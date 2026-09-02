@@ -33,9 +33,12 @@ import argparse
 import difflib
 import json
 import logging
+import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
+from scipy.optimize import linear_sum_assignment
 
 from . import config
 
@@ -123,6 +126,113 @@ def normalize_season(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Matching dei nomi: assegnamento bipartito ottimale
+# ---------------------------------------------------------------------------
+
+# Token di rumore: prefissi e suffissi societari che non identificano il club.
+# Rimuoverli prima del confronto fa collassare "AC Milan" e "Milan" sulla
+# stessa chiave, e "Real Sociedad" NON collassa su "Real Madrid" perche'
+# 'sociedad' e 'madrid' restano.
+NOISE_TOKENS = {
+    "fc", "afc", "cf", "ac", "as", "ss", "ssc", "us", "usa", "sc", "cd", "ud",
+    "rc", "rcd", "sd", "cp", "sv", "vfl", "vfb", "tsg", "fsv", "bsc", "sge",
+    "calcio", "club", "futbol", "football", "deportivo", "sporting", "spor",
+    "de", "of", "the", "1846", "1899", "1900", "1904", "1905", "1907", "1909",
+}
+
+ACCENTS = str.maketrans(
+    "àáâãäåèéêëìíîïòóôõöùúûüýÿñçøåæ",
+    "aaaaaaeeeeiiiiooooouuuuyyncoaa",
+)
+
+
+def match_key(name: str) -> str:
+    """
+    Chiave normalizzata per il confronto: minuscole, accenti rimossi,
+    punteggiatura via, token societari eliminati.
+
+    Non e' la chiave di join: serve solo a misurare la somiglianza.
+    """
+    s = str(name).lower().translate(ACCENTS)
+    s = re.sub(r"[^a-z0-9\s]", " ", s)
+    tokens = [t for t in s.split() if t not in NOISE_TOKENS]
+    return " ".join(tokens) if tokens else s.strip()
+
+
+def similarity(a: str, b: str) -> float:
+    """
+    Somiglianza fra due nomi squadra, in [0, 1].
+
+    Combina la ratio di difflib con due bonus specifici del dominio:
+    una fonte usa spesso una forma abbreviata dell'altra ("Inter" per
+    "Internazionale", "Gladbach" per "Borussia Monchengladbach"), quindi
+    prefissi e sottostringhe valgono molto piu' di quanto difflib da solo
+    riconosca.
+    """
+    ka, kb = match_key(a), match_key(b)
+    if not ka or not kb:
+        return 0.0
+    if ka == kb:
+        return 1.0
+
+    score = difflib.SequenceMatcher(None, ka, kb).ratio()
+
+    if ka.startswith(kb) or kb.startswith(ka):
+        score = max(score, 0.92)
+    elif ka in kb or kb in ka:
+        score = max(score, 0.85)
+
+    # Token in comune: "borussia dortmund" vs "dortmund"
+    ta, tb = set(ka.split()), set(kb.split())
+    if ta & tb:
+        jaccard = len(ta & tb) / len(ta | tb)
+        score = max(score, 0.5 + 0.4 * jaccard)
+
+    return score
+
+
+# Sopra questa soglia l'accoppiamento si considera affidabile e applicabile
+# senza revisione. Sotto, va confermato a mano.
+CONFIDENT = 0.75
+
+
+def assign_names(
+    unmatched: list[str], candidates: list[str]
+) -> list[tuple[str, str, float]]:
+    """
+    Accoppia i nomi non allineati ai candidati risolvendo un problema di
+    assegnamento bipartito, non con ricerche indipendenti.
+
+    Il punto chiave: i due insiemi sono in corrispondenza biunivoca (sono le
+    stesse squadre scritte diversamente), quindi accoppiare A con X *toglie*
+    X dai candidati per tutti gli altri. Un nome con somiglianza testuale
+    bassa viene comunque accoppiato correttamente **per esclusione** quando
+    resta un solo candidato disponibile.
+
+    `linear_sum_assignment` massimizza la somiglianza totale, non quella di
+    ogni singola coppia: e' cio' che rende l'accoppiamento globalmente
+    coerente invece che localmente avido.
+    """
+    if not unmatched or not candidates:
+        return [(n, "", 0.0) for n in unmatched]
+
+    scores = np.array([[similarity(u, c) for c in candidates] for u in unmatched])
+
+    # linear_sum_assignment minimizza: si passa il costo, cioe' l'opposto.
+    rows, cols = linear_sum_assignment(-scores)
+
+    result = []
+    assigned = dict(zip(rows.tolist(), cols.tolist()))
+    for i, name in enumerate(unmatched):
+        j = assigned.get(i)
+        if j is None:
+            result.append((name, "", 0.0))
+        else:
+            result.append((name, candidates[j], float(scores[i, j])))
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Diagnosi dei disallineamenti
 # ---------------------------------------------------------------------------
 
@@ -134,20 +244,22 @@ def teams_by_season(df: pd.DataFrame) -> dict[tuple[str, str], set[str]]:
     return out
 
 
-def diff_report(base: pd.DataFrame, other: pd.DataFrame, other_name: str) -> dict[str, str]:
+def diff_report(
+    base: pd.DataFrame, other: pd.DataFrame, other_name: str
+) -> dict[str, tuple[str, float]]:
     """
-    Confronta gli insiemi di nomi tra tabella base e fonte secondaria,
-    per ogni (lega, stagione). Ritorna le proposte di mapping.
+    Confronta gli insiemi di nomi tra tabella base e fonte secondaria, per
+    ogni (lega, stagione), e propone gli accoppiamenti.
 
-    Il fuzzy matching e' solo un suggerimento: va SEMPRE rivisto a mano.
-    difflib puo' accoppiare squadre diverse con nomi simili (per esempio
-    due club della stessa citta').
+    Ritorna {nome_fonte: (nome_canonico, confidenza)}. Un nome che compare in
+    piu' stagioni viene risolto una volta sola, tenendo l'accoppiamento con
+    confidenza piu' alta.
     """
     base_teams = teams_by_season(base)
     other_teams = teams_by_season(other)
 
-    suggestions: dict[str, str] = {}
-    total_unmatched = 0
+    proposals: dict[str, tuple[str, float]] = {}
+    n_conf = n_weak = 0
 
     common_keys = sorted(set(base_teams) & set(other_teams))
     only_base = sorted(set(base_teams) - set(other_teams))
@@ -159,51 +271,97 @@ def diff_report(base: pd.DataFrame, other: pd.DataFrame, other_name: str) -> dic
         log.warning("(lega, stagione) presenti solo in %s: %s", other_name, only_other[:10])
 
     for key in common_keys:
-        unmatched = other_teams[key] - base_teams[key]
+        unmatched = sorted(other_teams[key] - base_teams[key])
         if not unmatched:
             continue
         candidates = sorted(base_teams[key] - other_teams[key])
-        log.warning("%s %s: %d nomi non allineati", other_name, key, len(unmatched))
-        for name in sorted(unmatched):
-            total_unmatched += 1
-            close = difflib.get_close_matches(name, candidates, n=1, cutoff=0.6)
-            proposal = close[0] if close else ""
-            marker = "->" if proposal else "??"
-            log.warning("    %-28s %s %s", name, marker, proposal or "NESSUN CANDIDATO")
-            if name not in suggestions:
-                suggestions[name] = proposal
 
-    if total_unmatched == 0:
+        if len(unmatched) != len(candidates):
+            log.warning(
+                "%s %s: %d nomi non allineati ma %d candidati. "
+                "Squadre mancanti in una delle due fonti?",
+                other_name, key, len(unmatched), len(candidates),
+            )
+
+        for name, proposal, score in assign_names(unmatched, candidates):
+            prev = proposals.get(name)
+            if prev is None or score > prev[1]:
+                proposals[name] = (proposal, score)
+
+    for name, (proposal, score) in sorted(proposals.items()):
+        if proposal and score >= CONFIDENT:
+            n_conf += 1
+            log.info("  OK   %-30s -> %-24s (%.2f)", name, proposal, score)
+        else:
+            n_weak += 1
+            log.warning(
+                "  ??   %-30s -> %-24s (%.2f)  DA CONFERMARE",
+                name, proposal or "NESSUN CANDIDATO", score,
+            )
+
+    if not proposals:
         log.info("%s: tutti i nomi gia' allineati", other_name)
     else:
-        log.warning("%s: %d nomi da mappare", other_name, total_unmatched)
+        log.info(
+            "%s: %d accoppiamenti affidabili, %d da confermare",
+            other_name, n_conf, n_weak,
+        )
 
-    return suggestions
+    return proposals
 
 
-def cmd_report() -> None:
-    """Diagnosi completa + generazione della mappa proposta."""
+def cmd_report(apply_confident: bool = False) -> None:
+    """
+    Diagnosi dei nomi e generazione della mappa.
+
+    Con apply_confident=True gli accoppiamenti sopra la soglia di confidenza
+    vengono scritti direttamente in team_name_map.json, preservando le voci
+    gia' presenti. Restano da rivedere a mano solo quelli incerti.
+    """
     mapping = load_name_map()
     base = normalize_season(apply_name_map(load_raw(BASE_SOURCE), mapping))
 
-    all_suggestions: dict[str, str] = {}
+    proposals: dict[str, tuple[str, float]] = {}
     for src in SECONDARY_SOURCES:
         try:
             other = normalize_season(apply_name_map(load_raw(src), mapping))
         except FileNotFoundError as exc:
             log.warning("salto '%s': %s", src, exc)
             continue
-        all_suggestions.update(diff_report(base, other, src))
+        proposals.update(diff_report(base, other, src))
 
-    if all_suggestions:
-        with config.TEAM_NAME_MAP_SUGGESTED.open("w", encoding="utf-8") as fh:
-            json.dump(all_suggestions, fh, indent=2, ensure_ascii=False, sort_keys=True)
-        log.info("proposte scritte in %s", config.TEAM_NAME_MAP_SUGGESTED)
-        log.info(
-            "RIVEDILE A MANO, correggi le voci vuote o sbagliate, "
-            "poi rinomina il file in %s",
-            config.TEAM_NAME_MAP.name,
+    if not proposals:
+        return
+
+    # File di revisione: tutte le proposte, anche quelle deboli.
+    flat = {name: prop for name, (prop, _) in sorted(proposals.items())}
+    with config.TEAM_NAME_MAP_SUGGESTED.open("w", encoding="utf-8") as fh:
+        json.dump(flat, fh, indent=2, ensure_ascii=False, sort_keys=True)
+    log.info("proposte complete scritte in %s", config.TEAM_NAME_MAP_SUGGESTED.name)
+
+    if not apply_confident:
+        log.info("usa --apply per applicare automaticamente gli accoppiamenti affidabili")
+        return
+
+    confident = {
+        name: prop
+        for name, (prop, score) in proposals.items()
+        if prop and score >= CONFIDENT
+    }
+    weak = [name for name, (_, score) in proposals.items() if score < CONFIDENT]
+
+    merged = {**confident, **mapping}  # le voci gia' presenti hanno precedenza
+    with config.TEAM_NAME_MAP.open("w", encoding="utf-8") as fh:
+        json.dump(merged, fh, indent=2, ensure_ascii=False, sort_keys=True)
+
+    log.info("scritte %d voci in %s", len(merged), config.TEAM_NAME_MAP.name)
+    if weak:
+        log.warning(
+            "restano %d nomi da confermare a mano in %s: %s",
+            len(weak), config.TEAM_NAME_MAP.name, weak,
         )
+    else:
+        log.info("nessun nome incerto: la mappa e' completa")
 
 
 # ---------------------------------------------------------------------------
@@ -312,10 +470,15 @@ def main() -> None:
     g = parser.add_mutually_exclusive_group(required=True)
     g.add_argument("--report", action="store_true", help="diagnosi nomi squadra")
     g.add_argument("--build", action="store_true", help="costruisci matches_master")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="con --report: scrive gli accoppiamenti affidabili in team_name_map.json",
+    )
     args = parser.parse_args()
 
     if args.report:
-        cmd_report()
+        cmd_report(apply_confident=args.apply)
     else:
         cmd_build()
 

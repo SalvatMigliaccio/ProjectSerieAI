@@ -32,20 +32,17 @@ from pathlib import Path
 import pandas as pd
 import soccerdata as sd
 
+from src import config
+
 # ---------------------------------------------------------------------------
 # Configurazione
 # ---------------------------------------------------------------------------
+# Leghe, stagioni e percorsi vengono da src/config.py: unica fonte di verita'.
+# Per cambiare perimetro modifica quel file, non questo.
 
-LEAGUE = "ITA-Serie A"
-
-# Formato stagione accettato da soccerdata: '2425' = 2024/25.
-# Parti da 10 stagioni. Se poi vuoi allenare multi-lega, aggiungi
-# 'ENG-Premier League', 'ESP-La Liga', 'GER-Bundesliga', 'FRA-Ligue 1'
-# a LEAGUE (accetta anche una lista) e triplichi il campione.
-SEASONS = ["1617", "1718", "1819", "1920", "2021",
-           "2122", "2223", "2324", "2425", "2526"]
-
-RAW = Path("data/raw")
+LEAGUE = config.LEAGUES
+SEASONS = config.SEASONS
+RAW = config.RAW
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger("ingest")
@@ -236,15 +233,32 @@ def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataF
 
     elo = sd.ClubElo()
     frames = []
+    consecutive_failures = 0
+
     for team in teams:
         try:
             hist = elo.read_team_history(team).reset_index()
             hist["team"] = team
             frames.append(hist)
+            consecutive_failures = 0
         except Exception as exc:
-            # I nomi squadra tra ClubElo e FBref non sempre coincidono.
-            # Le eccezioni vanno raccolte e mappate a mano in un dizionario.
+            # I nomi squadra tra ClubElo e FBref non sempre coincidono: un
+            # fallimento isolato e' normale e si mappa a mano. Fallimenti
+            # consecutivi su squadre note significano invece che il servizio
+            # e' giu' (tipicamente 502), e insistere e' inutile.
+            consecutive_failures += 1
             log.warning("Elo non trovato per '%s': %s", team, exc)
+            if consecutive_failures >= 3:
+                log.error(
+                    "3 fallimenti consecutivi su ClubElo: il servizio sembra "
+                    "non disponibile. Lo stage 'elo' e' opzionale, riprova piu' "
+                    "tardi e prosegui con gli altri."
+                )
+                break
+
+    if not frames:
+        log.error("nessun dato Elo scaricato: stage saltato")
+        return pd.DataFrame()
 
     df = pd.concat(frames, ignore_index=True)
     save(df, "clubelo_history")

@@ -34,10 +34,10 @@ for _d in (RAW, INTERIM, PROCESSED, MANUAL):
 # tutto il resto del codice funziona identico.
 LEAGUES = [
     "ITA-Serie A",
-    "ENG-Premier League",
-    "ESP-La Liga",
-    "GER-Bundesliga",
-    "FRA-Ligue 1",
+    # "ENG-Premier League",
+    # "ESP-La Liga",
+    # "GER-Bundesliga",
+    # "FRA-Ligue 1",
 ]
 
 # 2014/15 e' il limite inferiore di Understat, che e' la fonte di xG e PPDA.

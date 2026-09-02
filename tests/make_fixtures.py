@@ -22,14 +22,22 @@ rng = np.random.default_rng(42)
 # Nomi come li scrive football-data.co.uk (tabella base)
 TEAMS_BASE = [
     "Napoli", "Inter", "Milan", "Juventus", "Roma", "Lazio",
-    "Atalanta", "Fiorentina", "Bologna", "Torino",
+    "Atalanta", "Fiorentina", "Bologna", "Verona",
 ]
 
-# Come li scrive Understat: tre disallineamenti deliberati
+# Come li scrive Understat. Casi deliberatamente difficili:
+#  - "Internazionale" vs "Inter": difflib da solo NON lo trovava (ratio 0.53)
+#  - prefissi societari: AC, AS, SSC
+#  - accenti: Hellas Verona con accento fittizio
+#  - il caso pericoloso: Roma e Lazio sono entrambe di Roma, e "AS Roma"
+#    non deve finire su "Lazio"
 TEAMS_UNDERSTAT = {
     "Inter": "Internazionale",
     "Milan": "AC Milan",
     "Roma": "AS Roma",
+    "Napoli": "SSC Nàpoli",
+    "Verona": "Hellas Verona FC",
+    "Juventus": "Juventus FC",
 }
 
 SEASONS = ["2425", "2526"]
