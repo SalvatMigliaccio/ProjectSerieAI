@@ -72,3 +72,44 @@ SEASON_REGRESSION = 0.30
 
 # Numero massimo di gol per lato nella matrice dei risultati esatti.
 MAX_GOALS = 10
+
+# ---------------------------------------------------------------------------
+# Protocollo di valutazione
+# ---------------------------------------------------------------------------
+
+# Stagioni di test. Sono le ultime tre concluse: si valuta sempre qui, e non si
+# guarda nient'altro finche' non si e' finito di scegliere. La 2627 e' in corso
+# (20 partite) e non fa da test: e' il set su cui si predice davvero.
+TEST_SEASONS = ["2324", "2425", "2526"]
+
+# Stagioni escluse dall'addestramento: la prima non ha storico ne' media di
+# lega di riferimento (vedi `is_burn_in` in features/form.py).
+BURN_IN_SEASONS = ["1415"]
+
+# Finestra mobile del GLM Poisson, in partite di lega. Due stagioni: abbastanza
+# da stimare 20 attacchi e 20 difese, abbastanza poco da seguire i cambi di
+# rosa. E' il primo iperparametro da mettere in discussione.
+GLM_WINDOW_MATCHES = 760
+
+# Ridge minima sui coefficienti del GLM. Non serve a regolarizzare davvero, ma
+# a rendere identificabile un modello dove intercetta, attacchi e difese sono
+# collineari per costruzione.
+GLM_RIDGE = 1e-3
+
+# Correzione Dixon-Coles sui punteggi bassi. Disattivata di default: entra in
+# gioco quando si stimera' rho sui dati, in models/dixon_coles.py.
+DC_RHO = 0.0
+
+# Numero di bin per curve di calibrazione ed ECE.
+CALIBRATION_BINS = 10
+
+# Stagioni di validazione: qui si tarano gli iperparametri, mai sul test.
+# Sono le due che precedono il test, quindi il taratura vede solo il passato.
+VALIDATION_SEASONS = ["2122", "2223"]
+
+# Ricampionamenti del bootstrap a cluster sulle giornate.
+BOOTSTRAP_SAMPLES = 10_000
+
+# Griglia di half-life in GIORNI per il decadimento temporale di Dixon-Coles.
+# Si sceglie sulla validazione.
+DC_HALFLIFE_GRID = [30, 60, 90, 120, 180]

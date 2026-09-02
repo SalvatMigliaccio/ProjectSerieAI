@@ -87,8 +87,38 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 
 ### Fatti noti sui dati
 
-- **Le colonne `Bb*` (Betbrain) sono morte.** Vuote su tutta la 2026/27.
-  Non usarle. Preferire `B365` e `PS`.
+- **Copertura quote, verificata stagione per stagione**
+  (`python -m src.features.market --coverage`):
+  - `B365` in apertura e' l'**unico** book con terzina 1X2 completa al 100%
+    su tutte e 13 le stagioni. E' il riferimento scelto.
+  - **Pinnacle e' morto**: `PS` copre il 52% della 2025/26 e lo 0% della
+    2026/27. Ottimo nello storico, inutilizzabile in produzione. Vale anche
+    per `VC` (finito nel 2024/25) e `IW` (crollato al 47% nel 2023/24).
+  - Le colonne `Bb*` (Betbrain) non sono "morte": sono il **vecchio nome**
+    degli aggregati di mercato, 100% dal 2014/15 al 2018/19 e finiti li'.
+    `Max`/`Avg` prendono il loro posto dal 2019/20. Le due famiglie non si
+    sovrappongono mai. I `Bb*` sono l'unica fonte over/under pre-2019/20.
+  - Le quote di **chiusura** (`*C`) partono dal 2019/20 per B365.
+- **La chiusura non e' utilizzabile come feature**: si forma pochi minuti
+  prima del fischio d'inizio e incorpora le formazioni ufficiali, fuori
+  dall'orizzonte T-24h. Il drift apertura-chiusura ha deviazione standard di
+  ~3 punti di probabilita': non e' rumore, e' proprio l'informazione che a
+  T-24h non si ha. Si calcola solo come diagnostica.
+- **La distorsione favorito-sfavorito del mercato NON esiste nella forma
+  generale.** Verificata fuori campione (`python -m src.evaluate --bias`):
+  impilando i tre esiti, l'ECE del mercato vale 0.010 su tutto lo storico e
+  0.022 sul test, nessun bin fuori dall'intervallo di confidenza, e la
+  pendenza di calibrazione e' 1.06-1.09, cioe' *sopra* 1 — il segno opposto
+  a quello della distorsione classica.
+  Sopravvive invece un effetto piu' stretto e specifico: **il mercato
+  sopravvaluta la squadra di casa quando NON e' favorita**. Nella meta' bassa
+  di `p_home` mancano all'appello 4 punti percentuali di vittorie casalinghe,
+  con z = -2.33 in training e -2.25 sul test — stesso segno e stessa
+  grandezza fuori campione. Nella meta' alta l'effetto sparisce (z = +0.21 e
+  -0.65), quindi non e' il fattore campo sopravvalutato in generale.
+  E' al limite della significativita' ed emerso dopo aver guardato piu'
+  viste: **non farne una feature**. Va trattato come residuo da spiegare col
+  modello, non come segnale da codificare a mano.
 - **Non esiste la colonna `referee`.** Era una feature debole, si rinuncia.
 - **ClubElo era irraggiungibile** al momento dell'ingestion (502 su tutte le
   squadre). Lo stage `elo` e' opzionale: l'Elo proprio, calcolato dai
@@ -113,21 +143,63 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   `--report --apply` scrive la mappa automaticamente sopra confidenza 0.75
 - `src/features/form.py` — medie mobili esponenziali leakage-safe, continue
   attraverso le stagioni con attenuazione del 30% al confine
+- `src/features/market.py` — de-vigging proporzionale e di Shin su 1X2 e
+  over/under 2.5, riferimento `B365` in **apertura**. Produce anche il
+  benchmark market-only sulla scala dei gol (`mkt_lambda_home/away`,
+  ottenuti invertendo un Poisson indipendente su totale e supremazia).
+  `data/processed/features_market.parquet`: 4580 righe, 35 colonne, 100% di
+  copertura su tutte le stagioni. Verificato contro `brentq` scalare
+  (scarto 9e-16) e contro i risultati veri: over 2.5 atteso 0.515 contro
+  0.520 reale, gol totali 2.75 contro 2.72, gol casa 1.51 contro 1.48.
+  Usare `FEATURES_T24`, mai `FEATURES_CLOSING`
+- `src/evaluate.py` — RPS, log loss, Brier, accuratezza, curve di calibrazione
+  ed ECE, harness di walk-forward per giornata. **Il ciclo di valutazione e'
+  stato costruito prima delle altre feature**, di proposito: ogni feature
+  successiva si misura sullo stesso test set invece di accumularsi non
+  validata
+- `src/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
+  `score_matrix` (lambda -> matrice dei risultati esatti -> 1X2 e over/under)
+  con correzione Dixon-Coles opzionale, spenta di default
 - `tests/make_fixtures.py`, `tests/test_form.py` — dati sintetici e test
+
+### Protocollo di valutazione — fissato, non cambiarlo per far vincere un modello
+
+- Test set: **2324, 2425, 2526** (`config.TEST_SEASONS`). 1140 partite.
+- Burn-in **1415** mai in addestramento (`config.BURN_IN_SEASONS`).
+- Walk-forward per giornata, riaddestramento da zero, 114 blocchi.
+- **Il taglio del training e' la data, non la giornata**: `date < prima data
+  della giornata`. Con il taglio per giornata una partita rinviata finirebbe
+  nel training di se stessa. Verificato a ogni blocco da un assert.
+- La giornata arriva da `fbref_schedule.week`. Non si ricostruisce dalle date:
+  provato con assegnamento goloso, coincide solo nell'85% dei casi perche' un
+  rinvio sfasa tutto il resto della stagione.
+
+### Risultati sul test set (walk-forward, 1140 partite)
+
+| modello | RPS | log loss | Brier | accur. | ECE |
+|---|---|---|---|---|---|
+| M1b market-only diretto | **0.1881** | 0.967 | 0.576 | 0.540 | 0.022 |
+| M1 market-only via lambda | 0.1882 | 0.968 | 0.577 | 0.541 | 0.027 |
+| M2 GLM Poisson | 0.1969 | 0.994 | 0.594 | 0.520 | 0.017 |
+| M0b frequenze di base | 0.2291 | 1.090 | 0.661 | 0.402 | 0.024 |
+| M0 sempre casa | 0.4583 | inf | 1.197 | 0.402 | 0.399 |
+
+**Soglia da battere: RPS 0.1881.** Ma la varianza fra stagioni del solo
+mercato va da 0.178 a 0.202, cioe' 0.024: piu' del triplo del distacco fra M2
+e il mercato (0.0088). Un miglioramento di RPS sotto i 0.005 su una sola
+finestra di test non e' un miglioramento, e' rumore.
 
 ### Da fare, in ordine
 
-1. `src/features/market.py` — de-vigging (proporzionale e metodo di Shin),
-   drift apertura-chiusura. Decidere quale bookmaker usare come riferimento
-   e verificare la copertura per stagione
-2. `src/features/team_strength.py` — Elo proprio calcolato dai risultati
-3. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
+1. `src/features/team_strength.py` — Elo proprio calcolato dai risultati
+2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
    derby (`manual/derbies.csv` e' pronto), cambi allenatore
    (`manual/coach_changes.csv` e' ancora un template vuoto)
-4. `src/models/dixon_coles.py` — modello a gol con decadimento temporale
-5. `src/evaluate.py` — RPS, calibrazione, walk-forward per giornata
-6. `src/models/gbm.py` — LightGBM con obiettivo Poisson
-7. `src/predict.py` — inferenza settimanale + log append-only
+3. `src/models/dixon_coles.py` — modello a gol con decadimento temporale.
+   `score_matrix` accetta gia' rho: manca solo stimarlo. Attenzione al segno,
+   e' rho **negativo** ad alzare 0-0 e 1-1
+4. `src/models/gbm.py` — LightGBM con obiettivo Poisson
+5. `src/predict.py` — inferenza settimanale + log append-only
 
 ## Comandi
 
@@ -149,6 +221,14 @@ python -m src.normalize --build            # costruisce matches_master.parquet
 
 # Feature
 python -m src.features.form
+python -m src.features.market
+python -m src.features.market --coverage   # copertura quote per stagione
+
+# Valutazione
+python -m src.evaluate                # tabella di confronto sul test set
+python -m src.evaluate --calibration  # curve di calibrazione ed ECE
+python -m src.evaluate --bias         # favourite-longshot, stagione per stagione
+python -m src.models.baseline --demo  # controlli sulla matrice dei risultati
 
 # Test senza rete
 python -m tests.test_form
@@ -188,4 +268,7 @@ L'ambiente di sviluppo e' **Windows con PowerShell**. Per cancellare file usare
 - `manual/derbies.csv` — GIA FATTO, 48 coppie con colonna `intensity`
   (city/regional/rivalry). La coppia va trattata come NON ordinata:
   `tuple(sorted([casa, trasferta]))`
-- `manual/team_name_map.json` — GIA FATTO, 8 voci generate automaticamente
+- `manual/team_name_map.json` — GIA FATTO, 10 voci. Le ultime due
+  (`Hellas Verona`, `SPAL`) aggiunte a mano per agganciare `fbref_schedule`,
+  che usa nomi diversi da quelli gia' mappati (`Hellas Verona FC`,
+  `SPAL 2013`). Senza quelle due la giornata si agganciava solo all'89%
