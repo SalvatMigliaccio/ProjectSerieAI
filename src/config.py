@@ -96,8 +96,10 @@ GLM_WINDOW_MATCHES = 760
 # collineari per costruzione.
 GLM_RIDGE = 1e-3
 
-# Correzione Dixon-Coles sui punteggi bassi. Disattivata di default: entra in
-# gioco quando si stimera' rho sui dati, in models/dixon_coles.py.
+# Correzione Dixon-Coles sui punteggi bassi, per i modelli che NON la stimano
+# (M1, M2, M4). Zero significa due Poisson indipendenti. M3 non usa questo
+# valore: stima il proprio rho insieme ad attacchi e difese.
+# ATTENZIONE AL SEGNO: e' rho negativo ad alzare 0-0 e 1-1.
 DC_RHO = 0.0
 
 # Numero di bin per curve di calibrazione ed ECE.
@@ -111,5 +113,16 @@ VALIDATION_SEASONS = ["2122", "2223"]
 BOOTSTRAP_SAMPLES = 10_000
 
 # Griglia di half-life in GIORNI per il decadimento temporale di Dixon-Coles.
-# Si sceglie sulla validazione.
-DC_HALFLIFE_GRID = [30, 60, 90, 120, 180]
+# Si sceglie sulla validazione. La griglia arriva fino a due anni perche' la
+# prima versione si fermava a 180 e il minimo cadeva proprio li': scegliere il
+# valore al bordo della griglia significa non aver ancora trovato il minimo.
+DC_HALFLIFE_GRID = [30, 60, 90, 120, 180, 240, 365, 540, 730]
+
+# Valore scelto sulla validazione (RPS 0.20051). Il minimo e' interno alla
+# griglia e la curva e' piatta fra 180 e 540 giorni: la scelta esatta conta
+# poco, quello che conta e' non stare sotto i 120.
+DC_HALFLIFE = 240
+
+# Numero di alberi del GBM, scelto sulla validazione per ciascuna variante.
+GBM_TREES_NO_MARKET = 300
+GBM_TREES_MARKET = 300

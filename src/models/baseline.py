@@ -56,11 +56,24 @@ PRED_COLS = [
 # Da lambda alla matrice dei risultati, e dalla matrice a tutto il resto
 # ---------------------------------------------------------------------------
 
+def valid_rho_floor(lam_home: np.ndarray, lam_away: np.ndarray, margine: float = 0.95) -> np.ndarray:
+    """
+    Il rho piu' negativo ammissibile, riga per riga.
+
+    La correzione di Dixon-Coles non e' valida per ogni rho: e' una
+    moltiplicazione, e se tau diventa negativo esce una probabilita' negativa.
+    Con rho < 0 i vincoli che mordono sono tau(0,1) = 1 + lam*rho > 0 e
+    tau(1,0) = 1 + mu*rho > 0, cioe' rho > -1 / max(lam, mu). Con lambda 3.5
+    significa rho > -0.29: un limite che si tocca davvero, non teorico.
+    """
+    return -margine / np.maximum(np.maximum(lam_home, lam_away), 1e-9)
+
+
 def score_matrix(
     lam_home: np.ndarray,
     lam_away: np.ndarray,
     max_goals: int = config.MAX_GOALS,
-    rho: float = 0.0,
+    rho: float | np.ndarray = 0.0,
 ) -> np.ndarray:
     """
     Matrice dei risultati esatti, una per riga: shape (n, K+1, K+1).
@@ -95,19 +108,25 @@ def score_matrix(
     pa = poisson.pmf(goals[None, :], lam_away[:, None])
     mat = ph[:, :, None] * pa[:, None, :]
 
-    if rho != 0.0:
-        lh = lam_home[:, None]
-        la = lam_away[:, None]
+    rho_arr = np.broadcast_to(np.asarray(rho, dtype=float), lam_home.shape)
+    if np.any(rho_arr != 0.0):
         tau = np.ones_like(mat)
-        tau[:, 0, 0] = (1.0 - lh * la * rho).ravel()
-        tau[:, 0, 1] = (1.0 + lh * rho).ravel()
-        tau[:, 1, 0] = (1.0 + la * rho).ravel()
-        tau[:, 1, 1] = 1.0 - rho
+        tau[:, 0, 0] = 1.0 - lam_home * lam_away * rho_arr
+        tau[:, 0, 1] = 1.0 + lam_home * rho_arr
+        tau[:, 1, 0] = 1.0 + lam_away * rho_arr
+        tau[:, 1, 1] = 1.0 - rho_arr
         mat = mat * tau
-        # Con rho grande tau puo' diventare negativo: sarebbe una probabilita'
-        # negativa. Meglio accorgersene qui che a valle in una log loss.
+        # Fuori dal dominio valido tau diventa negativo e con lui la
+        # probabilita'. Si solleva invece di tagliare in silenzio: chi chiama
+        # deve sapere che il suo rho non e' ammissibile per quei lambda, e
+        # `valid_rho_floor` gli dice qual e' il limite.
         if (mat < 0).any():
-            raise ValueError(f"rho={rho} produce probabilita' negative: fuori dal dominio valido")
+            peggiore = float(rho_arr.ravel()[np.argmin(mat.min(axis=(1, 2)))])
+            raise ValueError(
+                f"rho={peggiore:.4f} produce probabilita' negative: fuori dal dominio "
+                f"valido. Il minimo ammissibile per questi lambda e' "
+                f"{valid_rho_floor(lam_home, lam_away).min():.4f}"
+            )
 
     total = mat.sum(axis=(1, 2), keepdims=True)
     return mat / total
@@ -397,6 +416,25 @@ def _demo() -> None:
     # E il pareggio nel complesso deve guadagnare: e' tutto il punto di DC.
     assert (outcomes_from_matrix(dc)["p_draw"] > out["p_draw"]).all(), \
         "DC con rho<0 deve alzare la probabilita' di pareggio"
+
+    # rho per riga: serve a Dixon-Coles, che taglia rho al dominio valido di
+    # ogni singola partita. Un rho per riga costante deve dare lo stesso
+    # risultato dello scalare.
+    per_riga = score_matrix(lam_h, lam_a, rho=np.full(3, -0.10))
+    assert np.allclose(per_riga, dc), "rho per riga non coincide con rho scalare"
+    misto = score_matrix(lam_h, lam_a, rho=np.array([-0.10, 0.0, -0.05]))
+    assert np.allclose(misto[1], mat[1]), "rho=0 su una riga deve lasciarla intatta"
+
+    # Il dominio: sotto il pavimento la correzione non e' piu' una probabilita'
+    # e la funzione deve rifiutarsi, non produrre numeri negativi in silenzio.
+    floor = valid_rho_floor(lam_h, lam_a)
+    assert (floor < 0).all()
+    try:
+        score_matrix(lam_h, lam_a, rho=float(floor.min() * 2))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("un rho fuori dominio doveva sollevare ValueError")
 
     log.info("controlli sulla matrice dei risultati superati")
     log.info("esempio lambda (%.2f, %.2f):\n%s", lam_h[0], lam_a[0], out.iloc[0].round(4).to_string())

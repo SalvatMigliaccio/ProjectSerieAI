@@ -31,8 +31,20 @@ Le altre si riportano per capire *come* un modello sbaglia: la log loss punisce
 la sicurezza mal riposta, il Brier e' meno sensibile alle code, l'accuratezza
 non serve a scegliere e sta in tabella solo per comunicare (regola 3).
 
+COME SI DECIDE SE UNA DIFFERENZA E' REALE
+Confronto APPAIATO, mai fra due medie separate. Due modelli valutati sulle
+stesse partite condividono la difficolta' di quelle partite; la differenza riga
+per riga la elimina. L'incertezza su quella differenza si stima con un
+bootstrap a cluster sulla giornata, non sulla partita: le dieci partite di una
+giornata sono predette dallo stesso addestramento e non sono indipendenti.
+Ignorare il cluster restringe l'intervallo del 38%.
+
+Non usare la varianza fra stagioni come soglia di rumore: misura quanto le
+stagioni differiscono in difficolta', che e' proprio cio' che l'appaiamento
+toglie di mezzo.
+
 Uso:
-    python -m src.evaluate                 # tabella di confronto sul test set
+    python -m src.evaluate                 # tabella + confronto appaiato
     python -m src.evaluate --calibration   # curve di calibrazione ed ECE
     python -m src.evaluate --bias          # favourite-longshot, stagione per stagione
 """
@@ -88,14 +100,19 @@ def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_dataset() -> pd.DataFrame:
-    """Risultati, giornata e feature di mercato in un unico frame ordinato."""
+def load_dataset(with_form: bool = True) -> pd.DataFrame:
+    """Risultati, giornata e feature (mercato e forma) in un unico frame ordinato."""
     matches = pd.read_parquet(config.INTERIM / "matches_master.parquet")
     base = matches[KEYS + ["date", "FTHG", "FTAG", "FTR"]].copy()
 
     market = pd.read_parquet(config.PROCESSED / "features_market.parquet")
     market = market.drop(columns=[c for c in market.columns if c == "date"])
     df = base.merge(market, on=KEYS, how="left", validate="one_to_one")
+
+    if with_form:
+        form = pd.read_parquet(config.PROCESSED / "features_form.parquet")
+        form = form.drop(columns=[c for c in form.columns if c == "date"])
+        df = df.merge(form, on=KEYS, how="left", validate="one_to_one")
 
     df = add_matchday(df)
     df["date"] = pd.to_datetime(df["date"])
@@ -409,6 +426,37 @@ def paired_comparison(
     return pd.DataFrame(rows).set_index("modello")
 
 
+def paired_pairs(preds: pd.DataFrame, pairs: list[tuple[str, str]]) -> pd.DataFrame:
+    """
+    Confronti appaiati fra coppie scelte, non tutti contro un riferimento.
+
+    Serve per le domande che non passano dal mercato: "la forma batte la forza
+    stimata dai risultati?" si risponde confrontando M4 senza mercato con M3,
+    e nessuno dei due col mercato.
+    """
+    wide = rps_by_match(preds)
+    cluster = (
+        wide.index.get_level_values("season").astype(str)
+        + "-"
+        + wide.index.get_level_values("matchday").astype(str)
+    ).to_numpy()
+
+    rows = []
+    for a, b in pairs:
+        if a not in wide.columns or b not in wide.columns:
+            log.warning("coppia saltata, modello assente: %s vs %s", a, b)
+            continue
+        res = cluster_bootstrap((wide[a] - wide[b]).to_numpy(dtype=float), cluster)
+        res["confronto"] = f"{a}  -  {b}"
+        res["conclusione"] = (
+            "il primo e' migliore" if res["ic_alto"] < 0
+            else "il secondo e' migliore" if res["ic_basso"] > 0
+            else "indistinguibili"
+        )
+        rows.append(res)
+    return pd.DataFrame(rows).set_index("confronto")
+
+
 def compare(
     preds: pd.DataFrame,
     reference: str = "M1b market-only (diretto)",
@@ -587,9 +635,29 @@ def _low_region_stats(p: np.ndarray, y: np.ndarray, soglia: float = 0.25) -> tup
 
 # ---------------------------------------------------------------------------
 
-def run(save: bool = True) -> pd.DataFrame:
+def all_models() -> list[Model]:
+    """
+    Il roster completo. Sta qui e non in baseline.py perche' dixon_coles e gbm
+    importano da baseline: metterlo la' chiuderebbe un ciclo di import.
+
+    Gli iperparametri sono quelli scelti sulla VALIDAZIONE, non sul test:
+      - half-life 240 giorni per M3, da `python -m src.models.dixon_coles --tune`
+      - numero di alberi per M4, da `python -m src.models.gbm --tune`
+    Se si ritarano, vanno aggiornati qui e va rifatta la tabella.
+    """
+    from .models.dixon_coles import DixonColes
+    from .models.gbm import PoissonGBM
+
+    return default_models() + [
+        DixonColes(halflife_days=config.DC_HALFLIFE),
+        PoissonGBM(use_market=False, n_estimators=config.GBM_TREES_NO_MARKET),
+        PoissonGBM(use_market=True, n_estimators=config.GBM_TREES_MARKET),
+    ]
+
+
+def run(save: bool = True, models: list[Model] | None = None) -> pd.DataFrame:
     df = load_dataset()
-    preds = walk_forward(df, default_models())
+    preds = walk_forward(df, models or all_models())
     if save:
         dst = config.PROCESSED / "walk_forward_predictions.parquet"
         preds.to_parquet(dst, index=False)
@@ -613,11 +681,38 @@ def main() -> None:
 
     preds = run(save=not args.no_save)
     tab = compare(preds)
+    reference = "M1b market-only (diretto)"
 
     print("\n=== CONFRONTO SUL TEST SET " + ", ".join(config.TEST_SEASONS) + " ===")
     print(tab.round(4).to_string())
     print("\nRPS: piu' basso e' meglio. E' la metrica che decide.")
+    print("skill_closed: quota di distanza fra il pavimento (M0b) e il mercato,")
+    print("              coperta dal modello. 1.0 = pari al mercato, >1 = lo batte.")
     print("log_loss inf = il modello assegna probabilita' zero a un esito accaduto.")
+
+    print(f"\n=== CONFRONTO APPAIATO CONTRO '{reference}' ===")
+    print("Differenza di RPS partita per partita, non fra due medie separate.")
+    print(f"Bootstrap a cluster sulle giornate, {config.BOOTSTRAP_SAMPLES} ricampionamenti.")
+    paired = paired_comparison(preds, reference=reference)
+    print(paired.round(5).to_string())
+    print("\ndifferenza > 0 = peggiore del mercato (l'RPS si minimizza).")
+    print("L'intervallo che NON contiene lo zero e' l'unica prova che la")
+    print("differenza non sia rumore. La varianza fra stagioni non c'entra:")
+    print("misura la difficolta' delle stagioni, non l'incertezza sul confronto.")
+
+    print("\n=== CONFRONTI DIRETTI FRA MODELLI ===")
+    gbm_no = "M4 GBM senza mercato"
+    gbm_si = "M4 GBM con mercato"
+    dc = f"M3 Dixon-Coles hl={config.DC_HALFLIFE:g}g"
+    pairs = paired_pairs(preds, [
+        (gbm_no, dc),            # forma e xG contro forza stimata dai risultati
+        (gbm_no, "M2 GLM Poisson"),
+        (dc, "M2 GLM Poisson"),  # quanto valgono decadimento e rho
+        (gbm_si, gbm_no),        # quanto aggiunge il mercato al GBM
+        (gbm_si, reference),     # e quanto il GBM aggiunge al mercato
+    ])
+    if not pairs.empty:
+        print(pairs[["differenza", "ic_basso", "ic_alto", "conclusione"]].round(5).to_string())
 
     if args.calibration:
         keep = common_rows(preds)

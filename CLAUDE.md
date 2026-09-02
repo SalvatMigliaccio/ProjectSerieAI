@@ -184,10 +184,29 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 | M0b frequenze di base | 0.2291 | 1.090 | 0.661 | 0.402 | 0.024 |
 | M0 sempre casa | 0.4583 | inf | 1.197 | 0.402 | 0.399 |
 
-**Soglia da battere: RPS 0.1881.** Ma la varianza fra stagioni del solo
-mercato va da 0.178 a 0.202, cioe' 0.024: piu' del triplo del distacco fra M2
-e il mercato (0.0088). Un miglioramento di RPS sotto i 0.005 su una sola
-finestra di test non e' un miglioramento, e' rumore.
+**Soglia da battere: RPS 0.1881.**
+
+### Come si decide se una differenza e' reale — confronto appaiato
+
+**Non guardare la varianza fra stagioni.** Una versione precedente di questo
+documento ne ricavava una soglia di rumore di 0.005: e' sbagliato. La varianza
+fra stagioni (da 0.178 a 0.202 per il solo mercato) misura quanto le stagioni
+siano diverse fra loro in difficolta', non l'incertezza sulla differenza fra
+due modelli. Due modelli valutati sulle **stesse** partite condividono quella
+difficolta', e la differenza riga per riga la elimina.
+
+Il metro corretto e' in `evaluate.paired_comparison`:
+1. RPS di ogni singola partita, per ogni modello;
+2. differenza appaiata riga per riga contro il riferimento;
+3. bootstrap con **cluster sulla giornata** (114 cluster, non 1140 partite:
+   le dieci partite di una giornata sono predette dallo stesso addestramento),
+   intervallo al 95%.
+
+Il cluster non e' un dettaglio: ignorarlo restringe l'intervallo del **38%**.
+La copertura empirica dell'intervallo, verificata per simulazione, e' 96.5%
+contro il 95% nominale.
+
+**Una differenza conta solo se il suo intervallo non contiene lo zero.**
 
 ### Da fare, in ordine
 
