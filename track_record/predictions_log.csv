@@ -1,0 +1,9 @@
+timestamp_prediction,model_version,league,season,matchday,match_date,home_team,away_team,lambda_home,lambda_away,p_home,p_draw,p_away,p_over25,p_btts,odds_home,odds_draw,odds_away,odds_source
+2026-09-05T16:01:19Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-05,Inter,Napoli,1.8603,0.9345,0.59118,0.22354,0.18528,0.5293,0.51271,1.62,3.75,5.5,B365
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-05,Roma,Atalanta,1.7249,0.9492,0.55635,0.23744,0.20621,0.5,0.50371,1.73,3.6,5.0,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-06,Frosinone,Venezia,1.3307,1.4265,0.35078,0.25473,0.39449,0.52027,0.55902,2.7,3.3,2.6,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-06,Parma,Monza,1.1753,1.1428,0.36684,0.28233,0.35083,0.40875,0.4708,2.6,3.1,2.9,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-06,Bologna,Sassuolo,1.5169,1.046,0.4813,0.25735,0.26135,0.47222,0.50635,2.0,3.4,3.9,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-06,Juventus,Milan,1.4241,1.0482,0.45648,0.26594,0.27757,0.44908,0.49311,2.1,3.25,3.7,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-07,Cagliari,Lecce,1.367,0.8866,0.4802,0.27648,0.24332,0.39161,0.43808,2.0,3.1,4.33,B365-fixtures
+2026-09-05T19:29:10Z,M1 market-only (lambda),ITA-Serie A,2627,3,2026-09-07,Udinese,Lazio,1.0896,1.2285,0.32509,0.2815,0.3934,0.40875,0.46937,2.9,3.1,2.55,B365-fixtures

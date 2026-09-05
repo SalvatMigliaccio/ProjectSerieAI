@@ -3,3 +3,9 @@ __pycache__/
 *.pyc
 .venv/
 manual/team_name_map_suggested.json
+
+# Il registro delle previsioni E' versionato: e' l'unico dato del progetto
+# che non si puo' rigenerare. Si escludono le copie di lavoro e le
+# ricostruzioni, che invece si rifanno quando servono.
+track_record/*.bak
+track_record/predictions_backfill.csv

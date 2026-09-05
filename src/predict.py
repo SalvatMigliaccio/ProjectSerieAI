@@ -67,14 +67,14 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("predict")
 
 KEYS = ["league", "season", "home_team", "away_team"]
-PREDICTIONS_LOG = config.PROCESSED / "predictions_log.csv"
+PREDICTIONS_LOG = config.TRACK_RECORD / "predictions_log.csv"
 
 # Le previsioni ricostruite con --as-of NON vanno nel registro vero. Sono
 # state prodotte conoscendo gia' il calendario completo e, soprattutto, da un
 # modello scelto guardando quelle stagioni: mescolarle al track record lo
 # falsificherebbe, e il track record e' l'unica misura davvero fuori campione
 # che il progetto abbia. Finiscono in un file separato.
-BACKFILL_LOG = config.PROCESSED / "predictions_backfill.csv"
+BACKFILL_LOG = config.TRACK_RECORD / "predictions_backfill.csv"
 
 UPCOMING_ODDS = config.MANUAL / "upcoming_odds.csv"
 

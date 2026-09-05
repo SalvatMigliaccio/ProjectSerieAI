@@ -17,12 +17,19 @@ INTERIM = DATA / "interim"
 PROCESSED = DATA / "processed"
 MANUAL = ROOT / "manual"
 
+# Il registro delle previsioni sta FUORI da data/, che e' in .gitignore.
+# E' l'unico dato irriproducibile del progetto: i parquet si riscaricano, le
+# previsioni no, perche' vanno scritte prima del calcio d'inizio e quel
+# momento non torna. Qui dentro e' versionato, quindi ha una storia completa
+# e una copia in ogni clone del repository.
+TRACK_RECORD = ROOT / "track_record"
+
 TEAM_NAME_MAP = MANUAL / "team_name_map.json"
 TEAM_NAME_MAP_SUGGESTED = MANUAL / "team_name_map_suggested.json"
 COACH_CHANGES = MANUAL / "coach_changes.csv"
 DERBIES = MANUAL / "derbies.csv"
 
-for _d in (RAW, INTERIM, PROCESSED, MANUAL):
+for _d in (RAW, INTERIM, PROCESSED, MANUAL, TRACK_RECORD):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
