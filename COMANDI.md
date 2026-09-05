@@ -38,7 +38,24 @@ non c'e' niente da fare esce con codice 0 e un messaggio, non con un errore.
 ```bash
 python -m src.weekly --dry-run       # tutto tranne la scrittura nel registro
 python -m src.weekly --skip-ingest   # riusa i dati gia' scaricati (~10s)
+python -m src.weekly --verbose       # log completi dei moduli chiamati
 ```
+
+### Il report su file
+
+Ogni ciclo scrive un report HTML, uno per giornata:
+
+```
+data/processed/reports/giornata_2627_03.html    una per giornata, non si sovrascrivono
+data/processed/reports/ultimo.html              percorso fisso, comodo da tenere aperto
+```
+
+Aprilo con un doppio clic. Ha la tabella delle previsioni, la sezione della
+squadra seguita con i punteggi esatti, le partite scoperte e il track record.
+Si adatta al tema chiaro/scuro del browser e non dipende da niente di esterno.
+
+Il report e' una **vista**: il dato e' `predictions_log.csv`. Rigenerarlo non
+cambia nulla, cancellarlo nemmeno.
 
 ### Se serve fare i passi a mano
 
@@ -232,6 +249,9 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | `data/processed/walk_forward_predictions.parquet` | `evaluate` | previsioni di tutti i modelli sul test |
 | `data/processed/gbm_tuning.parquet` | `gbm --tune` | esito della ricerca iperparametri |
 | **`data/processed/predictions_log.csv`** | `predict` | **il track record. Append-only, mai riscritto** |
+| `data/processed/predictions_log.csv.bak` | `predict` | copia di sicurezza, rifatta prima di ogni scrittura |
+| `data/processed/reports/giornata_*.html` | `weekly` | report leggibile, uno per giornata |
+| `data/processed/reports/ultimo.html` | `weekly` | copia dell'ultimo, a percorso fisso |
 | `data/processed/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, non un track record |
 
 Tutto `data/` e' in `.gitignore`.

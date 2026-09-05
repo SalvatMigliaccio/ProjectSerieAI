@@ -127,6 +127,20 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   E' al limite della significativita' ed emerso dopo aver guardato piu'
   viste: **non farne una feature**. Va trattato come residuo da spiegare col
   modello, non come segnale da codificare a mano.
+- **I FUSI ORARI DELLE DUE FONTI SONO DIVERSI, e non e' un dettaglio.**
+  `fbref_schedule.time` e' l'orario **locale dello stadio** (ora italiana per
+  la Serie A); football-data usa l'ora del **Regno Unito**. Verificato su 2681
+  partite con orario su entrambe: la differenza e' esattamente 1 ora in **ogni
+  mese dell'anno**, inverno compreso — quindi non e' UTC contro UK, che
+  varierebbe con l'ora legale. Convertendo con `config.LEAGUE_TIMEZONE` i due
+  orari coincidono al minuto sul 99.5% delle partite.
+
+  Perche' importa: leggere l'orario di fbref come UTC sposta il calcio
+  d'inizio di **due ore in avanti** d'estate, e l'assert che dovrebbe
+  impedire una previsione tardiva la lascia passare. E' successo: due righe
+  del registro sono state scritte a partita gia' iniziata (Inter-Napoli +1
+  minuto, Roma-Atalanta +44 minuti) e l'assert non ha protestato.
+  `backtest_log.flag_post_kickoff` ora le riconosce e le esclude.
 - **Non esiste la colonna `referee`.** Era una feature debole, si rinuncia.
 - **ClubElo era irraggiungibile** al momento dell'ingestion (502 su tutte le
   squadre). Lo stage `elo` e' opzionale: l'Elo proprio, calcolato dai
@@ -434,6 +448,26 @@ giu' dieci minuti sarebbe il modo peggiore di fallire — si prosegue con i dati
 presenti, e la vecchiaia dello snapshot viene comunque segnalata. I passi
 locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
 previsione sarebbe sbagliata in silenzio.
+
+**Il report va su file, non solo a schermo.** Ogni ciclo scrive
+`data/processed/reports/giornata_<stagione>_<NN>.html`, uno per giornata, piu'
+una copia in `ultimo.html` a percorso fisso. Uno per giornata e non uno solo
+sovrascritto: riaprire il report di tre turni fa e' esattamente cio' che serve
+per capire come sono andate le previsioni. Resta comunque una **vista** —
+il dato e' il registro, e il report si rigenera.
+
+**Il registro e' l'unico dato che non si rigenera.** Tutto il resto si
+riscarica; le previsioni no, perche' vanno scritte prima del calcio d'inizio e
+quel momento non torna. Per questo `append_log` fa una copia in
+`predictions_log.csv.bak` prima di ogni scrittura e verifica che il file non si
+sia accorciato.
+
+**Due difese sul calcio d'inizio, non una.** L'assert in `predict.py` impedisce
+di registrare una previsione tardiva; `backtest_log.flag_post_kickoff` la
+riconosce e la esclude anche se l'assert ha sbagliato. Serve la seconda perche'
+la prima ha gia' fallito una volta, per un errore di fuso orario (vedi sopra):
+le righe non valide restano nel registro — che e' append-only e deve conservare
+anche gli errori — ma non entrano mai nelle metriche.
 
 **La previsione va fatta PRIMA che si giochi**, ed e' l'unico passaggio non
 recuperabile. `predict.py` verifica con un assert che il timestamp UTC preceda

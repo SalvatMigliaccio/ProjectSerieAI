@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import shutil
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -107,10 +108,19 @@ def kickoff(df: pd.DataFrame) -> pd.Series:
     """
     Orario del calcio d'inizio, in UTC.
 
+    IL FUSO ORARIO E' LA PARTE CHE CONTA. fbref pubblica l'orario nel fuso
+    locale dello stadio, non in UTC: per la Serie A e' ora italiana. Trattarlo
+    come UTC lo sposta di due ore in avanti d'estate, e una previsione fatta
+    dopo il fischio d'inizio passa per valida. E' successo, su due righe del
+    registro. La conversione usa `config.LEAGUE_TIMEZONE`, che gestisce da
+    solo il cambio dell'ora legale.
+
     fbref pubblica l'ora solo per le giornate imminenti: su 380 partite di
-    stagione ne ha 50. Quando manca si prende la mezzanotte del giorno della
-    partita, che e' il limite PRUDENTE — anticipa il fischio d'inizio invece
-    di posticiparlo, quindi una previsione considerata valida lo e' davvero.
+    stagione ne ha una cinquantina. Quando manca si prende la mezzanotte
+    locale, che in UTC cade la sera PRIMA: e' il limite prudente, anticipa il
+    fischio invece di posticiparlo, quindi una previsione considerata valida
+    lo e' davvero.
+
     Lo stesso valore serve sia a filtrare le partite future sia a verificare
     che il timestamp della previsione le preceda: usarne due diversi
     permetterebbe a una partita di passare il filtro e fallire l'assert.
@@ -120,8 +130,23 @@ def kickoff(df: pd.DataFrame) -> pd.Series:
     delta = pd.to_timedelta(time.astype("string") + ":00", errors="coerce").fillna(
         pd.Timedelta(0)
     )
-    out = date + delta
-    return out.dt.tz_localize("UTC") if out.dt.tz is None else out.dt.tz_convert("UTC")
+    locale = date + delta
+
+    out = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns, UTC]")
+    leghe = df["league"] if "league" in df.columns else pd.Series("", index=df.index)
+    for lega, idx in leghe.groupby(leghe).groups.items():
+        tz = config.LEAGUE_TIMEZONE.get(lega)
+        if tz is None:
+            log.warning("fuso orario ignoto per '%s': interpreto gli orari come UTC", lega)
+            tz = "UTC"
+        # ambiguous/nonexistent: le due ore l'anno del cambio ora legale non
+        # devono far esplodere la conversione.
+        out.loc[idx] = (
+            locale.loc[idx]
+            .dt.tz_localize(tz, ambiguous=True, nonexistent="shift_forward")
+            .dt.tz_convert("UTC")
+        )
+    return out
 
 
 def load_fixtures(as_of: pd.Timestamp) -> pd.DataFrame:
@@ -471,9 +496,20 @@ def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
     })[LOG_COLUMNS]
 
     path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Copia di sicurezza prima di ogni scrittura. Il registro e' l'unico dato
+    # del progetto che non si puo' rigenerare: tutto il resto si riscarica, le
+    # previsioni no, perche' vanno scritte prima del calcio d'inizio e quel
+    # momento non torna. Una generazione di backup costa un copyfile.
+    if path.exists():
+        shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+
     # mode="a" e header solo alla creazione: il file non viene mai riaperto in
     # scrittura, quindi nessuna riga gia' scritta puo' essere persa o alterata.
+    prima = sum(1 for _ in path.open(encoding="utf-8")) if path.exists() else 0
     rec.to_csv(path, mode="a", header=not path.exists(), index=False)
+    dopo = sum(1 for _ in path.open(encoding="utf-8"))
+    assert dopo >= prima, f"il registro si e' accorciato: {prima} -> {dopo} righe"
     log.info("registrate %d previsioni in %s", len(rec), path.name)
     return len(rec), saltate
 
@@ -567,6 +603,7 @@ def run(
     as_of: pd.Timestamp | None = None,
     model: Model | None = None,
     dry_run: bool = False,
+    quiet: bool = False,
 ) -> Esito:
     now = pd.Timestamp(datetime.now(timezone.utc)) if as_of is None else as_of
     model = model or MarketOnly()
@@ -612,9 +649,13 @@ def run(
             f"{int((ko <= now).sum())} partite"
         )
 
-    print(f"\n=== GIORNATA {matchday if matchday is not None else '(tutte)'} — "
-          f"previsione del {now.strftime('%Y-%m-%d %H:%M UTC')} — modello: {model.name} ===\n")
-    print_report(preds, skipped, team)
+    # `quiet` serve a src/weekly.py, che il report lo impagina da solo: senza,
+    # la stessa giornata verrebbe stampata due volte in due formati diversi.
+    if not quiet:
+        print(f"\n=== GIORNATA {matchday if matchday is not None else '(tutte)'} - "
+              f"previsione del {now.strftime('%Y-%m-%d %H:%M UTC')} - "
+              f"modello: {model.name} ===\n")
+        print_report(preds, skipped, team)
 
     esito.preds, esito.skipped = preds, skipped
     if dry_run:

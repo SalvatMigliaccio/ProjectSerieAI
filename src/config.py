@@ -54,6 +54,26 @@ CURRENT_SEASON = "2627"
 
 SQUADRA_TARGET = "Napoli"
 
+# Fuso orario in cui ciascuna fonte esprime gli orari di calcio d'inizio.
+#
+# NON E' UN DETTAGLIO. fbref pubblica l'orario nel fuso LOCALE DELLO STADIO,
+# football-data.co.uk nel fuso del Regno Unito. Verificato su 2681 partite con
+# orario su entrambe le fonti: la differenza e' esattamente 1 ora in OGNI mese
+# dell'anno, inverno compreso — quindi non e' UTC contro UK (varierebbe con
+# l'ora legale), e' Italia contro UK. Convertendo entrambe con questi fusi, i
+# due orari coincidono al minuto sul 99.5% delle partite.
+#
+# Trattare l'orario di fbref come UTC sposta il calcio d'inizio di due ore in
+# avanti (in estate) e fa passare per valida una previsione fatta a partita
+# gia' iniziata. E' successo davvero, su due righe del registro.
+LEAGUE_TIMEZONE = {
+    "ITA-Serie A": "Europe/Rome",
+    "ENG-Premier League": "Europe/London",
+    "ESP-La Liga": "Europe/Madrid",
+    "GER-Bundesliga": "Europe/Berlin",
+    "FRA-Ligue 1": "Europe/Paris",
+}
+
 # ---------------------------------------------------------------------------
 # Quote delle partite in arrivo
 # ---------------------------------------------------------------------------

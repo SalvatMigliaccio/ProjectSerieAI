@@ -156,6 +156,63 @@ def outcomes_from_matrix(mat: np.ndarray, line: float = 2.5) -> pd.DataFrame:
     })
 
 
+def all_markets(
+    lam_home: np.ndarray,
+    lam_away: np.ndarray,
+    rho: float | np.ndarray = config.DC_RHO,
+    max_goals: int = config.MAX_GOALS,
+) -> pd.DataFrame:
+    """
+    Tutti i mercati derivabili, dalla stessa matrice dei risultati.
+
+    Non sono modelli diversi: sono somme diverse sulle stesse celle. Per
+    questo restano coerenti fra loro per costruzione — P(1X) e' esattamente
+    P(1) + P(X), e nessuna combinazione puo' contraddirne un'altra. Ricavare
+    la doppia chance da una stima separata sarebbe il modo di introdurre
+    incoerenze che poi sembrano opportunita'.
+
+    La doppia chance e l'under sono i mercati a quota bassa: hanno probabilita'
+    alta e varianza bassa. Non hanno valore atteso migliore — quello dipende
+    dal margine del book, che e' lo stesso su tutti i mercati derivati dalle
+    stesse quote.
+    """
+    mat = score_matrix(lam_home, lam_away, max_goals=max_goals, rho=rho)
+    k = mat.shape[1]
+    idx = np.arange(k)
+    tot = idx[:, None] + idx[None, :]
+
+    p1 = (mat * (idx[:, None] > idx[None, :])).sum(axis=(1, 2))
+    px = (mat * (idx[:, None] == idx[None, :])).sum(axis=(1, 2))
+    p2 = (mat * (idx[:, None] < idx[None, :])).sum(axis=(1, 2))
+    btts = 1.0 - mat[:, 0, :].sum(axis=1) - mat[:, :, 0].sum(axis=1) + mat[:, 0, 0]
+
+    out = {"1": p1, "X": px, "2": p2, "1X": p1 + px, "12": p1 + p2, "X2": px + p2}
+    for linea in (0.5, 1.5, 2.5, 3.5, 4.5):
+        over = (mat * (tot > linea)).sum(axis=(1, 2))
+        out[f"over {linea}"] = over
+        out[f"under {linea}"] = 1.0 - over
+    out["gol-gol"] = btts
+    out["no gol"] = 1.0 - btts
+    # Squadra che segna: utile perche' e' il mercato piu' probabile in assoluto
+    # su una favorita, e quindi quello che si cerca quando si vuole 'sicuro'.
+    out["casa segna"] = 1.0 - mat[:, 0, :].sum(axis=1)
+    out["fuori segna"] = 1.0 - mat[:, :, 0].sum(axis=1)
+    return pd.DataFrame(out)
+
+
+def fair_odds(p: np.ndarray | pd.Series) -> np.ndarray:
+    """
+    Quota equa: 1/p. E' il prezzo a cui la puntata avrebbe valore atteso zero.
+
+    Serve a leggere una quota reale: sopra la quota equa la puntata sarebbe in
+    vantaggio, sotto in svantaggio. Con M1 la quota reale e' SEMPRE sotto,
+    perche' p viene da quella stessa quota con il margine tolto.
+    """
+    p = np.asarray(p, dtype=float)
+    with np.errstate(divide="ignore"):
+        return np.where(p > 0, 1.0 / p, np.inf)
+
+
 def predictions_from_lambdas(
     lam_home: np.ndarray,
     lam_away: np.ndarray,

@@ -80,12 +80,64 @@ def load_log(path=PREDICTIONS_LOG, first_only: bool = True) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
+    """
+    Marca le righe scritte DOPO il calcio d'inizio: non sono previsioni.
+
+    Il controllo vive qui e non solo in `predict.py` perche' e' l'ultima
+    difesa: se il calcolo dell'orario ha un difetto — ed e' successo, gli
+    orari di fbref sono in ora locale e per un periodo li ho letti come UTC —
+    l'assert a monte lascia passare tutto e il registro si riempie di righe
+    che sembrano previsioni e non lo sono. Qui si ricontrolla contro il
+    calendario aggiornato, e le righe non valide vengono escluse dalle
+    metriche invece che cancellate: il registro resta append-only e l'errore
+    resta visibile.
+    """
+    from .predict import kickoff
+    from .normalize import apply_name_map, load_name_map, load_raw, normalize_season
+
+    out = preds.copy()
+    out["post_kickoff"] = False
+    try:
+        sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), load_name_map()))
+    except FileNotFoundError:
+        log.warning("calendario assente: salto il controllo sul calcio d'inizio")
+        return out
+
+    sched = sched[sched["league"].isin(config.LEAGUES)].dropna(subset=["time"])
+    if sched.empty:
+        return out
+    sched["kickoff"] = kickoff(sched)
+    sched["season"] = sched["season"].astype(str)
+    sched = sched[KEYS + ["kickoff"]].drop_duplicates(subset=KEYS)
+
+    out = out.merge(sched, on=KEYS, how="left")
+    noto = out["kickoff"].notna()
+    out.loc[noto, "post_kickoff"] = (
+        out.loc[noto, "timestamp_prediction"] >= out.loc[noto, "kickoff"]
+    )
+
+    n = int(out["post_kickoff"].sum())
+    if n:
+        log.warning("=" * 70)
+        log.warning("%d righe scritte DOPO il calcio d'inizio: escluse dalle metriche", n)
+        for _, r in out[out["post_kickoff"]].iterrows():
+            ritardo = (r["timestamp_prediction"] - r["kickoff"]).total_seconds() / 60
+            log.warning("  %s - %s: previsione %.0f minuti dopo l'inizio",
+                        r["home_team"], r["away_team"], ritardo)
+        log.warning("Non sono previsioni e non entrano nel track record.")
+        log.warning("=" * 70)
+    return out
+
+
 def attach_results(preds: pd.DataFrame) -> pd.DataFrame:
     """Aggancia i risultati veri. Chiave la quadrupla, mai la data."""
     truth = pd.read_parquet(config.INTERIM / "matches_master.parquet")
     truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR"]].drop_duplicates(subset=KEYS)
     truth["season"] = truth["season"].astype(str)
 
+    if "post_kickoff" not in preds.columns:
+        preds = flag_post_kickoff(preds)
     out = preds.merge(truth, on=KEYS, how="left", validate="many_to_one")
 
     # Controllo di coerenza: la data registrata al momento della previsione
@@ -163,12 +215,17 @@ def report(by_season: bool = False, show_pending: bool = False, path=PREDICTIONS
     preds = load_log(path)
     joined = attach_results(preds)
 
-    resolved = joined[joined["FTR"].notna()].copy()
-    pending = joined[joined["FTR"].isna()].copy()
+    valide = joined[~joined["post_kickoff"]]
+    escluse = int(joined["post_kickoff"].sum())
+    resolved = valide[valide["FTR"].notna()].copy()
+    pending = valide[valide["FTR"].isna()].copy()
 
     print(f"\n=== TRACK RECORD — {path.name} ===")
-    print(f"previsioni registrate: {len(joined)}   risolte: {len(resolved)}   "
-          f"in attesa: {len(pending)}")
+    print(f"previsioni registrate: {len(joined)}   valide: {len(valide)}   "
+          f"risolte: {len(resolved)}   in attesa: {len(pending)}")
+    if escluse:
+        print(f"ESCLUSE {escluse} righe scritte dopo il calcio d'inizio: "
+              f"non sono previsioni")
     if not joined.empty:
         print(f"periodo: dal {joined['match_date'].min()} al {joined['match_date'].max()}")
 
