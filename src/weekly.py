@@ -209,6 +209,9 @@ def _tabella_previsioni(preds: pd.DataFrame) -> None:
     print("  Orari in ora italiana. gg = gol-gol.")
 
 
+TRIVIALI = {"over 0.5", "under 0.5", "over 4.5", "under 4.5", "under 1.5"}
+
+
 def selezioni(preds: pd.DataFrame, minimo: float = 0.65) -> pd.DataFrame:
     """
     Tutti i mercati di tutte le partite, ordinati per probabilita'.
@@ -234,7 +237,10 @@ def selezioni(preds: pd.DataFrame, minimo: float = 0.65) -> pd.DataFrame:
     righe = []
     for i, r in preds.iterrows():
         for mercato, p in mk.loc[i].items():
-            if p < minimo:
+            # Le quasi-certezze si escludono: 'over 0.5' sta al 92% ma nessun
+            # book lo paga abbastanza perche' la giocata abbia senso, e in
+            # cima alla classifica coprirebbe tutto il resto.
+            if mercato in TRIVIALI or p < minimo:
                 continue
             righe.append({
                 "kickoff": r.get("kickoff"),
@@ -267,15 +273,27 @@ def _tabella_selezioni(preds: pd.DataFrame) -> None:
     tab = selezioni(preds)
     if tab.empty:
         return
-    _titolo("SELEZIONI PIU' PROBABILI  |  sopra il 65%")
-    print(f"  {'quando':<15} {'partita':<26} {'mercato':<26} {'prob':>6} {'q.equa':>7}")
-    print("  " + "-" * 84)
-    for _, r in tab.head(15).iterrows():
+    _titolo("SELEZIONI PIU' PROBABILI  |  una per partita, poi la classifica")
+    intest = f"  {'quando':<15} {'partita':<26} {'mercato':<26} {'prob':>6} {'q.equa':>7}"
+
+    print("  LA PIU' PROBABILE DI OGNI PARTITA")
+    print(intest)
+    print("  " + "-" * (len(intest) - 2))
+    for _, r in tab.sort_values("probabilita", ascending=False).drop_duplicates("partita").iterrows():
         print(f"  {_quando(r['kickoff']):<15} {r['partita']:<26} "
               f"{r['mercato']:<26} {r['probabilita']:>6.1%} {r['quota_equa']:>7.2f}")
-    print("\n  q.equa = quota a cui la puntata varrebbe zero. Quella del book")
-    print("  sara' sempre piu' bassa: e' li' che sta il suo margine, ~5%.")
-    print("  Probabilita' alta = varianza bassa, NON vantaggio.")
+
+    print("\n  CLASSIFICA COMPLETA (prime 12)")
+    print(intest)
+    print("  " + "-" * (len(intest) - 2))
+    for _, r in tab.head(12).iterrows():
+        print(f"  {_quando(r['kickoff']):<15} {r['partita']:<26} "
+              f"{r['mercato']:<26} {r['probabilita']:>6.1%} {r['quota_equa']:>7.2f}")
+
+    print("\n  q.equa = quota a cui la puntata varrebbe ZERO. Quella del book")
+    print("  sara' sempre piu' bassa: la differenza e' il suo margine, ~5%.")
+    print("  Probabilita' alta = varianza bassa, NON vantaggio: sul test set")
+    print("  la doppia chance piu' sicura vince l'80.6% e rende -2.9%.")
 
 
 def _sezione_target(preds: pd.DataFrame) -> None:

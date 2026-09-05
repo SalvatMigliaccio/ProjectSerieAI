@@ -290,6 +290,52 @@ Quattro conclusioni che l'ordinamento per RPS da solo non autorizzerebbe:
    acquisito). Con le feature di oggi il modo migliore di usare il mercato
    resta non toccarlo.
 
+## Il modello NON produce valore atteso positivo — misurato, non dedotto
+
+Domanda ricorrente, risposta con i numeri del test set (1140 partite fuori
+campione), da `scratchpad/ev.py` e `safe.py`:
+
+| dove si punta | EV medio | puntate con EV>0 | ROI reale |
+|---|---|---|---|
+| quote B365 di apertura | **-6.19%** | **0 su 3420** | -8.18% |
+| miglior quota di mercato (`Max`) | -1.40% | 31.7% | -4.01% |
+| B365 di chiusura (fuori orizzonte) | -6.07% | 18.1% | -8.70% |
+
+**Zero puntate su 3420 hanno EV positivo contro B365, ed e' aritmetica, non
+sfortuna.** M1 *e'* la quota B365 col margine tolto: se p = pi/1.055 e la
+quota e' 1/pi, allora EV = p*(1/pi) - 1 = -5.2% identico su ogni riga.
+
+Contro le quote `Max` il 31.7% delle puntate sembra a EV positivo, ma il ROI
+realizzato peggiora in modo monotono al crescere dell'EV stimato: -7.4% sopra
+lo zero, -19.0% sopra il 2%, **-47.3% sopra il 5%** (127 puntate, intervallo
+che non tocca lo zero). Un book molto piu' generoso di B365 non e' un'occasione:
+e' un book che sa qualcosa, o un errore che non si riesce a colpire.
+
+**Closing line value negativo**: puntando sull'esito piu' probabile secondo il
+modello, la chiusura gli da' ragione solo nel 45.5% dei casi e muove la linea
+di -0.0034 in media. Un modello con vantaggio reale batte la chiusura; questo
+la insegue, come ci si aspetta da un modello che *e'* la linea di apertura.
+
+### "Ma una giocata sicura a quota bassa?"
+
+Probabilita' alta abbassa la varianza, non il margine. Misurato:
+
+| strategia | vinte | ROI | IC 95% |
+|---|---|---|---|
+| esito piu' probabile | 53.9% | -1.83% | — |
+| solo se p > 70% | 77.0% | -0.09% | ±9.77% |
+| solo se p > 80% | 72.2% | -15.06% | ±25.06% |
+| doppia chance piu' sicura | **80.6%** | **-2.88%** | ±2.82% |
+
+L'ultima riga e' la piu' istruttiva: si vince quattro volte su cinque e si
+perde comunque, con un intervallo che **esclude lo zero**. Nessuna soglia di
+sicurezza produce profitto, perche' il margine del book (5.19%) e' identico su
+tutti i mercati derivati dalle stesse quote.
+
+`weekly` mostra le selezioni piu' probabili con la **quota equa** accanto
+(`models.baseline.all_markets` e `fair_odds`): serve a confrontare con quella
+del book, non a promettere un vantaggio che non c'e'.
+
 ## RISULTATO ACQUISITO — non riaprirlo senza dati nuovi
 
 **Le statistiche aggregate di gioco non aggiungono informazione alle quote.**
@@ -409,8 +455,9 @@ contro il 95% nominale.
    feature**: l'ancoraggio al mercato e' il test piu' potente che abbiamo, e
    l'infrastruttura c'e' gia'. Non ripartire da M4
 2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
-   derby (`manual/derbies.csv` e' pronto), cambi allenatore
-   (`manual/coach_changes.csv` e' ancora un template vuoto)
+   derby e cambi allenatore. **Entrambi i file manuali MANCANO**: `derbies.csv`
+   e `coach_changes.csv` non esistono in `manual/`, che contiene solo
+   `team_name_map.json` e `upcoming_odds.csv`
 3. `src/features/team_strength.py` — Elo proprio calcolato dai risultati.
    Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
    quarto modo di misurare la forza della squadra non cambiera' il quadro
@@ -552,11 +599,17 @@ mettere il codice in un file.
 
 ## Cosa manca dall'utente
 
-- `manual/coach_changes.csv` — colonne `league, season, team, date, coach_out,
-  coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
-- `manual/derbies.csv` — GIA FATTO, 48 coppie con colonna `intensity`
-  (city/regional/rivalry). La coppia va trattata come NON ordinata:
+**Verificato il 5 settembre 2026**: in `manual/` ci sono solo
+`team_name_map.json`, `team_name_map_suggested.json` e `upcoming_odds.csv`.
+Una versione precedente di questo documento dava `derbies.csv` per fatto: non
+c'e'. Chi scrive `context.py` non deve darlo per scontato.
+
+- `manual/derbies.csv` — **MANCANTE**. Colonne `home_team, away_team,
+  intensity` con intensity in (city/regional/rivalry). ~48 coppie per la
+  Serie A. La coppia va trattata come NON ordinata:
   `tuple(sorted([casa, trasferta]))`
+- `manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
+  date, coach_out, coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
 - `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
   arrivano da `python ingest.py --stage fixtures`. Serve compilarlo a mano
   soltanto per le partite che lo snapshot non copre o quando football-data e'

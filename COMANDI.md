@@ -50,7 +50,9 @@ data/processed/reports/giornata_2627_03.html    una per giornata, non si sovrasc
 data/processed/reports/ultimo.html              percorso fisso, comodo da tenere aperto
 ```
 
-Aprilo con un doppio clic. Ha la tabella delle previsioni, la sezione della
+Aprilo con un doppio clic. Ha la tabella delle previsioni, le **selezioni piu'
+probabili** su tutti i mercati (1X2, doppia chance, over/under 1.5-3.5,
+gol-gol, squadra che segna) con la **quota equa** accanto, la sezione della
 squadra seguita con i punteggi esatti, le partite scoperte e il track record.
 Si adatta al tema chiaro/scuro del browser e non dipende da niente di esterno.
 
