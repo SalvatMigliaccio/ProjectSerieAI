@@ -6,6 +6,7 @@ senza dover scaricare nulla.
     python -m tests.make_fixtures
 """
 
+import argparse
 import itertools
 import sys
 from datetime import datetime, timedelta
@@ -94,5 +95,36 @@ def build() -> None:
     print(f"disallineamenti deliberati: {list(TEAMS_UNDERSTAT.values())}")
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """
+    Serve un consenso esplicito perche' questo script DISTRUGGE data/raw.
+
+    Scrive dati sintetici sopra `matches.parquet` e `understat_team_match.
+    parquet` con gli stessi nomi dei dati veri. Senza argparse, un innocuo
+    `python -m tests.make_fixtures --help` non stampava l'aiuto: eseguiva la
+    sovrascrittura. E' successo, e da li' `normalize --build` ha propagato i
+    dati finti fino a matches_master.
+    """
+    ap = argparse.ArgumentParser(
+        description="Genera dati sintetici per i test. SOVRASCRIVE data/raw/."
+    )
+    ap.add_argument(
+        "--overwrite-raw", action="store_true",
+        help="conferma esplicita: sovrascrive matches.parquet e "
+             "understat_team_match.parquet con dati FINTI",
+    )
+    args = ap.parse_args()
+
+    if not args.overwrite_raw:
+        print("RIFIUTATO: questo script sovrascrive data/raw/ con dati sintetici.")
+        print("I file veri andrebbero persi e ogni ricostruzione a valle")
+        print("propagherebbe i dati finti fino a matches_master.")
+        print("\nSe e' davvero quello che vuoi:")
+        print("    python -m tests.make_fixtures --overwrite-raw")
+        raise SystemExit(2)
+
     build()
+
+
+if __name__ == "__main__":
+    main()

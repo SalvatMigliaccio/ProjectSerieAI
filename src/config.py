@@ -128,6 +128,12 @@ DC_RHO = 0.0
 # Numero di bin per curve di calibrazione ed ECE.
 CALIBRATION_BINS = 10
 
+# RPS del benchmark market-only sul test set (2324-2526, 1140 partite).
+# E' il riferimento contro cui si legge il track record di produzione: uno
+# scarto persistente da questo valore non e' un modello che sbaglia, e' la
+# pipeline che si comporta diversamente dal backtest.
+TEST_RPS_REFERENCE = 0.1881
+
 # Stagioni di validazione: qui si tarano gli iperparametri, mai sul test.
 # Sono le due che precedono il test, quindi il taratura vede solo il passato.
 VALIDATION_SEASONS = ["2122", "2223"]

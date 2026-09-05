@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import numpy as np
@@ -402,18 +403,50 @@ def predict_fixtures(
 # Registro
 # ---------------------------------------------------------------------------
 
-def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
-               path=PREDICTIONS_LOG) -> int:
-    """
-    Aggiunge in coda a predictions_log.csv. Mai riscritto, mai deduplicato.
+def already_logged(model_version: str, path=PREDICTIONS_LOG) -> set[tuple[str, ...]]:
+    """Le partite gia' registrate per questo modello, come insieme di chiavi."""
+    if not path.exists():
+        return set()
+    df = pd.read_csv(path, usecols=KEYS + ["model_version"])
+    df = df[df["model_version"] == model_version]
+    return set(map(tuple, df[KEYS].astype(str).to_numpy()))
 
-    Il file e' un registro, non uno stato: rilanciare la previsione della
-    stessa giornata aggiunge righe nuove invece di sostituire le vecchie, e la
-    storia di come la previsione e' cambiata resta leggibile. E' backtest_log
-    a decidere quale riga usare (la prima, la piu' onesta).
+
+def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
+               path=PREDICTIONS_LOG) -> tuple[int, int]:
+    """
+    Aggiunge in coda al registro. Restituisce (scritte, saltate perche' gia'
+    presenti).
+
+    APPEND-ONLY E IDEMPOTENTE INSIEME
+    Il file non viene mai riscritto: si aggiunge in fondo e basta. Ma una
+    partita gia' registrata per lo stesso modello non viene aggiunta di nuovo,
+    cosi' rilanciare il ciclo tre volte nella stessa settimana non moltiplica
+    le righe.
+
+    PERCHE' NON SI AGGIORNA LA RIGA SE LE QUOTE SONO CAMBIATE
+    Perche' falsificherebbe il track record a posteriori: la previsione
+    registrata deve restare quella fatta con l'informazione di quel momento,
+    anche quando col senno di poi era peggiore. Se serve una seconda opinione
+    su quote nuove, si cambia `model_version` — la chiave di deduplicazione e'
+    (partita, modello), quindi la riga nuova entra e la vecchia resta.
     """
     if preds.empty:
-        return 0
+        return 0, 0
+
+    gia = already_logged(model_version, path)
+    if gia:
+        chiavi = list(map(tuple, preds[KEYS].astype(str).to_numpy()))
+        nuove = [k not in gia for k in chiavi]
+        saltate = len(preds) - sum(nuove)
+        preds = preds[nuove]
+        if saltate:
+            log.info("%d partite gia' registrate per '%s': non riscritte",
+                     saltate, model_version)
+        if preds.empty:
+            return 0, saltate
+    else:
+        saltate = 0
 
     rec = pd.DataFrame({
         "timestamp_prediction": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -442,7 +475,7 @@ def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
     # scrittura, quindi nessuna riga gia' scritta puo' essere persa o alterata.
     rec.to_csv(path, mode="a", header=not path.exists(), index=False)
     log.info("registrate %d previsioni in %s", len(rec), path.name)
-    return len(rec)
+    return len(rec), saltate
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +538,28 @@ def print_report(preds: pd.DataFrame, skipped: pd.DataFrame, team: str | None) -
 
 # ---------------------------------------------------------------------------
 
+@dataclass
+class Esito:
+    """
+    Cosa e' successo in una passata di previsione.
+
+    Serve a src/weekly.py, che deve poter riferire quante partite sono state
+    predette, quante saltate perche' gia' registrate e quante scoperte, senza
+    rifare i conti su un frame che non ha visto costruire.
+    """
+    matchday: int | None = None
+    preds: pd.DataFrame = field(default_factory=pd.DataFrame)
+    skipped: pd.DataFrame = field(default_factory=pd.DataFrame)
+    scritte: int = 0
+    duplicate: int = 0
+    model_version: str = ""
+    now: pd.Timestamp | None = None
+
+    @property
+    def vuoto(self) -> bool:
+        return self.preds.empty and self.skipped.empty
+
+
 def run(
     matchday: int | None = None,
     team: str | None = None,
@@ -512,20 +567,21 @@ def run(
     as_of: pd.Timestamp | None = None,
     model: Model | None = None,
     dry_run: bool = False,
-) -> pd.DataFrame:
+) -> Esito:
     now = pd.Timestamp(datetime.now(timezone.utc)) if as_of is None else as_of
     model = model or MarketOnly()
+    esito = Esito(model_version=model.name, now=now)
 
     fixtures = load_fixtures(now)
     if fixtures.empty:
         log.warning("nessuna partita futura nel calendario: serve un'ingestion aggiornata")
-        return fixtures
+        return esito
 
     if team:
         fixtures = fixtures[(fixtures["home_team"] == team) | (fixtures["away_team"] == team)]
         if fixtures.empty:
             log.warning("nessuna partita futura per '%s': nome giusto?", team)
-            return fixtures
+            return esito
     if use_next or (team and matchday is None):
         # Con --team da solo si intende la prossima partita di quella squadra,
         # non tutte le trentasei che restano da giocare.
@@ -533,9 +589,10 @@ def run(
         log.info("prima giornata utile: %d", matchday)
     if matchday is not None:
         fixtures = fixtures[fixtures["matchday"] == matchday]
+    esito.matchday = matchday
     if fixtures.empty:
         log.warning("nessuna partita corrisponde ai filtri")
-        return fixtures
+        return esito
 
     played = load_played(now)
     played_all = pd.read_parquet(config.INTERIM / "matches_master.parquet")
@@ -559,15 +616,22 @@ def run(
           f"previsione del {now.strftime('%Y-%m-%d %H:%M UTC')} — modello: {model.name} ===\n")
     print_report(preds, skipped, team)
 
+    esito.preds, esito.skipped = preds, skipped
     if dry_run:
+        # Anche in prova si conta quante sarebbero saltate come duplicate:
+        # e' l'informazione che dice se c'e' davvero qualcosa da fare.
+        gia = already_logged(model.name)
+        if not preds.empty and gia:
+            chiavi = map(tuple, preds[KEYS].astype(str).to_numpy())
+            esito.duplicate = sum(k in gia for k in chiavi)
         log.info("dry-run: niente scritto nel registro")
     else:
         destinazione = PREDICTIONS_LOG if as_of is None else BACKFILL_LOG
         if as_of is not None:
             log.warning("previsione ricostruita con --as-of: va in %s, non nel "
                         "track record", destinazione.name)
-        append_log(preds, model.name, now, path=destinazione)
-    return preds
+        esito.scritte, esito.duplicate = append_log(preds, model.name, now, path=destinazione)
+    return esito
 
 
 def main() -> None:

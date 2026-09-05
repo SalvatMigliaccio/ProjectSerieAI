@@ -30,10 +30,12 @@ squadre. Non va usata per l'addestramento: e' marcata con `is_burn_in`.
 
 Uso:
     python -m src.features.form
+    python -m src.features.form --no-save    # calcola senza scrivere
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
 
 import numpy as np
@@ -275,5 +277,15 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
     return wide
 
 
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Feature di forma: medie mobili leakage-safe")
+    ap.add_argument("--no-save", action="store_true",
+                    help="calcola senza scrivere features_form.parquet")
+    args = ap.parse_args()
+
+    wide = build(save=not args.no_save)
+    log.info("prodotte %d righe, %d colonne", len(wide), wide.shape[1])
+
+
 if __name__ == "__main__":
-    build()
+    main()

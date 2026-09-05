@@ -408,6 +408,38 @@ def check_dates(merged: pd.DataFrame, suffix: str, tolerance_days: int = 3) -> N
         log.info("date coerenti su tutte le righe accoppiate")
 
 
+def _guard_shrink(out, nuovo, soglia: float = 0.20) -> None:
+    """
+    Rifiuta di sostituire il dataset con uno molto piu' piccolo.
+
+    Il dataset cresce di dieci partite a settimana e non si accorcia mai. Se
+    la ricostruzione ne produce uno drasticamente piu' corto, la causa e' in
+    `data/raw`, non nei dati veri: tipicamente un file grezzo sovrascritto da
+    dati sintetici. Senza questo controllo la sostituzione avviene in silenzio
+    e lo storico e' perso — e' successo davvero, ed e' costato un ripristino
+    dalla cache di soccerdata.
+
+    Si puo' scavalcare con la variabile d'ambiente AI_NAPLES_FORCE_BUILD=1,
+    che serve quando si riduce di proposito il perimetro (per esempio meno
+    stagioni in config.SEASONS).
+    """
+    import os
+
+    if not out.exists() or os.environ.get("AI_NAPLES_FORCE_BUILD") == "1":
+        return
+    vecchio = len(pd.read_parquet(out, columns=["league"]))
+    if len(nuovo) >= vecchio * (1 - soglia):
+        return
+    raise ValueError(
+        f"il nuovo {out.name} avrebbe {len(nuovo)} righe contro le {vecchio} "
+        f"attuali: un calo del {100 * (1 - len(nuovo) / vecchio):.0f}%.\n"
+        f"    Il dataset non si accorcia mai da solo. Controlla data/raw/: "
+        f"probabilmente un file grezzo e' stato sovrascritto (tests/"
+        f"make_fixtures.py lo fa di proposito).\n"
+        f"    Se la riduzione e' voluta: AI_NAPLES_FORCE_BUILD=1"
+    )
+
+
 def cmd_build() -> None:
     """Costruisce interim/matches_master.parquet."""
     mapping = load_name_map()
@@ -455,6 +487,7 @@ def cmd_build() -> None:
         raise ValueError(f"righe attese {n_expected}, ottenute {len(merged)}")
 
     out = config.INTERIM / "matches_master.parquet"
+    _guard_shrink(out, merged)
     merged.to_parquet(out, index=False)
     log.info("scritto %s: %d righe, %d colonne", out, len(merged), merged.shape[1])
 

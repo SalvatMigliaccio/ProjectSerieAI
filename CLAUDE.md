@@ -1,7 +1,15 @@
 # CLAUDE.md
 
-Contesto operativo per Claude Code. Il documento completo di progettazione e'
-`PROGETTO_SERIE_A.md`: leggilo per il razionale, questo file e' l'operativo.
+Contesto operativo per Claude Code.
+
+| documento | cosa contiene |
+|---|---|
+| `PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| **questo file** | decisioni prese, risultati misurati, il **perche'** |
+| **`COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
+
+I comandi vivono solo in `COMANDI.md`. Quando ne cambia uno si aggiorna li',
+non qui: due elenchi divergono e viene sempre letto quello sbagliato.
 
 ## Obiettivo
 
@@ -393,38 +401,49 @@ contro il 95% nominale.
    Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
    quarto modo di misurare la forza della squadra non cambiera' il quadro
 
-## Ciclo settimanale — la routine operativa
-
-Da rilanciare dopo ogni giornata. Nessun passaggio manuale: soccerdata
-riscarica da sola la stagione in corso.
+## Ciclo settimanale — un comando solo
 
 ```bash
-# 1. AGGIORNAMENTO DATI (~10 minuti, solo gli stage veloci)
-python ingest.py --stage matches
-python ingest.py --stage understat
-python ingest.py --stage fixtures     # quote delle partite in arrivo
-python ingest.py --stage schedule
-
-# 2. RICOSTRUZIONE DEL DATASET
-python -m src.normalize --build       # matches_master.parquet
-
-# 3. FEATURE
-python -m src.features.form
-python -m src.features.market
-
-# 4. PREVISIONE della giornata in arrivo (scrive nel registro append-only)
-python -m src.predict --next
-
-# 5. DOPO che le partite si sono giocate, ripartendo dal punto 1:
-python -m src.backtest_log            # track record aggiornato
+python -m src.weekly
 ```
 
-**Il punto 4 va fatto PRIMA che si giochi**, ed e' l'unico passaggio che non
-si puo' recuperare dopo. `predict.py` verifica con un assert che il timestamp
-UTC preceda il calcio d'inizio di ogni partita registrata: se il registro non
-e' scritto in tempo, quella giornata e' persa per sempre ai fini del track
-record. Ricostruirla dopo con `--as-of` produce un file separato
+`src/weekly.py` fa tutto in sequenza: aggiorna i dati, scarica le quote,
+ricostruisce il dataset e le feature, deduce da solo la prossima giornata, la
+predice **tutta** (nessun filtro per squadra: piu' righe nel registro
+significano stime piu' precise) e aggiorna il track record.
+
+**Quando lanciarlo: sabato mattina** per il weekend, **mercoledi' mattina**
+per gli infrasettimanali. Cioe' dopo che football-data ha caricato lo snapshot
+quote (venerdi' 17:00 UK, martedi' 13:00 UK) e prima del primo calcio
+d'inizio.
+
+**E' idempotente**: rilanciarlo tre volte nella stessa settimana non sporca il
+registro. Una partita gia' prevista dallo stesso modello viene saltata e
+dichiarata. Se non c'e' niente da fare — lunedi', o secondo lancio — esce con
+codice **0** e un messaggio esplicito, non con un errore.
+
+**Se le quote cambiano, la riga vecchia non si aggiorna.** Falsificherebbe il
+track record a posteriori con informazione che al momento della previsione non
+c'era. Per una seconda opinione si cambia `model_version`: la chiave di
+deduplicazione e' (partita, modello), quindi la riga nuova entra e la vecchia
+resta. Garantito da `tests/test_predictions_log.py`.
+
+**Quali passi sono fatali.** I passi di rete no: football-data risponde 503
+piu' spesso di quanto dovrebbe, e restare senza previsione perche' un sito era
+giu' dieci minuti sarebbe il modo peggiore di fallire — si prosegue con i dati
+presenti, e la vecchiaia dello snapshot viene comunque segnalata. I passi
+locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
+previsione sarebbe sbagliata in silenzio.
+
+**La previsione va fatta PRIMA che si giochi**, ed e' l'unico passaggio non
+recuperabile. `predict.py` verifica con un assert che il timestamp UTC preceda
+il calcio d'inizio di ogni partita registrata: se il registro non e' scritto in
+tempo, quella giornata e' persa per sempre ai fini del track record.
+Ricostruirla dopo con `--as-of` produce un file separato
 (`predictions_backfill.csv`) che **non** e' un track record e non va mescolato.
+
+I comandi dei singoli passi, per quando serve lanciarli a mano, stanno in
+**`COMANDI.md`**.
 
 ### Le quote delle partite in arrivo — nota metodologica, non un dettaglio
 
@@ -466,63 +485,14 @@ distanza la differenza serve a interpretare il track record.
 
 ## Comandi
 
-```bash
-# Ingestion (stage veloci: ~10 minuti totali)
-python ingest.py --stage matches
-python ingest.py --stage understat
-python ingest.py --stage fixtures   # quote del turno imminente
-python ingest.py --stage schedule
-python ingest.py --stage elo        # opzionale, servizio a volte giu'
+Sono tutti in **`COMANDI.md`**, con tempi di esecuzione misurati, file
+prodotti da ciascuno, e la lista delle cose da non fare. Non duplicarli qui:
+due elenchi divergono, e quello sbagliato viene sempre letto per primo.
 
-# Se football-data e' irraggiungibile, si punta a una copia locale:
-python ingest.py --stage fixtures --fixtures-file percorso/fixtures.csv
-
-# Stage lenti (ore, rate-limited, interrompibili grazie alla cache)
-python ingest.py --stage lineups
-python ingest.py --stage player_stats
-python ingest.py --stage missing      # richiede Chrome/Chromium
-
-# Normalizzazione
-python -m src.normalize --report --apply   # diagnosi + mappa automatica
-python -m src.normalize --build            # costruisce matches_master.parquet
-
-# Feature
-python -m src.features.form
-python -m src.features.market
-python -m src.features.market --coverage   # copertura quote per stagione
-
-# Valutazione (~5 minuti: 114 giornate x 8 modelli)
-python -m src.evaluate                # tabella + confronto appaiato
-python -m src.evaluate --calibration  # curve di calibrazione ed ECE
-python -m src.evaluate --bias         # favourite-longshot, stagione per stagione
-
-# Modelli: controlli e taratura (SEMPRE su validazione, mai sul test)
-python -m src.models.baseline --demo         # matrice dei risultati, segno di rho
-python -m src.models.dixon_coles --check     # gradiente analitico
-python -m src.models.dixon_coles --tune      # half-life, ~1 minuto
-python -m src.models.gbm --tune --workers 8   # iperparametri GBM, tutte le varianti
-python -m src.models.gbm --tune --variants ancorato   # solo M5, ~2 minuti
-python -m src.models.gbm --blend              # peso della miscela di M6
-python -m src.models.gbm --importance         # cosa usa davvero M4 senza mercato
-
-# Produzione
-python -m src.predict --next                  # prossima giornata con partite future
-python -m src.predict --matchday 3            # una giornata precisa
-python -m src.predict --team Napoli           # prossima partita del Napoli
-python -m src.predict --matchday 3 --dry-run  # senza scrivere nel registro
-python -m src.predict --as-of 2026-08-27 --next   # ricostruzione, va nel file di backfill
-python -m src.backtest_log                    # track record
-python -m src.backtest_log --pending          # previsioni in attesa di risultato
-python -m src.backtest_log --backfill         # rilegge le ricostruzioni (NON e' un track record)
-
-# Test senza rete
-python -m tests.test_form
-python -m tests.make_fixtures         # ATTENZIONE: scrive in data/raw
-```
-
-L'ambiente di sviluppo e' **Windows con PowerShell**. Per cancellare file usare
-`Remove-Item ... -ErrorAction SilentlyContinue`, non `rm -f`. Evitare
-`python -c "..."` con apici annidati: mettere il codice in un file.
+Regola dell'ambiente, che vale ovunque: si sviluppa su **Windows con
+PowerShell**. Per cancellare file usare `Remove-Item ... -ErrorAction
+SilentlyContinue`, non `rm -f`. Evitare `python -c "..."` con apici annidati:
+mettere il codice in un file.
 
 ## Note operative
 
@@ -557,9 +527,9 @@ L'ambiente di sviluppo e' **Windows con PowerShell**. Per cancellare file usare
   arrivano da `python ingest.py --stage fixtures`. Serve compilarlo a mano
   soltanto per le partite che lo snapshot non copre o quando football-data e'
   irraggiungibile. Colonne `league, season, home_team, away_team, B365H,
-  B365D, B365A, B365>2.5, B365<2.5`: servono **entrambi** i mercati, perche' i
+  B365D, B365A, B365>2.5, B365<2.5`: servono **entrambi** i mercati, perche' i 
   gol attesi nascono dall'incrocio fra supremazia (1X2) e totale (over/under)
 - `manual/team_name_map.json` — GIA FATTO, 10 voci. Le ultime due
   (`Hellas Verona`, `SPAL`) aggiunte a mano per agganciare `fbref_schedule`,
   che usa nomi diversi da quelli gia' mappati (`Hellas Verona FC`,
-  `SPAL 2013`). Senza quelle due la giornata si agganciava solo all'89%
+  `SPAL 2013`). Senza quelle due la giornata si agganciava solo all'89%  
