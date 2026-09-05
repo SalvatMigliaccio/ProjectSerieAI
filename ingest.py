@@ -100,6 +100,45 @@ def season_from_date(d: pd.Timestamp) -> str:
     return f"{start % 100:02d}{(start + 1) % 100:02d}"
 
 
+def _leggi_csv(src: str | Path) -> pd.DataFrame:
+    """
+    Legge il CSV da rete con header da browser, o da file locale.
+
+    Gli header servono perche' alcuni server rifiutano le richieste che non
+    sembrano un browser. Non e' il caso di football-data — provato: risponde
+    503 anche con header completi mentre altri host rispondono 200, quindi il
+    blocco e' verso l'ambiente, non verso l'User-Agent — ma costa una riga e
+    toglie una variabile quando il download fallisce.
+    """
+    src = str(src)
+    if not src.startswith(("http://", "https://")):
+        return pd.read_csv(src, encoding="latin-1")
+
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(src, headers={
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                       "AppleWebKit/537.36 (KHTML, like Gecko) "
+                       "Chrome/131.0.0.0 Safari/537.36"),
+        "Accept": "text/csv,text/plain,*/*",
+        "Accept-Language": "it-IT,it;q=0.9,en;q=0.8",
+        "Referer": "https://www.football-data.co.uk/matches.php",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            dati = resp.read()
+    except urllib.error.HTTPError as exc:
+        raise ConnectionError(
+            f"{src} ha risposto {exc.code}. Il sito e' spesso irraggiungibile "
+            f"dai programmi pur funzionando dal browser: scaricalo a mano e usa "
+            f"'python ingest.py --stage fixtures --fixtures-file <percorso>'."
+        ) from exc
+
+    import io
+    return pd.read_csv(io.BytesIO(dati), encoding="latin-1")
+
+
 def _parse_fixture_dates(df: pd.DataFrame) -> pd.Series:
     """
     Data e ora di football-data in un unico timestamp.
@@ -133,7 +172,7 @@ def ingest_fixtures(source: str | Path | None = None) -> pd.DataFrame:
     src = source or config.FIXTURES_URL
     downloaded_at = pd.Timestamp.now(tz="UTC")
     log.info("scarico %s", src)
-    raw = pd.read_csv(src, encoding="latin-1")
+    raw = _leggi_csv(src)
     # Un BOM in testa al file rinomina silenziosamente la prima colonna in
     # '﻿Div' e fa fallire tutto con un KeyError incomprensibile.
     raw.columns = [str(c).lstrip("﻿").lstrip("ï»¿").strip() for c in raw.columns]

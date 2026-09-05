@@ -445,15 +445,56 @@ contro il 95% nominale.
   indagato quello, non accettato il risultato. Ritarare sempre con
   `python -m src.models.dixon_coles --tune` dopo ogni nuovo blocco di feature.
 
+### Il test set non ha la potenza per misurare il layer giocatori
+
+`python -m src.power_analysis`, con la deviazione standard della differenza
+appaiata gia' misurata (0.00354 per cluster, su 114 cluster osservati):
+
+| perimetro | cluster | n | MDE (80%, 5%) | effetto atteso |
+|---|---|---|---|---|
+| Serie A | giornata = settimana | 114 | **0.00240** | 0.00060 |
+| Big 5 | giornata di campionato | 570 | **0.00107** | 0.00060 |
+| Big 5 | settimana di calendario | 114 | **0.00240** | 0.00060 |
+
+**Nessuno dei due perimetri basta.** Il minimo rilevabile e' 4 volte l'effetto
+atteso in Serie A, e ancora 1.8 volte con i Big 5 nell'ipotesi ottimistica.
+
+**La definizione di cluster cambia il risultato di sqrt(5).** Se ogni lega ha
+un modello proprio, i Big 5 danno 5 volte i cluster (giornata di campionato).
+Se il modello e' unico — ed e' il caso, `config.LEAGUES` e' una lista sola —
+le giornate della stessa settimana condividono lo stesso addestramento e
+contano per **un** cluster: i Big 5 non aggiungono potenza, aggiungono solo
+partite dentro gli stessi 114 cluster.
+
+Quanto servirebbe, per dimensione dell'effetto:
+
+| shift di lambda | effetto RPS | cluster necessari | stagioni Serie A |
+|---|---|---|---|
+| 0.05 gol | 0.00015 | 28 974 | 762 |
+| **0.10 gol** | **0.00060** | **1 839** | **48** |
+| 0.15 gol | 0.00127 | 410 | 11 |
+| 0.20 gol | 0.00196 | 171 | 4.5 |
+| 0.30 gol | 0.00522 | 24 | 0.6 |
+
+Il ginocchio della curva sta fra 0.15 e 0.20 gol. **Sotto quella soglia
+l'effetto non e' dimostrabile con i dati che questo progetto potra' mai
+avere**; sopra, bastano poche stagioni di Serie A.
+
 ### Da fare, in ordine
 
-1. **Layer giocatori e infortuni.** E' l'unica direzione rimasta aperta: il
-   test decisivo di M5 ha chiuso quella delle statistiche aggregate (vedi
-   "risultato acquisito"). Serve a due cose insieme — battere il mercato, e
-   falsificare l'ipotesi sull'half-life.
-   Quando arrivera', il modo giusto di misurarlo e' **rifare M5 con le nuove
-   feature**: l'ancoraggio al mercato e' il test piu' potente che abbiamo, e
-   l'infrastruttura c'e' gia'. Non ripartire da M4
+1. **Layer giocatori e infortuni** — ma prima decidere se ha senso misurarlo.
+   Il calcolo di potenza dice che un effetto da 0.10 gol richiederebbe 48
+   stagioni di Serie A, e che i Big 5 non aiutano se il modello resta unico.
+   Le opzioni oneste sono tre:
+   - **restringere il campo alle assenze grosse** (portiere titolare, o oltre
+     il 30% dei minuti pesati): meno partite ma effetto piu' grande, e il
+     ginocchio della curva e' li';
+   - **un modello per lega**, che rende i Big 5 davvero 5 volte i cluster;
+   - **costruirlo comunque senza pretendere di dimostrarlo**, dichiarandolo.
+
+   Quando si fara', il modo giusto di misurarlo e' **rifare M5**: l'ancoraggio
+   al mercato e' il test piu' potente disponibile e l'infrastruttura c'e'.
+   Non ripartire da M4
 2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
    derby e cambi allenatore. **Entrambi i file manuali MANCANO**: `derbies.csv`
    e `coach_changes.csv` non esistono in `manual/`, che contiene solo

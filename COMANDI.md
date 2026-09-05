@@ -189,6 +189,10 @@ python -m src.models.gbm --blend                      # 61s  -> config.BLEND_WEI
 
 # Diagnostica
 python -m src.models.gbm --importance       # 4s — cosa usa M4 senza mercato
+
+# Potenza statistica: serve allargare ai Big 5? (~30s)
+python -m src.power_analysis
+python -m src.power_analysis --shift-lambda 0.20 --minuti-assenti 0.20
 ```
 
 Opzioni utili di `--tune`: `--configs N` (quante configurazioni provare, default
@@ -221,9 +225,18 @@ python -m src.backtest_log --backfill  # rilegge le ricostruzioni (NON e' un tra
 ## 9. Test senza rete
 
 ```bash
-python -m tests.test_form
+python -m tests.test_form              # medie mobili leakage-safe
+python -m tests.test_market            # de-vigging di Shin, lambda impliciti
+python -m tests.test_kickoff           # fusi orari e ordine previsione/fischio
+python -m tests.test_leakage           # il walk-forward non vede il futuro
 python -m tests.test_predictions_log   # append-only e idempotenza del registro
 ```
+
+I quattro test centrali coprono i punti in cui un errore **non darebbe
+eccezioni**: un fuso sbagliato produce una data valida, un de-vigging rotto
+produce tre numeri che sommano a uno, un leakage produce metriche migliori, e
+un registro riscritto produce un track record piu' bello. Sono esattamente i
+difetti che si auto-premiano.
 
 `tests/make_fixtures.py` genera dati sintetici **sovrascrivendo `data/raw/`**.
 Ora rifiuta di partire senza consenso esplicito:
@@ -250,8 +263,9 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | `data/processed/features_market.parquet` | `features.market` | de-vigging + lambda impliciti |
 | `data/processed/walk_forward_predictions.parquet` | `evaluate` | previsioni di tutti i modelli sul test |
 | `data/processed/gbm_tuning.parquet` | `gbm --tune` | esito della ricerca iperparametri |
-| **`data/processed/predictions_log.csv`** | `predict` | **il track record. Append-only, mai riscritto** |
-| `data/processed/predictions_log.csv.bak` | `predict` | copia di sicurezza, rifatta prima di ogni scrittura |
+| **`track_record/predictions_log.csv`** | `predict` | **il track record. Versionato in git, append-only** |
+| `track_record/predictions_log.csv.bak` | `predict` | copia di sicurezza, rifatta prima di ogni scrittura |
+| `track_record/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, NON versionate |
 | `data/processed/reports/giornata_*.html` | `weekly` | report leggibile, uno per giornata |
 | `data/processed/reports/ultimo.html` | `weekly` | copia dell'ultimo, a percorso fisso |
 | `data/processed/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, non un track record |
