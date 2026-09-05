@@ -83,6 +83,143 @@ def ingest_matches() -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Stage 1b - Quote delle partite in arrivo (football-data.co.uk/fixtures.csv)
+# ---------------------------------------------------------------------------
+
+def season_from_date(d: pd.Timestamp) -> str:
+    """
+    Stagione soccerdata a quattro cifre dalla data della partita.
+
+    Il file dei fixture non dice a quale stagione appartenga: contiene solo il
+    turno imminente. Si deduce dal mese, con lo stacco a luglio — nessun
+    campionato dei Big 5 gioca partite di lega in quel mese.
+    Non si usa `config.CURRENT_SEASON` perche' andrebbe aggiornato a mano ogni
+    agosto, ed e' esattamente il tipo di dettaglio che si dimentica.
+    """
+    start = d.year if d.month >= 7 else d.year - 1
+    return f"{start % 100:02d}{(start + 1) % 100:02d}"
+
+
+def _parse_fixture_dates(df: pd.DataFrame) -> pd.Series:
+    """
+    Data e ora di football-data in un unico timestamp.
+
+    Il formato e' britannico (giorno/mese) e l'anno compare sia a due sia a
+    quattro cifre a seconda dell'annata: `dayfirst=True` copre entrambi. Senza
+    di esso il 05/09 diventerebbe il 9 maggio, e l'errore passerebbe
+    silenziosamente perche' e' comunque una data valida.
+    """
+    date = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
+    if "Time" in df.columns:
+        delta = pd.to_timedelta(df["Time"].astype("string") + ":00", errors="coerce")
+        date = date + delta.fillna(pd.Timedelta(0))
+    return date
+
+
+def ingest_fixtures(source: str | Path | None = None) -> pd.DataFrame:
+    """
+    Quote di apertura delle partite del turno imminente.
+
+    ATTENZIONE, IL FILE E' UNA FINESTRA, NON UN ARCHIVIO: contiene solo le
+    partite dei prossimi giorni e viene sovrascritto. Se non lo si scarica in
+    tempo, quelle quote non si recuperano piu' da qui.
+
+    Le colonne vengono rinominate sullo schema di `matches.parquet` — league,
+    home_team, away_team, date — perche' tutto il progetto si aggancia su
+    quella quadrupla. Le colonne delle quote restano com'erano: sono le stesse
+    identiche di football-data, ed e' cio' che garantisce che in produzione si
+    usino le stesse quote dell'addestramento.
+    """
+    src = source or config.FIXTURES_URL
+    downloaded_at = pd.Timestamp.now(tz="UTC")
+    log.info("scarico %s", src)
+    raw = pd.read_csv(src, encoding="latin-1")
+    # Un BOM in testa al file rinomina silenziosamente la prima colonna in
+    # '﻿Div' e fa fallire tutto con un KeyError incomprensibile.
+    raw.columns = [str(c).lstrip("﻿").lstrip("ï»¿").strip() for c in raw.columns]
+
+    mancanti = [c for c in ("Div", "Date", "HomeTeam", "AwayTeam") if c not in raw.columns]
+    if mancanti:
+        raise ValueError(
+            f"{src} non ha le colonne attese {mancanti}. Trovate: "
+            f"{list(raw.columns)[:12]}. Il formato di football-data e' cambiato?"
+        )
+
+    log.info("fixtures.csv: %d righe, %d colonne, campionati %s",
+             len(raw), raw.shape[1], sorted(raw["Div"].dropna().unique()))
+
+    wanted = {k: v for k, v in config.FOOTBALL_DATA_DIV.items() if v in LEAGUE}
+    df = raw[raw["Div"].isin(wanted)].copy()
+    if df.empty:
+        log.warning("nessuna partita per %s: il turno non e' ancora pubblicato "
+                    "oppure i codici Div sono cambiati", LEAGUE)
+
+    df["league"] = df["Div"].map(wanted)
+    df["date"] = _parse_fixture_dates(df)
+    df = df.rename(columns={"HomeTeam": "home_team", "AwayTeam": "away_team"})
+    df = df.dropna(subset=["date", "home_team", "away_team"])
+    df["season"] = df["date"].map(season_from_date)
+    df["downloaded_at"] = downloaded_at
+
+    # Nomi squadra sulla convenzione del progetto, PRIMA di qualsiasi verifica.
+    from src.normalize import apply_name_map, load_name_map
+    df = apply_name_map(df, load_name_map())
+
+    _check_fixture_teams(df)
+
+    keep = ["league", "season", "date", "home_team", "away_team", "downloaded_at"]
+    odds = [c for c in df.columns if c not in keep and c not in ("Div", "Date", "Time")]
+    out = df[keep + odds].sort_values("date").reset_index(drop=True)
+
+    RAW.mkdir(parents=True, exist_ok=True)
+    dst = RAW / "fixtures_odds.parquet"
+    out.to_parquet(dst, index=False)
+    log.info("fixtures_odds        %6d righe, %2d colonne -> %s", len(out), out.shape[1], dst)
+    if len(out):
+        log.info("turno coperto: dal %s al %s (snapshot %s)",
+                 out["date"].min().date(), out["date"].max().date(),
+                 downloaded_at.strftime("%Y-%m-%d %H:%M UTC"))
+        b365 = [c for c in ("B365H", "B365D", "B365A") if c in out.columns]
+        if len(b365) == 3:
+            pieno = out[b365].notna().all(axis=1).sum()
+            log.info("quote B365 1X2 complete su %d/%d partite", pieno, len(out))
+        else:
+            log.warning("colonne B365 1X2 assenti dal file: %s", b365)
+    return out
+
+
+def _check_fixture_teams(df: pd.DataFrame) -> None:
+    """
+    Ogni squadra del file deve essere gia' nota a matches_master.
+
+    Un nome non riconosciuto non e' un dettaglio cosmetico: la partita non si
+    aggancerebbe alla quadrupla di join e sparirebbe senza rumore dalla
+    previsione. Meglio un avviso esplicito con il nome esatto da aggiungere a
+    team_name_map.json.
+    """
+    master = config.INTERIM / "matches_master.parquet"
+    if not master.exists():
+        log.warning("%s assente: salto la verifica dei nomi squadra", master.name)
+        return
+
+    noti = pd.read_parquet(master, columns=["home_team", "away_team"])
+    noti = set(noti["home_team"]) | set(noti["away_team"])
+    presenti = set(df["home_team"]) | set(df["away_team"])
+    sconosciute = sorted(presenti - noti)
+
+    if sconosciute:
+        log.warning("=" * 70)
+        log.warning("%d squadre del file fixture NON riconosciute: %s",
+                    len(sconosciute), sconosciute)
+        log.warning("Le loro partite non si aggancerebbero e sparirebbero dalla")
+        log.warning("previsione senza errore. Aggiungi la corrispondenza in")
+        log.warning("%s e rilancia questo stage.", config.TEAM_NAME_MAP)
+        log.warning("=" * 70)
+    else:
+        log.info("nomi squadra: tutte %d riconosciute", len(presenti))
+
+
+# ---------------------------------------------------------------------------
 # Stage 2 - xG per squadra/partita (Understat)
 # ---------------------------------------------------------------------------
 
@@ -269,6 +406,7 @@ def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataF
 
 STAGES = {
     "matches": ingest_matches,
+    "fixtures": ingest_fixtures,
     "understat": ingest_understat,
     "shots": ingest_understat_shots,
     "schedule": ingest_schedule,
@@ -281,7 +419,7 @@ STAGES = {
 
 # Ordine consigliato: prima i veloci, cosi' hai subito qualcosa con cui
 # lavorare mentre i lenti girano in background.
-ORDER = ["matches", "understat", "schedule", "elo",
+ORDER = ["matches", "understat", "fixtures", "schedule", "elo",
          "team_stats", "lineups", "player_stats", "missing"]
 
 
@@ -293,13 +431,22 @@ def main() -> None:
         default="matches",
         help="Quale stage eseguire",
     )
+    parser.add_argument(
+        "--fixtures-file",
+        help="solo per --stage fixtures: legge da un file locale invece che "
+             "dalla rete. Utile quando il sito e' giu' o per riprodurre uno "
+             "snapshot gia' scaricato.",
+    )
     args = parser.parse_args()
 
     stages = ORDER if args.stage == "all" else [args.stage]
     for name in stages:
         log.info("=== stage: %s ===", name)
         try:
-            STAGES[name]()
+            if name == "fixtures":
+                ingest_fixtures(args.fixtures_file)
+            else:
+                STAGES[name]()
         except Exception as exc:
             log.error("stage '%s' fallito: %s", name, exc)
             if args.stage != "all":

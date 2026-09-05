@@ -284,6 +284,7 @@ def walk_forward(
     models: list[Model],
     test_seasons: list[str] = tuple(config.TEST_SEASONS),
     exclude_seasons: list[str] = tuple(config.BURN_IN_SEASONS),
+    stride: int = 1,
 ) -> pd.DataFrame:
     """
     Per ogni giornata del test: addestra sul passato, predici, avanza.
@@ -291,13 +292,21 @@ def walk_forward(
     Restituisce un frame lungo, una riga per (partita, modello), che si salva
     su disco: cosi' un modello nuovo si confronta con i vecchi senza doverli
     riaddestrare tutti.
+
+    `stride` raggruppa piu' giornate in un blocco solo, cioe' riaddestra ogni
+    `stride` giornate invece che ogni giornata. Resta senza leakage — il taglio
+    e' sempre la prima data del blocco — ma e' una previsione piu' difficile,
+    perche' l'ultima giornata del blocco viene predetta con un modello vecchio
+    di tre settimane. Serve SOLO ad abbassare il costo della ricerca degli
+    iperparametri: il risultato riportato usa sempre stride=1.
     """
     played = df[df["FTR"].notna()]
     test = df[df["season"].isin(test_seasons)].copy()
-    blocks = test.groupby(["season", "matchday"], observed=True, sort=True)
+    test["_block"] = (test["matchday"] - 1) // stride
+    blocks = test.groupby(["season", "_block"], observed=True, sort=True)
     log.info(
-        "walk-forward: %d giornate, %d partite, modelli %s",
-        blocks.ngroups, len(test), [m.name for m in models],
+        "walk-forward: %d blocchi (stride %d), %d partite, modelli %s",
+        blocks.ngroups, stride, len(test), [m.name for m in models],
     )
 
     rows: list[pd.DataFrame] = []
@@ -635,23 +644,60 @@ def _low_region_stats(p: np.ndarray, y: np.ndarray, soglia: float = 0.25) -> tup
 
 # ---------------------------------------------------------------------------
 
+def report(preds: pd.DataFrame, reference: str = "M1b market-only (diretto)") -> pd.DataFrame:
+    """
+    La tabella unica: metriche, quota coperta e confronto appaiato col mercato.
+
+    Sta tutto insieme di proposito. Un RPS senza il suo intervallo appaiato
+    invita a leggere come differenza quello che e' rumore, e un intervallo
+    senza `skill_closed` non dice se il modello sia arrivato a meta' strada o
+    a un decimo.
+    """
+    tab = compare(preds, reference=reference)
+    paired = paired_comparison(preds, reference=reference)
+
+    tab["delta_mercato"] = paired["differenza"]
+    tab["ic_95"] = [
+        "riferimento" if m == reference
+        else f"[{paired.loc[m, 'ic_basso']:+.5f}, {paired.loc[m, 'ic_alto']:+.5f}]"
+        for m in tab.index
+    ]
+    tab["verdetto"] = [
+        "riferimento" if m == reference
+        else "batte il mercato" if paired.loc[m, "ic_alto"] < 0
+        else "peggio del mercato" if paired.loc[m, "ic_basso"] > 0
+        else "indistinguibile dal mercato"
+        for m in tab.index
+    ]
+    cols = ["RPS", "skill_closed", "delta_mercato", "ic_95", "verdetto",
+            "log_loss", "Brier", "accuratezza", "ECE"]
+    out = tab[[c for c in cols if c in tab.columns]].copy()
+    for c in ("RPS", "skill_closed", "log_loss", "Brier", "accuratezza", "ECE"):
+        if c in out.columns:
+            out[c] = out[c].round(4)
+    out["delta_mercato"] = out["delta_mercato"].round(5)
+    return out
+
+
 def all_models() -> list[Model]:
     """
     Il roster completo. Sta qui e non in baseline.py perche' dixon_coles e gbm
     importano da baseline: metterlo la' chiuderebbe un ciclo di import.
 
     Gli iperparametri sono quelli scelti sulla VALIDAZIONE, non sul test:
-      - half-life 240 giorni per M3, da `python -m src.models.dixon_coles --tune`
-      - numero di alberi per M4, da `python -m src.models.gbm --tune`
-    Se si ritarano, vanno aggiornati qui e va rifatta la tabella.
+      - half-life di M3, da `python -m src.models.dixon_coles --tune`
+      - iperparametri di M4, da `python -m src.models.gbm --tune`
+    Se si ritarano, vanno aggiornati in config.py e va rifatta la tabella.
     """
     from .models.dixon_coles import DixonColes
-    from .models.gbm import PoissonGBM
+    from .models.gbm import LogBlend, MarketAnchoredGBM, PoissonGBM
 
     return default_models() + [
         DixonColes(halflife_days=config.DC_HALFLIFE),
-        PoissonGBM(use_market=False, n_estimators=config.GBM_TREES_NO_MARKET),
-        PoissonGBM(use_market=True, n_estimators=config.GBM_TREES_MARKET),
+        PoissonGBM(use_market=False, **config.GBM_PARAMS_NO_MARKET),
+        PoissonGBM(use_market=True, **config.GBM_PARAMS_MARKET),
+        MarketAnchoredGBM(**config.GBM_PARAMS_ANCHORED),
+        LogBlend(weight=config.BLEND_WEIGHT, **config.GBM_PARAMS_NO_MARKET),
     ]
 
 
@@ -680,36 +726,35 @@ def main() -> None:
         return
 
     preds = run(save=not args.no_save)
-    tab = compare(preds)
     reference = "M1b market-only (diretto)"
+    tab = report(preds, reference=reference)
 
-    print("\n=== CONFRONTO SUL TEST SET " + ", ".join(config.TEST_SEASONS) + " ===")
-    print(tab.round(4).to_string())
-    print("\nRPS: piu' basso e' meglio. E' la metrica che decide.")
-    print("skill_closed: quota di distanza fra il pavimento (M0b) e il mercato,")
-    print("              coperta dal modello. 1.0 = pari al mercato, >1 = lo batte.")
-    print("log_loss inf = il modello assegna probabilita' zero a un esito accaduto.")
-
-    print(f"\n=== CONFRONTO APPAIATO CONTRO '{reference}' ===")
-    print("Differenza di RPS partita per partita, non fra due medie separate.")
-    print(f"Bootstrap a cluster sulle giornate, {config.BOOTSTRAP_SAMPLES} ricampionamenti.")
-    paired = paired_comparison(preds, reference=reference)
-    print(paired.round(5).to_string())
-    print("\ndifferenza > 0 = peggiore del mercato (l'RPS si minimizza).")
-    print("L'intervallo che NON contiene lo zero e' l'unica prova che la")
-    print("differenza non sia rumore. La varianza fra stagioni non c'entra:")
-    print("misura la difficolta' delle stagioni, non l'incertezza sul confronto.")
+    print("\n=== TEST SET " + ", ".join(config.TEST_SEASONS) + " — 1140 partite ===")
+    print(tab.to_string())
+    print("""
+RPS            metrica primaria, piu' basso e' meglio
+skill_closed   quota della distanza fra il pavimento (M0b) e il mercato che il
+               modello ha coperto. 1.0 = pari al mercato, >1 = lo batte
+delta_mercato  differenza di RPS APPAIATA partita per partita contro il mercato.
+               Positiva = peggiore del mercato
+ic_95          intervallo bootstrap sulla differenza, con cluster sulla giornata.
+               Se contiene lo zero, la differenza non e' distinguibile dal rumore
+log_loss inf   il modello assegna probabilita' zero a un esito accaduto""")
 
     print("\n=== CONFRONTI DIRETTI FRA MODELLI ===")
     gbm_no = "M4 GBM senza mercato"
     gbm_si = "M4 GBM con mercato"
+    anc = "M5 GBM ancorato al mercato"
+    blend = f"M6 miscela log w={config.BLEND_WEIGHT:.2f}"
     dc = f"M3 Dixon-Coles hl={config.DC_HALFLIFE:g}g"
     pairs = paired_pairs(preds, [
         (gbm_no, dc),            # forma e xG contro forza stimata dai risultati
         (gbm_no, "M2 GLM Poisson"),
         (dc, "M2 GLM Poisson"),  # quanto valgono decadimento e rho
         (gbm_si, gbm_no),        # quanto aggiunge il mercato al GBM
-        (gbm_si, reference),     # e quanto il GBM aggiunge al mercato
+        (anc, reference),        # IL TEST DECISIVO
+        (blend, reference),      # e il suo controllo povero
+        (anc, gbm_si),           # ancorare batte il dare le quote come feature?
     ])
     if not pairs.empty:
         print(pairs[["differenza", "ic_basso", "ic_alto", "conclusione"]].round(5).to_string())

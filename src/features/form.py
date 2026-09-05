@@ -239,7 +239,12 @@ def to_wide(long: pd.DataFrame, form: pd.DataFrame, value_cols: list[str]) -> pd
 
 # ---------------------------------------------------------------------------
 
-def build(df: pd.DataFrame | None = None) -> pd.DataFrame:
+def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
+    """
+    `save=False` serve a src/predict.py: li' il frame contiene anche le partite
+    non ancora giocate, e il risultato non deve sovrascrivere il parquet delle
+    feature storiche.
+    """
     if df is None:
         path = config.INTERIM / "matches_master.parquet"
         df = pd.read_parquet(path)
@@ -263,9 +268,10 @@ def build(df: pd.DataFrame | None = None) -> pd.DataFrame:
     wide["is_burn_in"] = wide["season"] == first
     log.info("righe di burn-in escluse dal training: %d", int(wide["is_burn_in"].sum()))
 
-    out = config.PROCESSED / "features_form.parquet"
-    wide.to_parquet(out, index=False)
-    log.info("scritto %s: %d righe, %d colonne", out.name, len(wide), wide.shape[1])
+    if save:
+        out = config.PROCESSED / "features_form.parquet"
+        wide.to_parquet(out, index=False)
+        log.info("scritto %s: %d righe, %d colonne", out.name, len(wide), wide.shape[1])
     return wide
 
 

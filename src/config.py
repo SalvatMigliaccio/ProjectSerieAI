@@ -55,6 +55,29 @@ CURRENT_SEASON = "2627"
 SQUADRA_TARGET = "Napoli"
 
 # ---------------------------------------------------------------------------
+# Quote delle partite in arrivo
+# ---------------------------------------------------------------------------
+
+# football-data.co.uk pubblica in un unico file le partite del turno imminente
+# di tutti i campionati che copre, con le quote di apertura.
+FIXTURES_URL = "https://www.football-data.co.uk/fixtures.csv"
+
+# Codice 'Div' di football-data -> nome lega di soccerdata. Il file dei
+# fixture non ha una colonna lega leggibile: ha questi codici.
+FOOTBALL_DATA_DIV = {
+    "I1": "ITA-Serie A",
+    "E0": "ENG-Premier League",
+    "SP1": "ESP-La Liga",
+    "D1": "GER-Bundesliga",
+    "F1": "FRA-Ligue 1",
+}
+
+# Oltre questa eta' lo snapshot delle quote e' sospetto: il file copre il turno
+# imminente e viene rigenerato ogni settimana, quindi tre giorni sono gia'
+# tanti. Non blocca, avvisa.
+FIXTURES_MAX_AGE_DAYS = 3
+
+# ---------------------------------------------------------------------------
 # Parametri di modellazione
 # ---------------------------------------------------------------------------
 
@@ -123,6 +146,52 @@ DC_HALFLIFE_GRID = [30, 60, 90, 120, 180, 240, 365, 540, 730]
 # poco, quello che conta e' non stare sotto i 120.
 DC_HALFLIFE = 240
 
-# Numero di alberi del GBM, scelto sulla validazione per ciascuna variante.
-GBM_TREES_NO_MARKET = 300
-GBM_TREES_MARKET = 300
+# Iperparametri del GBM, scelti per ricerca casuale sulla validazione, uno per
+# variante. Il numero di alberi NON e' qui: lo decide l'arresto anticipato sulla
+# coda del training, con tetto a 3000 (che non viene mai raggiunto: le scelte
+# stanno intorno ai 450).
+# Si riottengono con: python -m src.models.gbm --tune
+#
+# NOTA SUI BORDI DELLO SPAZIO DI RICERCA. In entrambe le varianti la scelta
+# tocca `num_leaves` al massimo (8) e `colsample_bytree` al minimo (0.6). Non
+# si e' esteso lo spazio perche' la superficie e' piatta: fra la prima e la
+# quinta configurazione ci sono 0.0003 di RPS, contro un'ampiezza tipica
+# dell'intervallo appaiato di ~0.006. La scelta esatta dentro le prime cinque
+# e' rumore. Se un giorno si estende, gli unici due parametri da muovere sono
+# quelli, e solo quelli.
+GBM_PARAMS_NO_MARKET = {
+    "learning_rate": 0.03,
+    "num_leaves": 8,
+    "min_child_samples": 75,
+    "colsample_bytree": 0.6,
+    "subsample": 0.6,
+    "reg_lambda": 20.0,
+}
+GBM_PARAMS_MARKET = {
+    "learning_rate": 0.02,
+    "num_leaves": 8,
+    "min_child_samples": 75,
+    "colsample_bytree": 0.6,
+    "subsample": 0.7,
+    "reg_lambda": 5.0,
+}
+
+# M5, il GBM ancorato al mercato via init_score. Regolarizzazione molto piu'
+# forte: stima un residuo, e un residuo si sovradatta piu' facilmente di un
+# livello. Lo spazio di ricerca e' stato esteso una volta (learning_rate giu',
+# reg_lambda su) perche' le prime cinque scelte lo toccavano sistematicamente;
+# estenderlo ha guadagnato 0.00006 di RPS e ha reso la superficie piatta
+# (0.000025 fra le prime cinque), quindi non si estende oltre.
+GBM_PARAMS_ANCHORED = {
+    "learning_rate": 0.0025,
+    "num_leaves": 4,
+    "min_child_samples": 50,
+    "colsample_bytree": 0.6,
+    "subsample": 0.6,
+    "reg_lambda": 50.0,
+}
+
+# Peso della miscela logaritmica di M6, stimato sulla sola validazione.
+# 0 = mercato puro, 1 = GBM puro. La curva e' una U con minimo interno a 0.15;
+# il guadagno rispetto al mercato puro e' pero' di soli 0.00011 di RPS.
+BLEND_WEIGHT = 0.15

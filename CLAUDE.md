@@ -135,7 +135,13 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 ### Moduli scritti e verificati
 
 - `ingest.py` — download multi-fonte. Legge leghe e stagioni da `src/config.py`.
-  Fail-fast dopo 3 errori consecutivi su ClubElo
+  Fail-fast dopo 3 errori consecutivi su ClubElo.
+  Lo stage `fixtures` scarica le quote del turno imminente: filtra su `Div`
+  (`config.FOOTBALL_DATA_DIV`), deduce la stagione dalla data (stacco a
+  luglio, non da `CURRENT_SEASON` che andrebbe aggiornato a mano ogni agosto),
+  applica `team_name_map.json` e **avvisa nominando le squadre non
+  riconosciute** — un nome non mappato non darebbe errore, farebbe sparire la
+  partita dalla previsione in silenzio
 - `src/config.py` — percorsi, leghe, stagioni, iperparametri
 - `src/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
   (`scipy.optimize.linear_sum_assignment`), non fuzzy matching greedy. Risolve
@@ -159,7 +165,45 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   validata
 - `src/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
   `score_matrix` (lambda -> matrice dei risultati esatti -> 1X2 e over/under)
-  con correzione Dixon-Coles opzionale, spenta di default
+  con correzione Dixon-Coles opzionale, spenta di default. `valid_rho_floor`
+  da il rho minimo ammissibile: la correzione DC non e' valida per ogni rho,
+  serve rho > -1/max(lam, mu) o escono probabilita' negative
+- `src/models/dixon_coles.py` — M3, decadimento temporale esponenziale e rho
+  stimato **insieme** ad attacchi e difese, non fissato a priori. Gradiente
+  analitico (verificato a 1.8e-8 relativo contro differenza finita centrata:
+  con la differenza in avanti di `approx_fprime` l'errore di troncamento e'
+  1e-4 e sembra un bug del gradiente). Un fit costa 25-70 ms
+- `src/models/gbm.py` — M4 (LightGBM Poisson a due gol separati, con e senza
+  feature di mercato), **M5** (`MarketAnchoredGBM`, ancorato al mercato via
+  `init_score = log(mkt_lambda)`: stima il residuo, non il livello) e **M6**
+  (`LogBlend`, media geometrica fra i lambda del mercato e quelli di M4).
+  Il numero di alberi NON e' un iperparametro di griglia, lo decide l'arresto
+  anticipato su un ritaglio della CODA DEL TRAINING — informazione gia'
+  disponibile a T-24h, quindi non e' leakage. Ricerca casuale in parallelo su
+  8 processi, ~2-7 minuti.
+  **Attenzione a `predict()` con init_score**: LightGBM restituisce
+  `exp(somma degli alberi)` e NON riaggiunge l'init_score. Va sommato a mano
+  in scala logaritmica, come fa `MarketAnchoredGBM.predict`. Sbagliarlo non
+  solleva nessun errore: produce semplicemente il modello sbagliato
+- `src/predict.py` — inferenza settimanale. Modello **parametrico**, con M1
+  (market-only) come predefinito: e' l'unica scelta coerente con il test set,
+  che dice che nessun modello statistico batte il mercato. Quando un M7 lo
+  battera' con intervallo netto, qui cambia un argomento.
+  Le feature delle partite non giocate si ottengono **accodando la riga futura
+  allo storico** e rilanciando i moduli di feature senza modificarne la
+  logica: `form.py` scrive lo stato prima di ogni partita e salta i valori
+  nulli, quindi una riga futura riceve lo stato dopo l'ultima partita giocata
+  e non corrompe nulla. Tre protezioni, tutte verificate scattare:
+  `assert_no_post_match` (nessuna colonna post-partita valorizzata sulle righe
+  future), il controllo di duplicazione storico/futuro, e l'assert che il
+  timestamp UTC preceda il calcio d'inizio
+- `src/backtest_log.py` — rilegge `predictions_log.csv`, aggancia i risultati
+  veri sulla quadrupla e calcola RPS e calibrazione **solo** sulle previsioni
+  scritte prima del calcio d'inizio. Quando ci sono piu' righe per la stessa
+  partita usa la PRIMA per timestamp: il registro e' append-only e la piu'
+  recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
+  registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
+  distingue un errore del modello da un prezzo cambiato
 - `tests/make_fixtures.py`, `tests/test_form.py` — dati sintetici e test
 
 ### Protocollo di valutazione — fissato, non cambiarlo per far vincere un modello
@@ -176,15 +220,124 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 
 ### Risultati sul test set (walk-forward, 1140 partite)
 
-| modello | RPS | log loss | Brier | accur. | ECE |
+| modello | RPS | skill_closed | delta mercato | IC 95% | verdetto |
 |---|---|---|---|---|---|
-| M1b market-only diretto | **0.1881** | 0.967 | 0.576 | 0.540 | 0.022 |
-| M1 market-only via lambda | 0.1882 | 0.968 | 0.577 | 0.541 | 0.027 |
-| M2 GLM Poisson | 0.1969 | 0.994 | 0.594 | 0.520 | 0.017 |
-| M0b frequenze di base | 0.2291 | 1.090 | 0.661 | 0.402 | 0.024 |
-| M0 sempre casa | 0.4583 | inf | 1.197 | 0.402 | 0.399 |
+| M1b market-only diretto | **0.1881** | 1.000 | — | riferimento | — |
+| M1 market-only via lambda | 0.1882 | 0.999 | +0.00004 | [-0.00055, +0.00061] | indistinguibile |
+| M5 GBM ancorato al mercato | 0.1882 | 0.997 | +0.00011 | [-0.00056, +0.00077] | indistinguibile |
+| M6 miscela log w=0.15 | 0.1886 | 0.990 | +0.00043 | [-0.00022, +0.00107] | indistinguibile |
+| M4 GBM con mercato | 0.1905 | 0.941 | +0.00242 | [+0.00070, +0.00411] | peggio |
+| M4 GBM senza mercato | 0.1944 | 0.846 | +0.00629 | [+0.00342, +0.00923] | peggio |
+| M3 Dixon-Coles hl=240g | 0.1949 | 0.834 | +0.00681 | [+0.00395, +0.00956] | peggio |
+| M2 GLM Poisson | 0.1969 | 0.786 | +0.00877 | [+0.00559, +0.01191] | peggio |
+| M0b frequenze di base | 0.2291 | 0.000 | +0.04095 | [+0.03449, +0.04741] | peggio |
+| M0 sempre casa | 0.4583 | -5.599 | +0.27020 | [+0.24722, +0.29411] | peggio |
 
-**Soglia da battere: RPS 0.1881.**
+`skill_closed` = quota della distanza fra il pavimento M0b e il mercato,
+coperta dal modello. Comunica molto piu' del valore assoluto: 0.1944 non dice
+niente da solo, "l'85% della strada verso il mercato" si'.
+
+**Soglia da battere: RPS 0.1881. Nessun modello la batte.**
+
+### Cosa dicono i confronti appaiati — leggerli, non leggere gli RPS
+
+| confronto | differenza | IC 95% | conclusione |
+|---|---|---|---|
+| M4 senza mercato − M3 | -0.00052 | [-0.00401, +0.00282] | indistinguibili |
+| M4 senza mercato − M2 | -0.00248 | [-0.00645, +0.00148] | indistinguibili |
+| M3 − M2 | -0.00196 | [-0.00401, +0.00020] | indistinguibili |
+| M4 con mercato − M4 senza | -0.00388 | [-0.00605, -0.00179] | il mercato aggiunge |
+| **M5 ancorato − mercato** | **+0.00011** | **[-0.00056, +0.00077]** | **indistinguibili** |
+| M6 miscela − mercato | +0.00043 | [-0.00022, +0.00107] | indistinguibili |
+| M5 ancorato − M4 con mercato | -0.00230 | [-0.00384, -0.00071] | ancorare e' meglio |
+
+Quattro conclusioni che l'ordinamento per RPS da solo non autorizzerebbe:
+
+1. **M2, M3 e M4-senza-mercato sono indistinguibili fra loro.** L'ordine in
+   tabella (0.1944, 0.1949, 0.1969) e' rumore: tutti gli intervalli
+   contengono lo zero. Decadimento temporale, rho e gradient boosting su xG
+   e PPDA arrivano tutti allo stesso posto. Non spendere altro tempo a
+   scegliere fra questi tre finche' non arrivano feature nuove.
+2. **Il mercato aggiunge informazione al GBM** (-0.0039, intervallo netto).
+3. **Ancorare il modello al mercato batte il darglielo come feature**
+   (-0.0023, intervallo netto). E' la conferma che M4-con-mercato era
+   sotto-potenziato: fra cinquanta colonne le quote si diluiscono, come
+   punto di partenza no. Se un giorno servira' un modello che parte dal
+   mercato, la forma giusta e' M5, non M4.
+4. **Ma nemmeno M5 aggiunge niente al mercato** (vedi sopra, risultato
+   acquisito). Con le feature di oggi il modo migliore di usare il mercato
+   resta non toccarlo.
+
+## RISULTATO ACQUISITO — non riaprirlo senza dati nuovi
+
+**Le statistiche aggregate di gioco non aggiungono informazione alle quote.**
+Chiuso con un test ben potenziato, non per stanchezza.
+
+### Come e' stato chiuso
+
+La prima versione del test (M4 con le quote fra cinquanta feature) era
+sotto-potenziata: il modello spendeva capacita' a ricostruire il mercato dai
+suoi ingressi prima di poterlo correggere. M5 elimina il problema.
+
+**M5** e' un LightGBM Poisson con `init_score = log(mkt_lambda)`: il mercato
+non e' una feature, e' il punto di partenza esatto, e ogni albero puo'
+occuparsi solo del residuo. Le feature sono solo quelle non di mercato.
+
+La proprieta' che rende il test valido: **se non c'e' segnale, M5 degenera nel
+mercato.** Verificato direttamente — azzerando le feature, l'arresto anticipato
+si ferma a 1 albero e lo scarto logaritmico dal mercato e' **0.00000**.
+
+Risultato: **M5 e' indistinguibile dal mercato**, +0.00011 con intervallo
+[-0.00056, +0.00077]. Non lo batte. E non e' nemmeno peggiore, il che esclude
+la spiegazione alternativa (regolarizzazione troppo debole, modello che
+aggiunge rumore): il test ha davvero deciso.
+
+**M6**, la miscela geometrica fra i lambda del mercato e quelli di M4 senza
+mercato, e' il controllo povero: un solo parametro libero, impossibile
+sovradattare. Il peso ottimo sulla validazione e' 0.15 con una curva a U dal
+minimo interno, ma il guadagno di 0.00011 non sopravvive sul test:
++0.00043, intervallo [-0.00022, +0.00107]. Indistinguibile anche lui.
+
+Due modi opposti di combinare — uno flessibilissimo, uno rigidissimo — danno
+la stessa risposta. Non e' un problema di forma del modello.
+
+### Cosa usa davvero M4 senza mercato — la diagnosi
+
+`python -m src.models.gbm --importance`, guadagno medio su 3 stagioni x 2 lati,
+aggregato per statistica sommando le viste casa/fuori/differenza:
+
+```
+deep_for       13.2%      xpts_against    7.4%      goals_for   4.7%  <- nono posto
+xpts_for       11.8%      sot_for         6.5%      sot_against 4.4%
+ppda_against    8.6%      np_xg_against   6.5%      shots_for   4.1%
+shots_against   7.7%      deep_against    5.5%      np_xg_for   4.0%
+```
+
+**Il GBM non sta reinventando la forza di squadra dai gol**: `goals_for` e'
+nono, al 4.7%. In cima ci sono i punti attesi, i deep completions, il PPDA e
+l'xG non da rigore — cioe' esattamente i segnali avanzati.
+
+Con una precisazione che conta: `xpts` (punti attesi) e' esso stesso derivato
+dall'xG, ed e' a tutti gli effetti una misura sintetica di forza. Quindi la
+risposta non e' netta come le due diagnosi alternative suggerivano: il modello
+usa segnali avanzati, ma li usa **per costruire una misura di forza**, che e'
+poi la stessa cosa che Dixon-Coles stima dai risultati. Ecco perche' M2, M3 e
+M4 finiscono indistinguibili: tre strade diverse per la stessa quantita'.
+
+L'informazione c'e' — M4 senza mercato copre l'84.6% della distanza fra il
+pavimento e il mercato, e i dati di gioco da soli ricostruiscono gran parte di
+cio' che le quote sanno. Ma e' la **stessa** informazione che le quote gia'
+contengono, prezzata meglio.
+
+### Conseguenza operativa
+
+**Non cercare altre statistiche aggregate di gioco.** Non aggiungere altre
+medie mobili, altre finestre, altre viste degli stessi eventi: il test dice
+che quella direzione e' esaurita. Cercare dove il mercato e' strutturalmente
+cieco o lento — il layer giocatori e gli infortuni.
+
+Cosa riaprirebbe la questione: dati nuovi di natura diversa (giocatori,
+formazioni probabili, infortuni), non un modello nuovo sugli stessi dati.
 
 ### Come si decide se una differenza e' reale — confronto appaiato
 
@@ -208,17 +361,108 @@ contro il 95% nominale.
 
 **Una differenza conta solo se il suo intervallo non contiene lo zero.**
 
+### Ipotesi aperte — da verificare, non da assumere
+
+- **L'half-life di M3 e' lunga: 240 giorni.** Tarata sulla validazione, con
+  minimo interno alla griglia e curva piatta fra 180 e 540. Otto mesi di
+  memoria sono molti per una squadra di calcio, e l'ipotesi e' che siano
+  lunghi **perche' mancano le feature che catturano il cambiamento**:
+  infortuni, mercato di gennaio, cambi di allenatore. Senza quelle, l'unico
+  modo che il modello ha di non sbagliare dopo uno shock e' non credere
+  troppo al recente, cioe' allungare la memoria.
+
+  **Predizione falsificabile**: quando arrivera' il layer giocatori e le
+  feature di contesto, l'half-life ottima deve **accorciarsi**. Se si ritara
+  e resta sui 240 giorni, quelle feature non stanno funzionando — e va
+  indagato quello, non accettato il risultato. Ritarare sempre con
+  `python -m src.models.dixon_coles --tune` dopo ogni nuovo blocco di feature.
+
 ### Da fare, in ordine
 
-1. `src/features/team_strength.py` — Elo proprio calcolato dai risultati
+1. **Layer giocatori e infortuni.** E' l'unica direzione rimasta aperta: il
+   test decisivo di M5 ha chiuso quella delle statistiche aggregate (vedi
+   "risultato acquisito"). Serve a due cose insieme — battere il mercato, e
+   falsificare l'ipotesi sull'half-life.
+   Quando arrivera', il modo giusto di misurarlo e' **rifare M5 con le nuove
+   feature**: l'ancoraggio al mercato e' il test piu' potente che abbiamo, e
+   l'infrastruttura c'e' gia'. Non ripartire da M4
 2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
    derby (`manual/derbies.csv` e' pronto), cambi allenatore
    (`manual/coach_changes.csv` e' ancora un template vuoto)
-3. `src/models/dixon_coles.py` — modello a gol con decadimento temporale.
-   `score_matrix` accetta gia' rho: manca solo stimarlo. Attenzione al segno,
-   e' rho **negativo** ad alzare 0-0 e 1-1
-4. `src/models/gbm.py` — LightGBM con obiettivo Poisson
-5. `src/predict.py` — inferenza settimanale + log append-only
+3. `src/features/team_strength.py` — Elo proprio calcolato dai risultati.
+   Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
+   quarto modo di misurare la forza della squadra non cambiera' il quadro
+
+## Ciclo settimanale — la routine operativa
+
+Da rilanciare dopo ogni giornata. Nessun passaggio manuale: soccerdata
+riscarica da sola la stagione in corso.
+
+```bash
+# 1. AGGIORNAMENTO DATI (~10 minuti, solo gli stage veloci)
+python ingest.py --stage matches
+python ingest.py --stage understat
+python ingest.py --stage fixtures     # quote delle partite in arrivo
+python ingest.py --stage schedule
+
+# 2. RICOSTRUZIONE DEL DATASET
+python -m src.normalize --build       # matches_master.parquet
+
+# 3. FEATURE
+python -m src.features.form
+python -m src.features.market
+
+# 4. PREVISIONE della giornata in arrivo (scrive nel registro append-only)
+python -m src.predict --next
+
+# 5. DOPO che le partite si sono giocate, ripartendo dal punto 1:
+python -m src.backtest_log            # track record aggiornato
+```
+
+**Il punto 4 va fatto PRIMA che si giochi**, ed e' l'unico passaggio che non
+si puo' recuperare dopo. `predict.py` verifica con un assert che il timestamp
+UTC preceda il calcio d'inizio di ogni partita registrata: se il registro non
+e' scritto in tempo, quella giornata e' persa per sempre ai fini del track
+record. Ricostruirla dopo con `--as-of` produce un file separato
+(`predictions_backfill.csv`) che **non** e' un track record e non va mescolato.
+
+### Le quote delle partite in arrivo — nota metodologica, non un dettaglio
+
+`--stage fixtures` scarica `football-data.co.uk/fixtures.csv`, che contiene le
+partite del turno imminente di tutti i campionati coperti, con le quote di
+apertura. Filtra su `Div` (Serie A = `I1`), rinomina sullo schema di
+`matches.parquet` e salva in `data/raw/fixtures_odds.parquet` con il
+**timestamp di download**.
+
+**Perche' proprio quella fonte e non un'altra.** Quelle quote sono raccolte il
+**venerdi' entro le 17:00 UK** per le partite del weekend e il **martedi'
+entro le 13:00** per gli infrasettimanali. E' lo stesso identico criterio con
+cui sono state raccolte le quote di apertura dello storico su cui il modello
+e' stato addestrato e valutato. La corrispondenza fra addestramento e
+produzione e' garantita da questo, non da altro.
+
+Prendere le quote da un altro book, da un aggregatore, o dallo stesso book in
+un altro momento della settimana romperebbe quella corrispondenza in modo
+invisibile: i numeri sarebbero plausibili, il codice non protesterebbe, e
+l'RPS in produzione divergerebbe da 0.188 senza che si capisca perche'. Il
+drift apertura-chiusura misurato ha deviazione standard di ~3 punti di
+probabilita': e' l'ordine di grandezza dell'errore che si introdurrebbe.
+
+**Il file e' una finestra, non un archivio.** Contiene solo il turno imminente
+e viene sovrascritto. Se non lo si scarica in tempo, quelle quote da li' non
+si recuperano piu'. Da qui l'avviso quando lo snapshot ha piu' di
+`config.FIXTURES_MAX_AGE_DAYS` giorni, e il messaggio esplicito quando la
+giornata richiesta non e' coperta — chiedere la giornata 12 a settembre non
+produce un errore, produce zero quote, e senza messaggio si cercherebbe il
+problema nel posto sbagliato.
+
+**Ripiego manuale.** `manual/upcoming_odds.csv` resta come rete di sicurezza
+per le partite che lo snapshot non copre o quando il sito e' giu' (succede:
+risponde 503 su tutto il dominio). Stesse colonne, precedenza piu' bassa.
+Nel registro `odds_source` distingue le due provenienze — `B365-fixtures`
+contro `B365-manual` — perche' la prima e' lo snapshot ufficiale di un momento
+noto e la seconda una quota copiata a mano in un momento ignoto: a mesi di
+distanza la differenza serve a interpretare il track record.
 
 ## Comandi
 
@@ -226,8 +470,12 @@ contro il 95% nominale.
 # Ingestion (stage veloci: ~10 minuti totali)
 python ingest.py --stage matches
 python ingest.py --stage understat
+python ingest.py --stage fixtures   # quote del turno imminente
 python ingest.py --stage schedule
 python ingest.py --stage elo        # opzionale, servizio a volte giu'
+
+# Se football-data e' irraggiungibile, si punta a una copia locale:
+python ingest.py --stage fixtures --fixtures-file percorso/fixtures.csv
 
 # Stage lenti (ore, rate-limited, interrompibili grazie alla cache)
 python ingest.py --stage lineups
@@ -243,11 +491,29 @@ python -m src.features.form
 python -m src.features.market
 python -m src.features.market --coverage   # copertura quote per stagione
 
-# Valutazione
-python -m src.evaluate                # tabella di confronto sul test set
+# Valutazione (~5 minuti: 114 giornate x 8 modelli)
+python -m src.evaluate                # tabella + confronto appaiato
 python -m src.evaluate --calibration  # curve di calibrazione ed ECE
 python -m src.evaluate --bias         # favourite-longshot, stagione per stagione
-python -m src.models.baseline --demo  # controlli sulla matrice dei risultati
+
+# Modelli: controlli e taratura (SEMPRE su validazione, mai sul test)
+python -m src.models.baseline --demo         # matrice dei risultati, segno di rho
+python -m src.models.dixon_coles --check     # gradiente analitico
+python -m src.models.dixon_coles --tune      # half-life, ~1 minuto
+python -m src.models.gbm --tune --workers 8   # iperparametri GBM, tutte le varianti
+python -m src.models.gbm --tune --variants ancorato   # solo M5, ~2 minuti
+python -m src.models.gbm --blend              # peso della miscela di M6
+python -m src.models.gbm --importance         # cosa usa davvero M4 senza mercato
+
+# Produzione
+python -m src.predict --next                  # prossima giornata con partite future
+python -m src.predict --matchday 3            # una giornata precisa
+python -m src.predict --team Napoli           # prossima partita del Napoli
+python -m src.predict --matchday 3 --dry-run  # senza scrivere nel registro
+python -m src.predict --as-of 2026-08-27 --next   # ricostruzione, va nel file di backfill
+python -m src.backtest_log                    # track record
+python -m src.backtest_log --pending          # previsioni in attesa di risultato
+python -m src.backtest_log --backfill         # rilegge le ricostruzioni (NON e' un track record)
 
 # Test senza rete
 python -m tests.test_form
@@ -287,6 +553,12 @@ L'ambiente di sviluppo e' **Windows con PowerShell**. Per cancellare file usare
 - `manual/derbies.csv` — GIA FATTO, 48 coppie con colonna `intensity`
   (city/regional/rivalry). La coppia va trattata come NON ordinata:
   `tuple(sorted([casa, trasferta]))`
+- `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
+  arrivano da `python ingest.py --stage fixtures`. Serve compilarlo a mano
+  soltanto per le partite che lo snapshot non copre o quando football-data e'
+  irraggiungibile. Colonne `league, season, home_team, away_team, B365H,
+  B365D, B365A, B365>2.5, B365<2.5`: servono **entrambi** i mercati, perche' i
+  gol attesi nascono dall'incrocio fra supremazia (1X2) e totale (over/under)
 - `manual/team_name_map.json` — GIA FATTO, 10 voci. Le ultime due
   (`Hellas Verona`, `SPAL`) aggiunte a mano per agganciare `fbref_schedule`,
   che usa nomi diversi da quelli gia' mappati (`Hellas Verona FC`,

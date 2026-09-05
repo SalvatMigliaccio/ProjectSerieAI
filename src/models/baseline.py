@@ -47,7 +47,7 @@ log = logging.getLogger("baseline")
 
 PRED_COLS = [
     "p_home", "p_draw", "p_away",
-    "p_over25", "p_under25",
+    "p_over25", "p_under25", "p_btts",
     "lambda_home", "lambda_away",
 ]
 
@@ -141,12 +141,18 @@ def outcomes_from_matrix(mat: np.ndarray, line: float = 2.5) -> pd.DataFrame:
     away_win = idx[:, None] < idx[None, :]
     over = (idx[:, None] + idx[None, :]) > line
 
+    # Gol-gol: entrambe segnano almeno una volta. E' il complemento della
+    # prima riga e della prima colonna, con lo 0-0 ridato indietro perche'
+    # altrimenti verrebbe tolto due volte.
+    btts = 1.0 - mat[:, 0, :].sum(axis=1) - mat[:, :, 0].sum(axis=1) + mat[:, 0, 0]
+
     return pd.DataFrame({
         "p_home": (mat * home_win).sum(axis=(1, 2)),
         "p_draw": (mat * draw).sum(axis=(1, 2)),
         "p_away": (mat * away_win).sum(axis=(1, 2)),
         "p_over25": (mat * over).sum(axis=(1, 2)),
         "p_under25": (mat * ~over).sum(axis=(1, 2)),
+        "p_btts": btts,
     })
 
 
@@ -389,6 +395,11 @@ def _demo() -> None:
     out = outcomes_from_matrix(mat)
     assert np.allclose(out[["p_home", "p_draw", "p_away"]].sum(axis=1), 1.0), "1X2 non somma a 1"
     assert np.allclose(out[["p_over25", "p_under25"]].sum(axis=1), 1.0), "over/under non somma a 1"
+
+    # Gol-gol, controllato contro l'indipendenza: senza correzione DC vale
+    # esattamente (1 - e^-lam_casa)(1 - e^-lam_fuori).
+    atteso = (1 - np.exp(-lam_h)) * (1 - np.exp(-lam_a))
+    assert np.allclose(out["p_btts"], atteso, atol=1e-6), "gol-gol non torna sotto indipendenza"
 
     # I gol attesi dalla matrice devono ridare i lambda, ma solo a meno del
     # troncamento: oltre MAX_GOALS la coda viene tagliata e la rinormalizzazione

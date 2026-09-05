@@ -401,7 +401,11 @@ FEATURES_CLOSING = [
 ]
 
 
-def build(df: pd.DataFrame | None = None) -> pd.DataFrame:
+def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
+    """
+    `save=False` serve a src/predict.py, che passa un frame comprensivo delle
+    partite in arrivo e non deve sovrascrivere il parquet storico.
+    """
     if df is None:
         path = config.INTERIM / "matches_master.parquet"
         df = pd.read_parquet(path)
@@ -433,14 +437,15 @@ def build(df: pd.DataFrame | None = None) -> pd.DataFrame:
     out["drift_p_over25"] = out["close_p_over25"] - out["mkt_p_over25"]
     out["drift_abs"] = out[["drift_p_home", "drift_p_away"]].abs().sum(axis=1)
 
-    dst = config.PROCESSED / "features_market.parquet"
-    out.to_parquet(dst, index=False)
-    log.info("scritto %s: %d righe, %d colonne", dst.name, len(out), out.shape[1])
+    if save:
+        dst = config.PROCESSED / "features_market.parquet"
+        out.to_parquet(dst, index=False)
+        log.info("scritto %s: %d righe, %d colonne", dst.name, len(out), out.shape[1])
 
-    cov = out.groupby("season")[["mkt_p_home", "mkt_p_over25", "close_p_home"]].apply(
-        lambda g: g.notna().mean().mul(100).round(1)
-    )
-    log.info("copertura %% per stagione:\n%s", cov.to_string())
+        cov = out.groupby("season")[["mkt_p_home", "mkt_p_over25", "close_p_home"]].apply(
+            lambda g: g.notna().mean().mul(100).round(1)
+        )
+        log.info("copertura %% per stagione:\n%s", cov.to_string())
     return out
 
 
