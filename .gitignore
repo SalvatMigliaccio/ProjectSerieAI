@@ -9,3 +9,6 @@ manual/team_name_map_suggested.json
 # ricostruzioni, che invece si rifanno quando servono.
 track_record/*.bak
 track_record/predictions_backfill.csv
+# Il report e' una vista del registro: si rigenera con 'python -m src.report',
+# e versionarne una copia nuova ogni settimana sarebbe solo rumore nel diff.
+track_record/report.html

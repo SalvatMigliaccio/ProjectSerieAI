@@ -120,7 +120,12 @@ if __name__ == "__main__":
     df = synthetic()
     print(f"dati sintetici: {len(df)} partite, {df.season.nunique()} stagioni\n")
 
-    wide = form.build(df)
+    # save=False non e' un dettaglio: con il default il test scriverebbe le
+    # sue 90 righe sintetiche sopra `data/processed/features_form.parquet`,
+    # cioe' sopra le 4580 righe vere. Non darebbe nessun errore — il merge di
+    # `evaluate.load_dataset` riempirebbe di NaN tutte le feature di forma e
+    # M4 degenererebbe in un modello costante senza protestare. E' successo.
+    wide = form.build(df, save=False)
     print()
 
     test_no_future_rows(df, wide)

@@ -226,7 +226,25 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
   registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
   distingue un errore del modello da un prezzo cambiato
-- `tests/make_fixtures.py`, `tests/test_form.py` — dati sintetici e test
+- `src/report.py` — il report settimanale in HTML statico: CSS dentro il file,
+  grafici in SVG generato a mano, nessun CDN e nessun framework. Cinque
+  sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
+  di quelle squadre, divergenza fra M4-senza-mercato e M1 (**diagnostica, non
+  segnale di scommessa**), track record con la linea del backtest e la stima di
+  quante previsioni servono ancora, stato del sistema. Lo chiama `weekly.py` in
+  coda al ciclo, ma gira anche da solo con `python -m src.report --open` — e in
+  quel caso **non tocca il registro**, e il report lo dichiara.
+  La sezione 3 addestra M4 e controlla che non sia degenerato: con le feature
+  di forma nulle LightGBM si ferma a un albero e prevede la stessa cosa per
+  tutte le partite, senza sollevare niente
+- `tests/make_fixtures.py`, `tests/test_form.py`, `tests/test_kickoff.py`,
+  `tests/test_market.py`, `tests/test_leakage.py`,
+  `tests/test_predictions_log.py`, `tests/test_report.py` — dati sintetici e
+  test di regressione. **Nessun test scrive nella cartella dati vera**:
+  `test_form` passava `save=True` per errore e sovrascriveva
+  `features_form.parquet` con 90 righe sintetiche, senza alcun errore —
+  il merge di `load_dataset` riempiva di NaN tutte le feature di forma e M4
+  degenerava in silenzio in un modello costante
 
 ### Protocollo di valutazione — fissato, non cambiarlo per far vincere un modello
 
@@ -537,12 +555,13 @@ presenti, e la vecchiaia dello snapshot viene comunque segnalata. I passi
 locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
 previsione sarebbe sbagliata in silenzio.
 
-**Il report va su file, non solo a schermo.** Ogni ciclo scrive
-`data/processed/reports/giornata_<stagione>_<NN>.html`, uno per giornata, piu'
-una copia in `ultimo.html` a percorso fisso. Uno per giornata e non uno solo
-sovrascritto: riaprire il report di tre turni fa e' esattamente cio' che serve
-per capire come sono andate le previsioni. Resta comunque una **vista** —
-il dato e' il registro, e il report si rigenera.
+**Il report va su file, non solo a schermo.** Lo scrive `src/report.py`, in
+coda al ciclo: `track_record/report.html` a percorso fisso, piu' una copia
+d'archivio in `data/processed/reports/giornata_<stagione>_<NN>.html`. Una per
+giornata e non una sola sovrascritta: riaprire il report di tre turni fa e'
+esattamente cio' che serve per capire come sono andate le previsioni. Resta
+comunque una **vista** — il dato e' il registro, il report si rigenera con
+`python -m src.report` e per questo non e' versionato.
 
 **Il registro e' l'unico dato che non si rigenera.** Tutto il resto si
 riscarica; le previsioni no, perche' vanno scritte prima del calcio d'inizio e

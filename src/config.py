@@ -161,6 +161,18 @@ CALIBRATION_BINS = 10
 # pipeline che si comporta diversamente dal backtest.
 TEST_RPS_REFERENCE = 0.1881
 
+# Scarto dal riferimento sotto il quale non vale la pena accorgersi di niente.
+# Serve a rispondere a "quante previsioni servono perche' il track record dica
+# qualcosa": senza una tolleranza dichiarata, la domanda non ha risposta.
+#
+# 0.01 non e' arbitrario: e' un quarto della distanza fra il mercato (0.1881) e
+# il pavimento delle frequenze di base (0.2291), ed e' piu' grande di QUALSIASI
+# differenza misurata fra i modelli statistici provati (la maggiore, M2 contro
+# il mercato, vale 0.0088). Una divergenza piu' piccola di cosi' fra produzione
+# e backtest non cambierebbe nessuna decisione; una piu' grande vuol dire che
+# la pipeline di produzione non sta facendo quello che faceva il backtest.
+TRACK_TOLERANCE_RPS = 0.01
+
 # Stagioni di validazione: qui si tarano gli iperparametri, mai sul test.
 # Sono le due che precedono il test, quindi il taratura vede solo il passato.
 VALIDATION_SEASONS = ["2122", "2223"]

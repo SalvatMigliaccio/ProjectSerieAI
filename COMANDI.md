@@ -43,21 +43,48 @@ python -m src.weekly --verbose       # log completi dei moduli chiamati
 
 ### Il report su file
 
-Ogni ciclo scrive un report HTML, uno per giornata:
+Ogni ciclo scrive un report HTML, e lo si puo' rigenerare da solo:
+
+```bash
+python -m src.report               # rigenera track_record/report.html
+python -m src.report --open        # lo rigenera e lo apre nel browser
+python -m src.report --no-diverge  # salta la sezione 3, che addestra M4
+```
 
 ```
-data/processed/reports/giornata_2627_03.html    una per giornata, non si sovrascrivono
-data/processed/reports/ultimo.html              percorso fisso, comodo da tenere aperto
+track_record/report.html                        percorso fisso, da tenere aperto
+data/processed/reports/giornata_2627_03.html    archivio, una per giornata
 ```
 
-Aprilo con un doppio clic. Ha la tabella delle previsioni, le **selezioni piu'
-probabili** su tutti i mercati (1X2, doppia chance, over/under 1.5-3.5,
-gol-gol, squadra che segna) con la **quota equa** accanto, la sezione della
-squadra seguita con i punteggi esatti, le partite scoperte e il track record.
-Si adatta al tema chiaro/scuro del browser e non dipende da niente di esterno.
+Aprilo con un doppio clic. Cinque sezioni, in quest'ordine:
+
+1. **la giornata in arrivo** — 1/X/2, gol attesi, over 2.5, gol-gol, le
+   selezioni piu' probabili con la **quota equa** accanto, e la squadra seguita
+   in evidenza con i primi cinque punteggi esatti;
+2. **cosa e' cambiato** — i gol attesi di ogni squadra contro quelli
+   dell'ultima previsione che la riguardava. Un lambda isolato non e'
+   leggibile, un lambda che si e' mosso si';
+3. **dove il modello diverge dal mercato** — M4 senza quote contro M1. E'
+   **diagnostica, non un segnale di scommessa**: il test set ha stabilito che
+   nessun modello statistico batte le quote, quindi uno scarto grande e'
+   un'anomalia da capire, non un'occasione;
+4. **track record** — RPS cumulativo delle previsioni vere nel tempo con la
+   linea del backtest a 0.1881, curva di calibrazione, e quante previsioni
+   servono ancora perche' il confronto significhi qualcosa;
+5. **stato del sistema** — data dello snapshot quote, partite scoperte,
+   avvisi. Se qualcosa non ha funzionato si vede qui, non solo nel log.
+
+Si adatta al tema chiaro/scuro del browser e non dipende da niente di esterno:
+CSS dentro il file, grafici in SVG generato, nessun CDN.
+
+`python -m src.report` **non tocca mai il registro**: le previsioni si scrivono
+una volta sola, da `python -m src.weekly`, prima del calcio d'inizio. Il report
+lo dichiara in fondo, cosi' un file rigenerato non si confonde con quello del
+ciclo vero.
 
 Il report e' una **vista**: il dato e' `predictions_log.csv`. Rigenerarlo non
-cambia nulla, cancellarlo nemmeno.
+cambia nulla, cancellarlo nemmeno. Per questo `report.html` sta in
+`track_record/` ma **non** e' versionato.
 
 ### Se serve fare i passi a mano
 
@@ -266,9 +293,8 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | **`track_record/predictions_log.csv`** | `predict` | **il track record. Versionato in git, append-only** |
 | `track_record/predictions_log.csv.bak` | `predict` | copia di sicurezza, rifatta prima di ogni scrittura |
 | `track_record/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, NON versionate |
-| `data/processed/reports/giornata_*.html` | `weekly` | report leggibile, uno per giornata |
-| `data/processed/reports/ultimo.html` | `weekly` | copia dell'ultimo, a percorso fisso |
-| `data/processed/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, non un track record |
+| `track_record/report.html` | `weekly`, `report` | il report a percorso fisso. NON versionato: si rigenera |
+| `data/processed/reports/giornata_*.html` | `weekly`, `report` | archivio del report, uno per giornata |
 
 Tutto `data/` e' in `.gitignore`.
 
