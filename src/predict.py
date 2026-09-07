@@ -579,7 +579,7 @@ class Esito:
     """
     Cosa e' successo in una passata di previsione.
 
-    Serve a src/weekly.py, che deve poter riferire quante partite sono state
+    Serve a src/predict_round.py, che deve poter riferire quante partite sono state
     predette, quante saltate perche' gia' registrate e quante scoperte, senza
     rifare i conti su un frame che non ha visto costruire.
     """
@@ -649,7 +649,7 @@ def run(
             f"{int((ko <= now).sum())} partite"
         )
 
-    # `quiet` serve a src/weekly.py, che il report lo impagina da solo: senza,
+    # `quiet` serve a src/predict_round.py, che impagina da solo: senza,
     # la stessa giornata verrebbe stampata due volte in due formati diversi.
     if not quiet:
         print(f"\n=== GIORNATA {matchday if matchday is not None else '(tutte)'} - "

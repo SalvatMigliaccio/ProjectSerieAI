@@ -1,5 +1,5 @@
 """
-Il report settimanale in HTML: un file statico, autonomo, apribile col doppio
+Il report della giornata in HTML: un file statico, autonomo, apribile col doppio
 clic.
 
 PERCHE' UN FILE E NON UNA DASHBOARD
@@ -107,7 +107,7 @@ def _esc(s) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Selezioni (condivise con il riepilogo a terminale di weekly.py)
+# Selezioni (condivise con il riepilogo a terminale di predict_round.py)
 # ---------------------------------------------------------------------------
 
 TRIVIALI = {"over 0.5", "under 0.5", "over 4.5", "under 4.5", "under 1.5"}
@@ -1032,7 +1032,7 @@ def build(
     falliti: list[str] | tuple[str, ...] = (),
     registro: str = SCRITTO,
     diverge: bool = True,
-    origine: str = "python -m src.weekly",
+    origine: str = "python -m src.predict_round",
 ) -> Path:
     """
     Scrive `track_record/report.html` e la copia d'archivio della giornata.
@@ -1145,7 +1145,7 @@ def main() -> None:
     args = ap.parse_args()
 
     # Rigenerare il report non deve MAI toccare il registro: le previsioni si
-    # scrivono da 'python -m src.weekly', una volta sola, prima del fischio.
+    # scrivono da 'python -m src.predict_round', una volta sola, prima del fischio.
     esito = predict_mod.run(use_next=True, dry_run=True, quiet=True)
     path = build(esito, registro=RIGENERATO, diverge=not args.no_diverge,
                  origine="python -m src.report")

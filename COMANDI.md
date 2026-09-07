@@ -13,37 +13,114 @@ Tempi misurati sulla macchina di sviluppo (i7-13620H, 10 core) con Serie A,
 
 ---
 
-## 1. Ciclo settimanale — un comando solo
+## 1. I due comandi della giornata
 
-```bash
-python -m src.weekly
+L'unita' di lavoro e' la **giornata di campionato**, non la settimana. Ogni
+giornata ha uno stato, e i due comandi la fanno avanzare:
+
+```
+futura   -> aperta   -> predetta      -> giocata -> chiusa
+           (quote)     predict_round             close_round
 ```
 
-Fa tutto: aggiorna i dati, scarica le quote, ricostruisce dataset e feature,
-deduce la prossima giornata, la predice tutta e aggiorna il track record.
-
-**Quando lanciarlo**
-
-| turno | snapshot quote caricato | lancia |
-|---|---|---|
-| weekend | venerdi' 17:00 UK | **sabato mattina** |
-| infrasettimanale | martedi' 13:00 UK | **mercoledi' mattina** |
-
-Cioe' dopo che le quote ci sono e prima del primo calcio d'inizio.
-
-**Rilanciarlo e' sicuro.** E' idempotente: una partita gia' prevista dallo
-stesso modello viene saltata e dichiarata, il registro resta append-only. Se
-non c'e' niente da fare esce con codice 0 e un messaggio, non con un errore.
+| stato | vuol dire |
+|---|---|
+| `futura` | nessuna quota disponibile |
+| `aperta` | quote presenti, partite non ancora giocate |
+| `predetta` | previsioni registrate (`predetta in parte` se non tutte) |
+| `giocata` | tutti i risultati disponibili |
+| `chiusa` | risultati agganciati, errore calcolato, giornata archiviata |
 
 ```bash
-python -m src.weekly --dry-run       # tutto tranne la scrittura nel registro
-python -m src.weekly --skip-ingest   # riusa i dati gia' scaricati (~10s)
-python -m src.weekly --verbose       # log completi dei moduli chiamati
+python -m src.predict_round     # da aperta a predetta
+python -m src.close_round       # da giocata a chiusa
+python -m src.rounds --status   # dove sta ogni giornata della stagione
 ```
+
+Nessuno dei due chiede quale giornata: la deducono da quote, registro e
+risultati. **Si lanciano quando si vuole e quante volte si vuole.** Se non c'e'
+niente da fare escono con codice **0** e un messaggio che nomina la giornata e
+il suo stato. Entrambi finiscono con due righe, `FATTO` e `IN SOSPESO`.
+
+**Opzioni comuni a tutti e due**
+
+```bash
+--round N        forza una giornata invece di dedurla
+--dry-run        tutto tranne la scrittura (registro o archivio)
+--skip-ingest    riusa i dati gia' scaricati, non tocca la rete
+--verbose        log completi dei moduli chiamati
+```
+
+`python -m src.predict_round` accetta anche `--no-open`, per non aprire il
+report nel browser.
+
+### `predict_round` — da aperta a predetta
+
+```bash
+python -m src.predict_round
+```
+
+1. `ingest`: `matches`, `understat`, `schedule`, `fixtures` (non fatali)
+2. `normalize --build`, `features.form`, `features.market` (fatali)
+3. trova la prima giornata con partite **predicibili adesso**: con le quote,
+   non gia' in registro, e con il calcio d'inizio ancora davanti
+4. riaddestra il modello su tutto lo storico e predice tutte le sue partite
+5. scrive nel registro saltando le gia' presenti, genera il report e lo apre
+
+**Giornata coperta a meta'.** Lo snapshot quote e' una finestra sul turno
+imminente: puo' contenerne sei su dieci. Si registrano le sei e si dice quali
+restano scoperte; al lancio dopo si completano le mancanti senza duplicare
+niente. La giornata resta `predetta in parte` finche' non sono coperte tutte.
+
+**Nota informativa, non un vincolo del codice** (nessun giorno della settimana
+compare da nessuna parte): football-data pubblica le quote il **venerdi' entro
+le 17:00 UK** per il weekend e il **martedi' entro le 13:00** per gli
+infrasettimanali. Prima di quei momenti la giornata risultera' ancora `futura`,
+e il comando lo dira'.
+
+### `close_round` — da giocata a chiusa
+
+```bash
+python -m src.close_round
+```
+
+1. `ingest`: `matches`, `understat` (non fatali)
+2. `normalize --build` e feature (fatali — senza, i risultati appena scaricati
+   non arrivano a `matches_master` e l'aggancio non trova niente)
+3. trova la prima giornata predetta e **interamente** giocata
+4. aggancia i risultati e archivia in
+   `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione, risultato
+   ed errore per singola partita
+5. rifa' `track_record/rounds/riepilogo.csv` e rigenera il report
+
+**Una giornata incompleta non si chiude**, nemmeno con `--round` esplicito: se
+manca un solo risultato resta aperta e si riprova al lancio dopo. Archiviare un
+RPS calcolato su nove partite su dieci lo renderebbe non piu' correggibile,
+perche' la giornata risulterebbe gia' chiusa.
+
+**Una giornata gia' chiusa non si riscrive.** Lo stato "chiusa" *e'*
+l'esistenza del file: per rifarla, cancella il CSV e rilancia.
+
+### `rounds --status` — dove sta ogni giornata
+
+```bash
+python -m src.rounds --status
+python -m src.rounds --status --season 2526
+```
+
+Una riga per giornata: date, partite, quote, previsioni, risultati, stato e RPS
+se chiusa. `>` marca la giornata che `predict_round` predirebbe adesso, `*`
+quella che `close_round` chiuderebbe.
+
+### `weekly` non esiste piu'
+
+`python -m src.weekly` stampa i due comandi nuovi ed esce con codice 2. Faceva
+due cose con precondizioni opposte — predire vuole le quote e nessun risultato,
+chiudere vuole tutti i risultati — quindi una delle due era sempre fuori tempo.
 
 ### Il report su file
 
-Ogni ciclo scrive un report HTML, e lo si puo' rigenerare da solo:
+Entrambi i comandi scrivono un report HTML, e lo si puo' rigenerare da solo:
 
 ```bash
 python -m src.report               # rigenera track_record/report.html
@@ -78,9 +155,9 @@ Si adatta al tema chiaro/scuro del browser e non dipende da niente di esterno:
 CSS dentro il file, grafici in SVG generato, nessun CDN.
 
 `python -m src.report` **non tocca mai il registro**: le previsioni si scrivono
-una volta sola, da `python -m src.weekly`, prima del calcio d'inizio. Il report
-lo dichiara in fondo, cosi' un file rigenerato non si confonde con quello del
-ciclo vero.
+una volta sola, da `python -m src.predict_round`, prima del calcio d'inizio. Il
+report lo dichiara in fondo, cosi' un file rigenerato non si confonde con quello
+del comando vero.
 
 Il report e' una **vista**: il dato e' `predictions_log.csv`. Rigenerarlo non
 cambia nulla, cancellarlo nemmeno. Per questo `report.html` sta in
@@ -293,8 +370,10 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | **`track_record/predictions_log.csv`** | `predict` | **il track record. Versionato in git, append-only** |
 | `track_record/predictions_log.csv.bak` | `predict` | copia di sicurezza, rifatta prima di ogni scrittura |
 | `track_record/predictions_backfill.csv` | `predict --as-of` | ricostruzioni, NON versionate |
-| `track_record/report.html` | `weekly`, `report` | il report a percorso fisso. NON versionato: si rigenera |
-| `data/processed/reports/giornata_*.html` | `weekly`, `report` | archivio del report, uno per giornata |
+| **`track_record/rounds/round_*.csv`** | `close_round` | **giornate chiuse: previsione, risultato ed errore per partita. Versionate: il file E' lo stato** |
+| `track_record/rounds/riepilogo.csv` | `close_round` | cumulativo per giornata, rifatto da zero a ogni chiusura |
+| `track_record/report.html` | `*_round`, `report` | il report a percorso fisso. NON versionato: si rigenera |
+| `data/processed/reports/giornata_*.html` | `*_round`, `report` | archivio del report, uno per giornata |
 
 Tutto `data/` e' in `.gitignore`.
 

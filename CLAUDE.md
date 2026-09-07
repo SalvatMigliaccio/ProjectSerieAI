@@ -231,16 +231,31 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
   di quelle squadre, divergenza fra M4-senza-mercato e M1 (**diagnostica, non
   segnale di scommessa**), track record con la linea del backtest e la stima di
-  quante previsioni servono ancora, stato del sistema. Lo chiama `weekly.py` in
-  coda al ciclo, ma gira anche da solo con `python -m src.report --open` — e in
+  quante previsioni servono ancora, stato del sistema. Lo chiamano in coda i
+  due comandi di giornata, ma gira anche da solo con `python -m src.report
+  --open` — e in
   quel caso **non tocca il registro**, e il report lo dichiara.
   La sezione 3 addestra M4 e controlla che non sia degenerato: con le feature
   di forma nulle LightGBM si ferma a un albero e prevede la stessa cosa per
   tutte le partite, senza sollevare niente
+- `src/rounds.py` — il ciclo di vita della giornata e la tabella di stato. E'
+  qui che si decide su quale giornata agire, guardando quote, registro e
+  risultati: nessun comando chiede il numero e nessuno sa che giorno e'.
+  Lo stato CHIUSA e' l'esistenza del file di archivio, non una colonna che
+  potrebbe divergere dai fatti
+- `src/predict_round.py` — porta una giornata da aperta a predetta. Gestisce la
+  giornata coperta a meta' (lo snapshot copre solo il turno imminente):
+  registra quelle che puo', nomina quelle che restano, e al lancio dopo
+  completa senza duplicare
+- `src/close_round.py` — porta una giornata da giocata a chiusa. Non chiude una
+  giornata incompleta nemmeno se glielo si chiede con `--round`: un RPS
+  archiviato su nove partite su dieci non sarebbe piu' correggibile. Scrive
+  l'errore per singola partita e rifa' il cumulativo da zero dai file di
+  giornata, che sono la fonte
 - `tests/make_fixtures.py`, `tests/test_form.py`, `tests/test_kickoff.py`,
   `tests/test_market.py`, `tests/test_leakage.py`,
-  `tests/test_predictions_log.py`, `tests/test_report.py` — dati sintetici e
-  test di regressione. **Nessun test scrive nella cartella dati vera**:
+  `tests/test_predictions_log.py`, `tests/test_report.py`,
+  `tests/test_rounds.py` — dati sintetici e test di regressione. **Nessun test scrive nella cartella dati vera**:
   `test_form` passava `save=True` per errore e sovrascriveva
   `features_form.parquet` con 90 righe sintetiche, senza alcun errore —
   il merge di `load_dataset` riempiva di NaN tutte le feature di forma e M4
@@ -350,7 +365,7 @@ perde comunque, con un intervallo che **esclude lo zero**. Nessuna soglia di
 sicurezza produce profitto, perche' il margine del book (5.19%) e' identico su
 tutti i mercati derivati dalle stesse quote.
 
-`weekly` mostra le selezioni piu' probabili con la **quota equa** accanto
+`predict_round` mostra le selezioni piu' probabili con la **quota equa** accanto
 (`models.baseline.all_markets` e `fair_odds`): serve a confrontare con quella
 del book, non a promettere un vantaggio che non c'e'.
 
@@ -521,26 +536,98 @@ avere**; sopra, bastano poche stagioni di Serie A.
    Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
    quarto modo di misurare la forza della squadra non cambiera' il quadro
 
-## Ciclo settimanale — un comando solo
+## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
+
+L'unita' di lavoro e' la **giornata di campionato**, non la settimana. Ha uno
+stato, e lo stato si deduce dai dati:
+
+| stato | condizione | chi la fa avanzare |
+|---|---|---|
+| **futura** | nessuna quota disponibile | il tempo |
+| **aperta** | quote presenti, partite non ancora giocate | `predict_round` |
+| **predetta** | previsioni registrate, tutte o in parte | `predict_round` |
+| **giocata** | tutti i risultati disponibili | il tempo |
+| **chiusa** | risultati agganciati, errore calcolato, archiviata | `close_round` |
 
 ```bash
-python -m src.weekly
+python -m src.predict_round     # da aperta a predetta
+python -m src.close_round       # da giocata a chiusa
+python -m src.rounds --status   # dove sta ogni giornata della stagione
 ```
 
-`src/weekly.py` fa tutto in sequenza: aggiorna i dati, scarica le quote,
-ricostruisce il dataset e le feature, deduce da solo la prossima giornata, la
-predice **tutta** (nessun filtro per squadra: piu' righe nel registro
-significano stime piu' precise) e aggiorna il track record.
+Opzioni comuni: `--round N` per forzare una giornata invece di dedurla,
+`--dry-run`, `--skip-ingest`.
 
-**Quando lanciarlo: sabato mattina** per il weekend, **mercoledi' mattina**
-per gli infrasettimanali. Cioe' dopo che football-data ha caricato lo snapshot
-quote (venerdi' 17:00 UK, martedi' 13:00 UK) e prima del primo calcio
-d'inizio.
+**Perche' non piu' un comando solo.** `weekly` faceva due cose con
+precondizioni opposte: predire vuole le quote e nessun risultato, chiudere
+vuole tutti i risultati. Una delle due era sempre fuori tempo. E "sabato
+mattina" individua la giornata giusta solo finche' il calendario e' regolare —
+un infrasettimanale, un rinvio, una partita spostata per la coppa, e non piu'.
+`src/weekly.py` resta come rimando: stampa i due comandi ed esce con codice 2.
 
-**E' idempotente**: rilanciarlo tre volte nella stessa settimana non sporca il
-registro. Una partita gia' prevista dallo stesso modello viene saltata e
-dichiarata. Se non c'e' niente da fare — lunedi', o secondo lancio — esce con
-codice **0** e un messaggio esplicito, non con un errore.
+**Nessun giorno della settimana compare nel codice.** Nota informativa, non un
+vincolo: football-data pubblica le quote il **venerdi' entro le 17:00 UK** per
+il weekend e il **martedi' entro le 13:00** per gli infrasettimanali. Lanciare
+`predict_round` prima di quei momenti trovera' la giornata ancora `futura`, e
+lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
+
+### `predict_round` — da aperta a predetta
+
+Aggiorna dati e quote, ricostruisce dataset e feature, individua **da solo** la
+prima giornata con partite ancora predicibili — con le quote, non in registro,
+e con il calcio d'inizio ancora davanti — riaddestra il modello su tutto lo
+storico, predice **tutte** le partite di quella giornata (nessun filtro per
+squadra: piu' righe nel registro significano stime piu' precise), scrive in
+modo idempotente, genera il report e lo apre.
+
+**Giornata coperta a meta'.** Il file delle quote e' una finestra sul turno
+imminente: puo' contenerne sei su dieci perche' le altre si giocano piu'
+avanti. Si predicono e si registrano le sei, e si dice quali restano scoperte.
+Al lancio successivo si completano le mancanti senza duplicare niente. La
+giornata resta **predetta in parte** finche' non sono coperte tutte — e se le
+mancanti hanno gia' iniziato ci resta per sempre, perche' una previsione
+scritta dopo il fischio non e' una previsione. Il comando lo dice invece di
+tacere.
+
+### `close_round` — da giocata a chiusa
+
+Aggiorna i risultati, ricostruisce il dataset, individua da solo la prima
+giornata predetta e **interamente** giocata, aggancia i risultati veri e la
+archivia in `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione,
+risultato ed errore di ogni singola partita. Poi rifa' il riepilogo cumulativo
+in `track_record/rounds/riepilogo.csv` e rigenera il report.
+
+**Una giornata incompleta non si chiude.** Se anche una sola partita non ha il
+risultato — posticipo, rinvio — la giornata resta aperta e si riprova al lancio
+successivo. Vale anche con `--round` esplicito: chiuderla significherebbe
+archiviare un RPS calcolato su nove partite su dieci, e al lancio dopo
+risulterebbe gia' chiusa, quindi nessuno tornerebbe a correggerlo.
+
+**Lo stato "chiusa" e' un file, non una colonna.** Una giornata e' chiusa se e
+solo se esiste il suo CSV. Non c'e' uno stato scritto da qualche parte che
+possa divergere dai fatti, e per questo `track_record/rounds/` e' **versionato**:
+in un clone senza quei file tutte le giornate tornerebbero da chiudere.
+
+**`normalize --build` non e' facoltativo nemmeno per chiudere.** `ingest
+--stage matches` aggiorna solo `data/raw/matches.parquet`: finche' non si
+ricostruisce `matches_master`, i risultati appena scaricati non esistono per il
+resto del progetto e l'aggancio non troverebbe niente.
+
+**Il track record non torna indietro sul modello.** Riaddestrare sui risultati
+nuovi e' automatico e legittimo — il modello ha piu' dati. Aggiustare il
+modello dopo aver visto come e' andato no: `close_round` non tocca niente che
+riguardi il modello, scrive soltanto cosa e' successo.
+
+### Cosa vale per entrambi
+
+**Sono idempotenti e lanciabili in qualsiasi momento.** Rilanciarli non sporca
+niente: una partita gia' registrata viene saltata e dichiarato, una giornata
+gia' chiusa non viene riscritta. Se non c'e' niente da fare escono con codice
+**0** e un messaggio che nomina la giornata e il suo stato — non in silenzio,
+che non distinguerebbe "tutto a posto" da "non ho trovato i dati".
+
+**Finiscono con due righe**, `FATTO` e `IN SOSPESO`, leggibili senza scorrere
+il log.
 
 **Se le quote cambiano, la riga vecchia non si aggiorna.** Falsificherebbe il
 track record a posteriori con informazione che al momento della previsione non
@@ -556,11 +643,12 @@ locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
 previsione sarebbe sbagliata in silenzio.
 
 **Il report va su file, non solo a schermo.** Lo scrive `src/report.py`, in
-coda al ciclo: `track_record/report.html` a percorso fisso, piu' una copia
-d'archivio in `data/processed/reports/giornata_<stagione>_<NN>.html`. Una per
-giornata e non una sola sovrascritta: riaprire il report di tre turni fa e'
-esattamente cio' che serve per capire come sono andate le previsioni. Resta
-comunque una **vista** — il dato e' il registro, il report si rigenera con
+coda a entrambi i comandi: `track_record/report.html` a percorso fisso, piu'
+una copia d'archivio in
+`data/processed/reports/giornata_<stagione>_<NN>.html`. Una per giornata e non
+una sola sovrascritta: riaprire il report di tre turni fa e' esattamente cio'
+che serve per capire come sono andate le previsioni. Resta comunque una
+**vista** — il dato e' il registro, il report si rigenera con
 `python -m src.report` e per questo non e' versionato.
 
 **Il registro e' l'unico dato che non si rigenera.** Tutto il resto si
@@ -574,7 +662,8 @@ di registrare una previsione tardiva; `backtest_log.flag_post_kickoff` la
 riconosce e la esclude anche se l'assert ha sbagliato. Serve la seconda perche'
 la prima ha gia' fallito una volta, per un errore di fuso orario (vedi sopra):
 le righe non valide restano nel registro — che e' append-only e deve conservare
-anche gli errori — ma non entrano mai nelle metriche.
+anche gli errori — ma non entrano mai nelle metriche. Il file di giornata le
+conserva con `valida=False`: le toglie dalle medie, non dalla storia.
 
 **La previsione va fatta PRIMA che si giochi**, ed e' l'unico passaggio non
 recuperabile. `predict.py` verifica con un assert che il timestamp UTC preceda
