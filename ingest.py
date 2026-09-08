@@ -307,6 +307,60 @@ def ingest_schedule() -> pd.DataFrame:
     return df
 
 
+def registra_coppe() -> list[str]:
+    """
+    Aggiunge le coppe UEFA al dizionario leghe di soccerdata, a runtime.
+
+    Sono chiavi NUOVE: non sovrascrivono nessuna lega esistente. Si fa qui e
+    non in `~/soccerdata/config/league_dict.json` per la stessa ragione del
+    locale WhoScored — quel file e' fuori dal progetto, non e' versionato, e
+    chi clona il repository si ritroverebbe uno stage che fallisce senza
+    capire perche'.
+    """
+    from soccerdata._config import LEAGUE_DICT
+
+    for chiave, nome in config.FBREF_CUPS.items():
+        LEAGUE_DICT.setdefault(chiave, {
+            "FBref": nome, "season_start": "Aug", "season_end": "May",
+        })
+    return list(config.FBREF_CUPS)
+
+
+def ingest_cups() -> pd.DataFrame:
+    """
+    Calendario di Champions, Europa e Conference League.
+
+    Serve al blocco A: senza, la congestione da coppa infrasettimanale e'
+    invisibile, perche' il calendario di campionato non cambia quando una
+    squadra gioca il martedi'. E' ingestion di solo calendario — una richiesta
+    per competizione e stagione, niente browser.
+
+    Le competizioni si scaricano una per volta: una stagione senza quella coppa
+    (la Conference prima del 2021/22) fa fallire l'intera chiamata se sono
+    tutte insieme, e si perderebbero anche quelle che ci sono.
+    """
+    coppe = registra_coppe()
+    pezzi = []
+    for coppa in coppe:
+        try:
+            fb = sd.FBref(leagues=[coppa], seasons=SEASONS)
+            df = fb.read_schedule().reset_index()
+            pezzi.append(df.assign(competition=coppa))
+            log.info("%-26s %5d partite", coppa, len(df))
+        except Exception as exc:
+            log.warning("%s non scaricata: %s", coppa, exc)
+
+    if not pezzi:
+        raise RuntimeError("nessuna coppa scaricata")
+    out = pd.concat(pezzi, ignore_index=True)
+    RAW.mkdir(parents=True, exist_ok=True)
+    dst = RAW / "fbref_cups_schedule.parquet"
+    out.to_parquet(dst, index=False)
+    log.info("%-22s %6d righe, %2d colonne -> %s",
+             "fbref_cups_schedule", len(out), out.shape[1], dst)
+    return out
+
+
 def ingest_team_stats() -> None:
     """
     Statistiche avanzate di squadra per partita, dai dati Opta/StatsPerform
@@ -365,6 +419,32 @@ def ingest_player_stats() -> pd.DataFrame:
     return df
 
 
+def applica_locale_whoscored() -> None:
+    """
+    Rimette a posto i nomi di regione che WhoScored serve tradotti.
+
+    WhoScored localizza le pagine sulla geolocalizzazione di chi chiama: da un
+    IP italiano la regione e' "Italia", non "Italy", e la mappa di soccerdata
+    non aggancia piu' niente. L'errore che ne esce — `None of [Index(['ITA-Serie
+    A'])] are in the [index]` — sembra una lega non supportata, e manda a
+    cercare nel posto sbagliato.
+
+    Si tocca SOLO il campo WhoScored: il file di configurazione globale
+    (`~/soccerdata/config/league_dict.json`) rimpiazzerebbe l'intera voce,
+    perche' soccerdata fa `dict.update` al primo livello, e porterebbe via
+    anche le mappe di FBref, Understat e MatchHistory.
+    """
+    from soccerdata._config import LEAGUE_DICT
+
+    from src import whoscored_patch
+
+    for chiave, nome in config.WHOSCORED_LEAGUE_OVERRIDE.items():
+        if chiave in LEAGUE_DICT:
+            LEAGUE_DICT[chiave]["WhoScored"] = nome
+            log.info("WhoScored: '%s' -> '%s'", chiave, nome)
+    whoscored_patch.applica()
+
+
 def ingest_missing() -> pd.DataFrame:
     """
     Infortunati e squalificati per singola partita, da WhoScored.
@@ -375,6 +455,7 @@ def ingest_missing() -> pd.DataFrame:
     RICHIEDE UN BROWSER: WhoScored ha protezioni anti-bot e soccerdata usa
     Selenium. Serve Chrome/Chromium installato. Se fallisce, saltalo per ora.
     """
+    applica_locale_whoscored()
     ws = sd.WhoScored(leagues=LEAGUE, seasons=SEASONS)
     df = ws.read_missing_players()
     save(df, "whoscored_missing")
@@ -449,6 +530,7 @@ STAGES = {
     "understat": ingest_understat,
     "shots": ingest_understat_shots,
     "schedule": ingest_schedule,
+    "cups": ingest_cups,
     "team_stats": ingest_team_stats,
     "lineups": ingest_lineups,
     "player_stats": ingest_player_stats,
@@ -458,7 +540,7 @@ STAGES = {
 
 # Ordine consigliato: prima i veloci, cosi' hai subito qualcosa con cui
 # lavorare mentre i lenti girano in background.
-ORDER = ["matches", "understat", "fixtures", "schedule", "elo",
+ORDER = ["matches", "understat", "fixtures", "schedule", "cups", "elo",
          "team_stats", "lineups", "player_stats", "missing"]
 
 

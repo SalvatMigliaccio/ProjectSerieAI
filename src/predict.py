@@ -58,6 +58,7 @@ import numpy as np
 import pandas as pd
 
 from . import config
+from .features import context as context_mod
 from .features import form as form_mod
 from .features import market as market_mod
 from .models.baseline import Model, MarketOnly, score_matrix
@@ -325,12 +326,14 @@ def build_features(played: pd.DataFrame, fixtures: pd.DataFrame) -> pd.DataFrame
 
     form = form_mod.build(combined, save=False)
     market = market_mod.build(combined, save=False)
+    # Il contesto guarda solo il calendario: per una partita da giocare
+    # funziona esattamente come per una gia' giocata, senza casi speciali.
+    context = context_mod.build(combined, save=False)
 
     feats = combined[KEYS + ["date"]].copy()
-    feats = feats.merge(form.drop(columns=["date"], errors="ignore"),
-                        on=KEYS, how="left", validate="one_to_one")
-    feats = feats.merge(market.drop(columns=["date"], errors="ignore"),
-                        on=KEYS, how="left", validate="one_to_one")
+    for pezzo in (form, market, context):
+        feats = feats.merge(pezzo.drop(columns=["date"], errors="ignore"),
+                            on=KEYS, how="left", validate="one_to_one")
     return feats
 
 

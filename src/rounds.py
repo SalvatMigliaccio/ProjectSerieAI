@@ -155,11 +155,12 @@ def ricostruisci() -> None:
     gia' giocate.
     """
     from . import normalize
-    from .features import form, market
+    from .features import context, form, market
 
     passo("2", "matches_master", normalize.cmd_build, fatale=True)
     passo("3a", "feature di forma", form.build, fatale=True)
     passo("3b", "feature di mercato", market.build, fatale=True)
+    passo("3c", "feature di contesto", context.build, fatale=True)
 
 
 # ---------------------------------------------------------------------------

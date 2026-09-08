@@ -99,6 +99,56 @@ FOOTBALL_DATA_DIV = {
     "F1": "FRA-Ligue 1",
 }
 
+# ---------------------------------------------------------------------------
+# Coppe europee: il pezzo che manca al blocco A
+# ---------------------------------------------------------------------------
+
+# `fbref_schedule` contiene la sola Serie A, quindi una partita di Champions
+# del martedi' non compare da nessuna parte e la congestione da coppa e'
+# invisibile. Queste tre competizioni la rendono visibile.
+#
+# I nomi a destra sono quelli ESATTI della pagina fbref.com/en/comps/ — non
+# "Champions League" ne' "UCL": soccerdata aggancia per stringa e uno scarto
+# di una parola non da' errore, da' zero righe. Le chiavi a sinistra sono
+# nuove, quindi aggiungerle a LEAGUE_DICT non sovrascrive nessuna lega
+# esistente (soccerdata fa `dict.update` al primo livello).
+#
+# La Conference League esiste solo dal 2021/22: sulle stagioni precedenti
+# restituisce vuoto, e va bene cosi'.
+FBREF_CUPS = {
+    "UEFA-Champions League": "UEFA Champions League",
+    "UEFA-Europa League": "UEFA Europa League",
+    "UEFA-Conference League": "UEFA Conference League",
+}
+
+# ---------------------------------------------------------------------------
+# WhoScored: nomi di regione localizzati
+# ---------------------------------------------------------------------------
+
+# WhoScored serve le pagine nella lingua dedotta dalla GEOLOCALIZZAZIONE di chi
+# chiama. Da un IP italiano la regione si chiama "Italia", non "Italy", e la
+# mappa interna di soccerdata — che si aspetta "Italy - Serie A" — non aggancia
+# piu' niente. L'errore non dice questo: dice
+#   KeyError: "None of [Index(['ITA-Serie A'])] are in the [index]"
+# che sembra una lega non supportata, mentre la lega c'e' e si chiama in
+# un'altra lingua.
+#
+# Qui si sovrascrive SOLO il campo WhoScored del dizionario leghe, a runtime e
+# dentro il progetto: scrivere in ~/soccerdata/config/league_dict.json
+# rimpiazzerebbe l'intera voce della lega (soccerdata fa `dict.update` al primo
+# livello) e romperebbe anche FBref, Understat e MatchHistory.
+#
+# Se un giorno le pagine tornassero in inglese, questa mappa va svuotata: il
+# controllo in `ingest.applica_locale_whoscored` avvisa quando una voce non
+# corrisponde a nessuna regione vista nel catalogo.
+WHOSCORED_LEAGUE_OVERRIDE = {
+    "ITA-Serie A": "Italia - Serie A",
+    "ENG-Premier League": "Inghilterra - Premier League",
+    "ESP-La Liga": "Spagna - LaLiga",
+    "GER-Bundesliga": "Germania - Bundesliga",
+    "FRA-Ligue 1": "Francia - Ligue 1",
+}
+
 # Oltre questa eta' lo snapshot delle quote e' sospetto: il file copre il turno
 # imminente e viene rigenerato ogni settimana, quindi tre giorni sono gia'
 # tanti. Non blocca, avvisa.

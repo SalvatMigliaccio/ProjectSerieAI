@@ -255,10 +255,23 @@ mancano voci in `manual/team_name_map.json`.
 python -m src.features.form                # medie mobili leakage-safe
 python -m src.features.market              # de-vigging Shin + proporzionale
 python -m src.features.market --coverage   # copertura quote, book per stagione
+python -m src.features.context             # blocco A: riposo, congestione, derby
 ```
 
 `--coverage` va rilanciato dopo ogni ingestion: i bookmaker spariscono senza
 preavviso (Pinnacle si e' spento nel 2025/26 a meta' stagione).
+
+`context` legge `manual/derbies.csv` (colonne `home_team, away_team,
+intensity` con intensity in city/regional/rivalry, coppia NON ordinata). Se il
+file manca, le due colonne del derby non vengono prodotte e lo dice: non finge
+che nessuna partita sia un derby, che sarebbe un dato falso invece che assente.
+
+**Le coppe europee infrasettimanali NON ci sono**, e non e' una dimenticanza:
+`fbref_schedule` contiene la sola Serie A, quindi una partita di Champions del
+martedi' non compare da nessuna parte. Servirebbe una ingestion nuova col
+calendario UEFA. Dedurre chi gioca in Europa dalla classifica dell'anno prima
+sarebbe una funzione dei risultati passati, cioe' proprio cio' che il piano
+esclude.
 
 ---
 
@@ -294,10 +307,27 @@ python -m src.models.gbm --blend                      # 61s  -> config.BLEND_WEI
 # Diagnostica
 python -m src.models.gbm --importance       # 4s — cosa usa M4 senza mercato
 
-# Potenza statistica: serve allargare ai Big 5? (~30s)
+# Misura di un blocco di feature, col protocollo fissato (~4 min)
+python -m src.evaluate --blocco contesto
+
+# Potenza: quale effetto questo test set puo' vedere? (~40s)
 python -m src.power_analysis
-python -m src.power_analysis --shift-lambda 0.20 --minuti-assenti 0.20
+python -m src.power_analysis --quota-partite 0.15 --shift-lambda 0.20
 ```
+
+**Da lanciare PRIMA di costruire un blocco di feature**, non dopo. Misura la
+correlazione dentro la giornata (`rho`, oggi 0.004) e ne ricava l'effetto
+minimo rilevabile nei tre scenari — Serie A, Big 5 per giornata, Big 5 per
+settimana.
+
+`--quota-partite` e' la **frazione di partite** che il sottoinsieme seleziona,
+**non** la soglia che lo definisce: "oltre il 15% dei minuti indisponibili" e'
+la soglia, e quante partite la superino si sa solo dopo aver costruito il
+blocco. Confonderle non da' errore, da' numeri sbagliati e plausibili.
+
+La tabella da leggere e' **la soglia di rottura**: per ogni dimensione del
+sottoinsieme, quale shift di lambda servirebbe. Restringere il sottoinsieme
+alza il minimo rilevabile, non lo abbassa.
 
 Opzioni utili di `--tune`: `--configs N` (quante configurazioni provare, default
 24), `--stride N` (giornate per blocco durante la ricerca, default 3 — solo per

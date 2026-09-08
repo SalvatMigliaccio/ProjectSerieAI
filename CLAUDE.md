@@ -141,6 +141,34 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   del registro sono state scritte a partita gia' iniziata (Inter-Napoli +1
   minuto, Roma-Atalanta +44 minuti) e l'assert non ha protestato.
   `backtest_log.flag_post_kickoff` ora le riconosce e le esclude.
+- **WhoScored risponde in ITALIANO, e questo rompe soccerdata in due punti.**
+  Il sito localizza le pagine sulla geolocalizzazione di chi chiama: da un IP
+  italiano la regione e' `Italia` (non `Italy`) e il link al calendario e'
+  `Partite` (non `Fixtures`). Nessuno dei due errori dice la verita':
+  - `KeyError: "None of [Index(['ITA-Serie A'])] are in the [index]"` sembra
+    una lega non supportata. La lega c'e', si chiama in un'altra lingua.
+    Rimedio: `config.WHOSCORED_LEAGUE_OVERRIDE`, che sovrascrive **solo** il
+    campo WhoScored del dizionario leghe. Scrivere in
+    `~/soccerdata/config/league_dict.json` NON va bene: soccerdata fa
+    `dict.update` al primo livello e si porterebbe via anche le mappe di
+    FBref, Understat e MatchHistory.
+  - `IndexError: list index out of range` a `whoscored.py:290` e' il link
+    "Fixtures" che non esiste. Rimedio: `src/whoscored_patch.py`, che cerca
+    l'href invece del testo — gli URL restano in inglese in ogni lingua.
+    **Attenzione alle maiuscole**: l'href e' `/fixtures` minuscolo e XPath 1.0
+    non ha `lower-case()`, quindi serve `translate()`. Cercare `/Fixtures` non
+    trova niente e sembra in tutto che la patch non funzioni.
+
+  Il resto dello scraper usa id e classi CSS, che non sono tradotti: il
+  problema e' circoscritto. Nel risultato, `reason` e' in inglese
+  (`injured`, `suspended`, `injured doubtful`) perche' viene da un attributo;
+  `status` e' tradotto (`Indisponibile`, `In dubbio`). **Usare `reason`**, che
+  e' strutturale, non `status`, che cambia con la lingua del sito.
+- **Costo misurato di WhoScored: ~11.6 secondi per partita**, una richiesta
+  Selenium ciascuna, piu' ~110 secondi per il calendario di ogni stagione.
+  Su 4940 partite fanno **circa 15 ore**. La cache e' persistente e il lavoro
+  e' riprendibile. Copertura verificata anche sulle stagioni vecchie: 1516 e
+  1920 rispondono entrambe.
 - **Non esiste la colonna `referee`.** Era una feature debole, si rinuncia.
 - **ClubElo era irraggiungibile** al momento dell'ingestion (502 su tutte le
   squadre). Lo stage `elo` e' opzionale: l'Elo proprio, calcolato dai
@@ -226,6 +254,15 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
   registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
   distingue un errore del modello da un prezzo cambiato
+- `src/features/context.py` — **blocco A**: riposo, congestione su finestra
+  (d-14, d) aperta da entrambi i lati, infrasettimanale, derby da
+  `manual/derbies.csv` con coppia NON ordinata. Solo calendario, nessuna
+  ingestion nuova. **Le coppe europee non ci sono e non ci possono essere**:
+  `fbref_schedule` contiene la sola Serie A, quindi una partita di Champions
+  del martedi' non compare da nessuna parte. Le due scorciatoie (dedurre chi
+  gioca in Europa dalla classifica dell'anno prima; usare l'orario di calcio
+  d'inizio come indizio) sono peggio del buco — la prima e' una funzione dei
+  risultati passati, cioe' proprio cio' che il piano esclude
 - `src/report.py` — il report settimanale in HTML statico: CSS dentro il file,
   grafici in SVG generato a mano, nessun CDN e nessun framework. Cinque
   sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
@@ -255,7 +292,10 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 - `tests/make_fixtures.py`, `tests/test_form.py`, `tests/test_kickoff.py`,
   `tests/test_market.py`, `tests/test_leakage.py`,
   `tests/test_predictions_log.py`, `tests/test_report.py`,
-  `tests/test_rounds.py` — dati sintetici e test di regressione. **Nessun test scrive nella cartella dati vera**:
+  `tests/test_rounds.py`, `tests/test_context.py` — dati sintetici e test di
+  regressione. `test_context` ha gia' trovato un confine sbagliato: la
+  finestra della congestione includeva la partita di esattamente 14 giorni
+  prima, cioe' un'unita' in piu' in ogni turno regolare, senza nessun sintomo. **Nessun test scrive nella cartella dati vera**:
   `test_form` passava `save=True` per errore e sovrascriveva
   `features_form.parquet` con 90 righe sintetiche, senza alcun errore —
   il merge di `load_dataset` riempiva di NaN tutte le feature di forma e M4
@@ -478,63 +518,207 @@ contro il 95% nominale.
   indagato quello, non accettato il risultato. Ritarare sempre con
   `python -m src.models.dixon_coles --tune` dopo ogni nuovo blocco di feature.
 
-### Il test set non ha la potenza per misurare il layer giocatori
+### Potenza: cosa questo test set puo' vedere — rifatto due volte
 
-`python -m src.power_analysis`, con la deviazione standard della differenza
-appaiata gia' misurata (0.00354 per cluster, su 114 cluster osservati):
+`python -m src.power_analysis`. Tre errori corretti, e ognuno cambiava la
+conclusione. Il terzo la ribalta.
 
-| perimetro | cluster | n | MDE (80%, 5%) | effetto atteso |
-|---|---|---|---|---|
-| Serie A | giornata = settimana | 114 | **0.00240** | 0.00060 |
-| Big 5 | giornata di campionato | 570 | **0.00107** | 0.00060 |
-| Big 5 | settimana di calendario | 114 | **0.00240** | 0.00060 |
+**1. Soglia e quota non sono la stessa cosa.** "Oltre il 15% dei minuti
+indisponibili" e' la **soglia** che definisce il sottoinsieme; la **quota** e'
+la frazione di partite che quella soglia seleziona, e finche' il blocco non
+esiste non si conosce. Il modulo usava lo stesso numero per entrambe:
+risultati plausibili e sbagliati. Ora la quota e' un parametro che si fa
+variare, e per il contesto e' misurata (11% derby, 11% infrasettimanali).
 
-**Nessuno dei due perimetri basta.** Il minimo rilevabile e' 4 volte l'effetto
-atteso in Serie A, e ancora 1.8 volte con i Big 5 nell'ipotesi ottimistica.
+**2. La correlazione dentro la giornata e' ~0, ed e' misurata, non assunta.**
+ANOVA a una via sulle differenze appaiate raggruppate per giornata; la formula
+del design effect — `Var(media di k) = sigma^2 (1+(k-1)rho)/k` — riproduce la
+sd osservata entro il 7%. **Questo smentisce quanto era scritto prima**: "i
+Big 5 non aggiungono potenza, aggiungono solo partite dentro gli stessi 114
+cluster" vale solo se rho ~ 1. Con rho ~ 0 allargare il cluster abbassa
+davvero la varianza della sua media, e le due definizioni di cluster — che
+sembravano distare un fattore sqrt(5) — danno in pratica lo stesso numero.
 
-**La definizione di cluster cambia il risultato di sqrt(5).** Se ogni lega ha
-un modello proprio, i Big 5 danno 5 volte i cluster (giornata di campionato).
-Se il modello e' unico — ed e' il caso, `config.LEAGUES` e' una lista sola —
-le giornate della stessa settimana condividono lo stesso addestramento e
-contano per **un** cluster: i Big 5 non aggiungono potenza, aggiungono solo
-partite dentro gli stessi 114 cluster.
+**3. La coppia di riferimento era sbagliata, e questo cambiava tutto.**
+Il rumore veniva misurato su M5 ancorato **contro il mercato**. Ma un blocco
+di feature non si decide contro il mercato: si decide sulla differenza fra due
+modelli **annidati**, lo stesso M5 con e senza le colonne nuove. I due
+condividono quasi tutto, quindi la loro differenza e' molto meno rumorosa.
 
-Quanto servirebbe, per dimensione dell'effetto:
-
-| shift di lambda | effetto RPS | cluster necessari | stagioni Serie A |
+| coppia | sd/partita | sd/cluster | MDE (Serie A, tutte) |
 |---|---|---|---|
-| 0.05 gol | 0.00015 | 28 974 | 762 |
-| **0.10 gol** | **0.00060** | **1 839** | **48** |
-| 0.15 gol | 0.00127 | 410 | 11 |
-| 0.20 gol | 0.00196 | 171 | 4.5 |
-| 0.30 gol | 0.00522 | 24 | 0.6 |
+| M5 − mercato (livello) | 0.01102 | 0.00354 | 0.00093 |
+| **M5+blocco − M5 (blocco)** | **0.00280** | **0.00083** | **0.00023** |
 
-Il ginocchio della curva sta fra 0.15 e 0.20 gol. **Sotto quella soglia
-l'effetto non e' dimostrabile con i dati che questo progetto potra' mai
-avere**; sopra, bastano poche stagioni di Serie A.
+Il confronto annidato e' **4.3 volte** meno rumoroso. Usare la coppia
+sbagliata gonfiava il minimo rilevabile dello stesso fattore e faceva
+dichiarare non misurabile un test che invece lo era.
 
-### Da fare, in ordine
+### Quello che il test set vede davvero
 
-1. **Layer giocatori e infortuni** — ma prima decidere se ha senso misurarlo.
-   Il calcolo di potenza dice che un effetto da 0.10 gol richiederebbe 48
-   stagioni di Serie A, e che i Big 5 non aiutano se il modello resta unico.
-   Le opzioni oneste sono tre:
-   - **restringere il campo alle assenze grosse** (portiere titolare, o oltre
-     il 30% dei minuti pesati): meno partite ma effetto piu' grande, e il
-     ginocchio della curva e' li';
-   - **un modello per lega**, che rende i Big 5 davvero 5 volte i cluster;
-   - **costruirlo comunque senza pretendere di dimostrarlo**, dichiarandolo.
+Effetto atteso da uno shift di 0.10 gol su una partita del sottoinsieme:
+0.00060 RPS.
 
-   Quando si fara', il modo giusto di misurarlo e' **rifare M5**: l'ancoraggio
-   al mercato e' il test piu' potente disponibile e l'infrastruttura c'e'.
-   Non ripartire da M4
-2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
-   derby e cambi allenatore. **Entrambi i file manuali MANCANO**: `derbies.csv`
-   e `coach_changes.csv` non esistono in `manual/`, che contiene solo
-   `team_name_map.json` e `upcoming_odds.csv`
-3. `src/features/team_strength.py` — Elo proprio calcolato dai risultati.
-   Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
-   quarto modo di misurare la forza della squadra non cambiera' il quadro
+| perimetro | cluster | MDE sul 20% | vede? |
+|---|---|---|---|
+| Serie A | giornata | 0.00052 | **si** |
+| Big 5 | giornata di campionato | 0.00023 | si |
+| Big 5 | settimana di calendario | 0.00024 | si |
+
+Quota minima perche' un effetto da 0.10 gol si veda: **16% delle partite in
+Serie A**, 4% con i Big 5. Sotto quella quota il sottoinsieme e' troppo
+piccolo, e restringerlo ancora **alza** il minimo rilevabile invece di
+abbassarlo — le partite diminuiscono. Restringere paga solo se l'effetto per
+partita cresce piu' in fretta del rumore.
+
+**Conseguenza operativa**: la Serie A da sola basta a misurare un blocco che
+tocchi almeno il 16% delle partite con uno shift da 0.10 gol. I Big 5 restano
+la leva piu' grande (2.2x) e servono per i sottoinsiemi piccoli — il derby
+all'11% non arriva alla soglia in Serie A.
+
+### Blocco A — contesto — MISURATO E SCARTATO
+
+`python -m src.evaluate --blocco contesto`, 8 settembre 2026. Nove colonne:
+riposo, congestione su finestra (d-14, d), infrasettimanale, derby.
+
+| modello | RPS | skill_closed | delta mercato | IC 95% |
+|---|---|---|---|---|
+| M1b market-only | 0.1881 | 1.000 | riferimento | — |
+| M5 ancorato, **senza** contesto | 0.1882 | 0.997 | +0.00011 | [-0.00056, +0.00077] |
+| M5 ancorato, **con** contesto | 0.1883 | 0.995 | +0.00020 | [-0.00052, +0.00089] |
+| M0b frequenze di base | 0.2291 | 0.000 | +0.04095 | [+0.03449, +0.04741] |
+
+**Il confronto che decide** — l'unico in cui il blocco e' l'unica cosa
+cambiata:
+
+| confronto | differenza | IC 95% | conclusione |
+|---|---|---|---|
+| **M5+contesto − M5** | **+0.00008** | **[-0.00007, +0.00024]** | **indistinguibili** |
+
+L'intervallo contiene lo zero. **E non e' un test debole**: il minimo
+rilevabile di quel confronto e' 0.00022, sotto i 0.00060 attesi da uno shift
+di 0.10 gol. Il blocco e' stato misurato con potenza sufficiente e non c'e'.
+
+**Cosa usa il modello, e perche' non basta.** Importanza per guadagno di M5
+ancorato (`--importance --anchored`), le nove colonne del blocco:
+
+```
+diff_rest_days     3.30%   rango 5/61      is_derby           0.77%   53/61
+home_rest_days     1.71%        24/61      away_rest_days     0.66%   55/61
+away_matches_14d   1.09%        39/61      home_matches_14d   0.36%   58/61
+derby_intensity    0.31%        59/61      is_midweek         0.00%   60/61
+                                           diff_matches_14d   0.00%   61/61
+```
+
+Totale 8.2% del guadagno con 9 colonne su 61, contro il 14.8% che avrebbero
+se contassero come le altre. **Il differenziale di riposo e' la quinta feature
+su sessantuno** — il modello lo usa parecchio — e nonostante questo la
+previsione non migliora. `is_midweek` e `diff_matches_14d` non ricevono
+nemmeno uno split: guadagno esattamente zero.
+
+La lettura e' la stessa del risultato acquisito sulle statistiche di gioco:
+non che riposo e derby non contino per il calcio, ma che **il mercato li ha
+gia' prezzati**. Le quote di apertura escono quando il calendario e' noto da
+mesi: chi le fa sa benissimo chi ha giocato mercoledi'.
+
+**Rimosso, non tenuto.** Le nove colonne sono in `gbm.BLOCCHI_SCARTATI`:
+restano nel dataset per poterle rimisurare su un perimetro piu' largo, ma non
+entrano nel modello. Tenerle "male che vada non fanno danno" sarebbe sbagliato
+con 3400 righe di training, e la diluizione e' gia' stata osservata su
+M4-con-mercato.
+
+**Cosa NON e' stato misurato, e va detto**: le coppe europee infrasettimanali
+non sono nel blocco perche' non sono derivabili dal calendario di campionato
+(vedi `features/context.py`). Il blocco A misurato e' quindi la sua meta'
+povera — riposo e congestione **di campionato**. Se un giorno arriva il
+calendario UEFA, il blocco va rimisurato, non dato per chiuso.
+
+### Il piano dei blocchi — uno alla volta, ciascuno misurato
+
+**Obiettivo dichiarato**: trovare il limite del ML su questo problema
+aggiungendo blocchi di informazione uno per volta e misurando ciascuno.
+
+**Regola generale, non negoziabile.** Ogni blocco si misura **rifacendo M5**,
+il GBM ancorato al mercato: e' il test piu' potente disponibile, l'ancoraggio
+elimina il lavoro di ricostruire il mercato dagli ingressi, e se non c'e'
+segnale M5 degenera esattamente nel mercato (verificato: azzerando le feature
+si ferma a 1 albero, scarto logaritmico 0.00000). Confronto appaiato con
+bootstrap a cluster sulla giornata. **Un blocco si tiene solo se l'intervallo
+sta tutto sotto zero.**
+
+**Non accumulare blocchi non misurati.** Con ~3400 righe di training la
+diluizione e' reale ed e' gia' stata osservata: M4 con il mercato fra
+cinquanta feature perde contro M5 ancorato di -0.0023 con intervallo netto,
+esattamente perche' le quote si diluivano. Se un blocco non supera
+l'intervallo va **rimosso**, non tenuto "male che vada non fa danno": con
+questa numerosita' fa danno.
+
+**Al termine di ogni blocco si riporta**: RPS, `skill_closed`, differenza
+appaiata contro il mercato con intervallo, e l'importanza delle feature nuove.
+
+#### Fase 0 — potenza — FATTA
+
+Vedi le due sezioni sopra. In sintesi: la Serie A da sola basta a misurare un
+blocco che tocchi almeno il **16% delle partite** con uno shift da 0.10 gol.
+I Big 5 valgono 2.2x e servono per i sottoinsiemi piu' piccoli. La coppia di
+riferimento giusta e' quella **annidata** (M5 con e senza il blocco), non M5
+contro il mercato: sbagliarla gonfia il minimo rilevabile di 4.3 volte.
+
+#### Blocco A — contesto — FATTO, SCARTATO
+
+Vedi la sezione dedicata sopra. `+0.00008` con IC `[-0.00007, +0.00024]`:
+indistinguibile, con potenza sufficiente. Le nove colonne sono in
+`gbm.BLOCCHI_SCARTATI` e non entrano nel modello.
+
+`manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
+partite) e **va rivisto**: non e' una fonte, e' un'opinione plausibile.
+
+#### Blocco B — giocatori e infortuni — IL PROSSIMO
+
+`ingest --stage missing`, `--stage lineups`, `--stage player_stats`. Feature:
+quota di minuti stagionali assenti **pesata per xG+xA per 90**; indice di
+turnover rispetto alla partita precedente.
+
+**Sottoinsieme di misura dichiarato PRIMA di guardare i risultati**: partite
+con oltre il **15% dei minuti pesati indisponibili**. La quota di partite che
+questa soglia seleziona e' ignota finche' il blocco non esiste: appena lo si
+sa, va sostituita nel calcolo di potenza al posto del 20% assunto. Serve che
+superi il **16%**, altrimenti in Serie A l'effetto non si vede e conviene
+allargare ai Big 5 prima di misurare.
+
+**Perche' ha senso provarlo dopo che A e' fallito.** Il contesto e' noto al
+mercato da mesi — il calendario si pubblica in estate. Un infortunio a due
+giorni dalla partita no: e' l'unico posto dove il mercato puo' essere
+strutturalmente lento, ed e' per questo che era il candidato migliore fin
+dall'inizio.
+
+Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
+la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
+sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
+
+#### Blocco C — valore delle rose
+
+Scraper Transfermarkt, HTML statico. Valore dell'XI disponibile e della rosa.
+**Solo se il blocco B ha dato segnale**: se le assenze non contano, il valore
+di mercato che le pesa non contera'.
+
+#### Cosa NON aggiungere, e perche'
+
+- **Posizione in classifica e partite giocate.** Sono funzioni dei risultati
+  passati, gia' catturate meglio da Elo, dai coefficienti Dixon-Coles e dalle
+  medie mobili — in forma continua invece che ordinale. Aggiungerle porta
+  collinearita', non informazione.
+- **Arbitri.** La colonna `referee` non e' nel dataset (verificato).
+  Servirebbe una fonte nuova ed e' il blocco con l'effetto atteso piu' basso:
+  rimandato, o incluso gratis se emerge da un'altra ingestion.
+- **Altre statistiche aggregate di gioco.** Chiuso, vedi il risultato
+  acquisito sopra: sono la stessa informazione delle quote, prezzata peggio.
+
+#### Fuori dal piano
+
+`src/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
+di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un quarto modo
+di misurare la forza della squadra non cambierebbe il quadro.
 
 ## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
 
@@ -748,15 +932,18 @@ mettere il codice in un file.
 
 ## Cosa manca dall'utente
 
-**Verificato il 5 settembre 2026**: in `manual/` ci sono solo
-`team_name_map.json`, `team_name_map_suggested.json` e `upcoming_odds.csv`.
-Una versione precedente di questo documento dava `derbies.csv` per fatto: non
-c'e'. Chi scrive `context.py` non deve darlo per scontato.
+**Aggiornato l'8 settembre 2026.**
 
-- `manual/derbies.csv` — **MANCANTE**. Colonne `home_team, away_team,
-  intensity` con intensity in (city/regional/rivalry). ~48 coppie per la
-  Serie A. La coppia va trattata come NON ordinata:
-  `tuple(sorted([casa, trasferta]))`
+- `manual/derbies.csv` — **C'E', MA VA RIVISTO.** 55 coppie compilate durante
+  il blocco A perche' senza il file il derby non era misurabile: 5 `city`,
+  42 `regional`, 8 `rivalry`, che agganciano 503 partite su 4580 (11.0%).
+  **Non e' una fonte, e' un'opinione plausibile**: le coppie `regional` sono
+  generose (mezza Lombardia con mezza Lombardia) e le `rivalry` sono
+  discrezionali. Se il blocco A dovesse dipendere da questa colonna, il primo
+  posto dove guardare e' questo file. La coppia e' trattata come NON ordinata,
+  `tuple(sorted([casa, trasferta]))`, e `context.py` funziona anche senza il
+  file: in quel caso le due colonne del derby non vengono prodotte, invece di
+  essere messe a zero — assente e falso non sono la stessa cosa
 - `manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
   date, coach_out, coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
 - `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
