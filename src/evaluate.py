@@ -122,14 +122,16 @@ def load_dataset(with_form: bool = True, with_context: bool = True) -> pd.DataFr
         df = df.merge(form, on=KEYS, how="left", validate="one_to_one")
 
     if with_context:
-        path = config.PROCESSED / "features_context.parquet"
-        if path.exists():
-            ctx = pd.read_parquet(path)
-            ctx = ctx.drop(columns=[c for c in ctx.columns if c == "date"])
-            df = df.merge(ctx, on=KEYS, how="left", validate="one_to_one")
-        else:
-            log.warning("%s assente: blocco A non disponibile. "
-                        "Lancia 'python -m src.features.context'.", path.name)
+        for nome, comando in (("features_context", "src.features.context"),
+                              ("features_players", "src.features.players")):
+            path = config.PROCESSED / f"{nome}.parquet"
+            if not path.exists():
+                log.warning("%s assente: quel blocco non e' disponibile. "
+                            "Lancia 'python -m %s'.", path.name, comando)
+                continue
+            extra = pd.read_parquet(path)
+            extra = extra.drop(columns=[c for c in extra.columns if c == "date"])
+            df = df.merge(extra, on=KEYS, how="left", validate="one_to_one")
 
     df = add_matchday(df)
     df["date"] = pd.to_datetime(df["date"])
@@ -703,9 +705,11 @@ def report(preds: pd.DataFrame, reference: str = "M1b market-only (diretto)") ->
 def colonne_blocco(nome: str, df: pd.DataFrame) -> list[str]:
     """Le colonne che un blocco aggiunge, quelle presenti nel dataset."""
     from .features.context import FEATURES_CONTEXT, FEATURES_DERBY
+    from .features.players import FEATURES_PLAYERS
 
     blocchi = {
         "contesto": FEATURES_CONTEXT + FEATURES_DERBY,
+        "giocatori": FEATURES_PLAYERS,
     }
     if nome not in blocchi:
         raise ValueError(f"blocco ignoto '{nome}': disponibili {sorted(blocchi)}")
@@ -751,12 +755,12 @@ def misura_blocco(nome: str, floor: bool = True) -> tuple[pd.DataFrame, pd.DataF
     # gia' misurati e scartati. La variante aggiunge SOLO il blocco in esame —
     # non anche gli altri blocchi bocciati, che tornerebbero dentro di
     # straforo e renderebbero la differenza non attribuibile.
-    from .models.gbm import BLOCCHI_SCARTATI
+    from .models.gbm import FUORI_DAL_MODELLO
 
-    senza = MarketAnchoredGBM(escludi=tuple(BLOCCHI_SCARTATI | set(colonne)),
+    senza = MarketAnchoredGBM(escludi=tuple(FUORI_DAL_MODELLO | set(colonne)),
                               **config.GBM_PARAMS_ANCHORED)
     senza.suffisso = f" (senza {nome})"
-    con = MarketAnchoredGBM(escludi=tuple(BLOCCHI_SCARTATI - set(colonne)),
+    con = MarketAnchoredGBM(escludi=tuple(FUORI_DAL_MODELLO - set(colonne)),
                             **config.GBM_PARAMS_ANCHORED)
     con.suffisso = f" (con {nome})"
 
@@ -771,6 +775,63 @@ def misura_blocco(nome: str, floor: bool = True) -> tuple[pd.DataFrame, pd.DataF
               (con.name, "M1b market-only (diretto)"),
               (senza.name, "M1b market-only (diretto)")]
     return preds, paired_pairs(preds, coppie)
+
+
+def diagnostica_nan(nome: str) -> pd.DataFrame:
+    """
+    Il blocco spiega il CONTENUTO, o solo la disponibilita' del dato?
+
+    IL PROBLEMA. Un blocco a copertura parziale ha NaN su tutte le stagioni
+    che lo scraping non raggiunge. LightGBM tratta il NaN come una direzione
+    di split: puo' separare "so" da "non so" e guadagnare, perche' quella
+    separazione coincide con "prima o dopo il 2021/22" — cioe' con il tempo,
+    non con gli infortuni. L'importanza risulterebbe alta e il blocco
+    sembrerebbe informativo mentre sta solo leggendo un calendario.
+
+    LA VERIFICA. Si addestra due volte: su tutto il training, e sulle sole
+    stagioni dove il blocco e' coperto — dove di NaN non ce ne sono. Se
+    l'importanza delle colonne nuove regge, il modello usa il contenuto. Se
+    crolla, stava splittando sulla disponibilita'.
+
+    Non e' un test sul RPS e non decide se tenere il blocco: decide come
+    leggere la sua importanza.
+    """
+    from .models.gbm import FUORI_DAL_MODELLO, MarketAnchoredGBM
+
+    df = load_dataset()
+    colonne = colonne_blocco(nome, df)
+    presente = df[colonne[0]].notna()
+    stagioni_coperte = sorted(df.loc[presente, "season"].unique())
+    log.info("blocco '%s' coperto nelle stagioni %s", nome, stagioni_coperte)
+
+    played = df[df["FTR"].notna() & ~df["season"].isin(config.BURN_IN_SEASONS)]
+    escludi = tuple(FUORI_DAL_MODELLO - set(colonne))
+
+    righe = []
+    for etichetta, dati in (
+        ("tutto il training (con NaN)", played),
+        ("solo stagioni coperte (senza NaN)",
+         played[played["season"].isin(stagioni_coperte)]),
+    ):
+        quote = []
+        for stagione in config.TEST_SEASONS:
+            cutoff = df.loc[df["season"] == stagione, "date"].min()
+            train = dati[dati["date"] < cutoff]
+            if len(train) < 500:
+                log.warning("%s, stagione %s: solo %d righe, saltata",
+                            etichetta, stagione, len(train))
+                continue
+            m = MarketAnchoredGBM(escludi=escludi,
+                                  **config.GBM_PARAMS_ANCHORED).fit(train)
+            if m.model_home_ is None:
+                continue
+            for mod in (m.model_home_, m.model_away_):
+                gain = mod.booster_.feature_importance(importance_type="gain")
+                s = pd.Series(gain / max(gain.sum(), 1e-12), index=m.features_)
+                quote.append(s.reindex(colonne).fillna(0.0).sum())
+        righe.append({"training": etichetta, "n_fit": len(quote),
+                      "quota_blocco": float(np.mean(quote)) if quote else np.nan})
+    return pd.DataFrame(righe)
 
 
 def all_models() -> list[Model]:
@@ -811,7 +872,11 @@ def main() -> None:
     ap.add_argument("--bias", action="store_true", help="distorsione favorito-sfavorito per stagione")
     ap.add_argument("--no-save", action="store_true", help="non scrivere le previsioni su disco")
     ap.add_argument("--blocco", help="misura un blocco di feature con M5 ancorato "
-                                     "(oggi: 'contesto')")
+                                     "(oggi: 'contesto', 'giocatori')")
+    ap.add_argument("--blocco-nan", dest="blocco_nan",
+                    help="il blocco spiega il contenuto o solo la "
+                         "disponibilita' del dato? Riaddestra sulle sole "
+                         "stagioni coperte e confronta l'importanza")
     args = ap.parse_args()
 
     pd.set_option("display.width", 200)
@@ -819,6 +884,24 @@ def main() -> None:
 
     if args.bias:
         bias_report(load_dataset())
+        return
+
+    if args.blocco_nan:
+        tab = diagnostica_nan(args.blocco_nan)
+        print(f"\n=== BLOCCO '{args.blocco_nan.upper()}': CONTENUTO O "
+              f"DISPONIBILITA'? ===")
+        print("Quota del guadagno presa dalle colonne del blocco, media sui "
+              "fit di test.\n")
+        print(tab.to_string(index=False))
+        if tab["quota_blocco"].notna().all() and len(tab) == 2:
+            con, senza = tab["quota_blocco"]
+            if con > 0 and senza / con < 0.5:
+                print("\n-> L'importanza CROLLA senza i NaN: il modello stava "
+                      "splittando\n   sulla disponibilita' del dato, non sul "
+                      "contenuto.")
+            else:
+                print("\n-> L'importanza regge anche senza NaN: il modello usa "
+                      "il contenuto.")
         return
 
     if args.blocco:

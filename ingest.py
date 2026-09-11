@@ -403,20 +403,56 @@ def ingest_lineups() -> pd.DataFrame:
     return df
 
 
-def ingest_player_stats() -> pd.DataFrame:
+def ingest_player_stats(seasons: list[str] | None = None) -> pd.DataFrame:
     """
-    Statistiche per giocatore e per partita: minuti, gol, assist, xG, xA,
-    tiri, tocchi. Serve per costruire il profilo storico di ogni calciatore
-    e quindi pesare le assenze in modo intelligente (un attaccante da 0.6 xG
-    a partita che manca pesa piu' di un terzino di rotazione).
+    Statistiche per giocatore e per partita: minuti, gol, assist, xG, xA.
 
-    MOLTO LENTO: una richiesta per partita, ~22+ righe ciascuna.
-    Consiglio: lancialo una stagione alla volta modificando SEASONS.
+    E' la base del peso delle assenze. Serve il PER PARTITA e non l'aggregato
+    stagionale: i minuti di fine stagione contengono quelli giocati DOPO la
+    partita da predire, e usarli sarebbe leakage. Con il per partita si
+    calcolano i minuti alla data, che e' l'unica cosa lecita.
+
+    MOLTO LENTO: una richiesta per partita. Riprendibile — si salva a ogni
+    stagione e al rilancio si riparte da dove si era arrivati.
+
+    Le colonne arrivano con un MultiIndex e una colonna `age` che mescola
+    interi e stringhe tipo `25-182`: si appiattisce e si converte, altrimenti
+    il parquet non si scrive e si perde tutto il lavoro sull'ultima riga.
     """
-    fb = sd.FBref(leagues=LEAGUE, seasons=SEASONS)
-    df = fb.read_player_match_stats(stat_type="summary")
-    save(df, "fbref_player_match")
-    return df
+    seasons = seasons or SEASONS
+    dst = RAW / "fbref_player_match.parquet"
+    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    fatte = set(pezzi[0]["season"].astype(str)) if pezzi else set()
+    if fatte:
+        log.info("stagioni gia' scaricate: %s", sorted(fatte))
+
+    for stagione in seasons:
+        if str(stagione) in fatte:
+            continue
+        try:
+            fb = sd.FBref(leagues=LEAGUE, seasons=[stagione])
+            df = fb.read_player_match_stats(stat_type="summary").reset_index()
+            df.columns = [
+                "_".join(str(p) for p in c
+                         if p and not str(p).startswith("Unnamed")).strip("_")
+                if isinstance(c, tuple) else str(c)
+                for c in df.columns
+            ]
+            df.columns = [c.lower().replace(" ", "_").replace("+", "_plus_")
+                          for c in df.columns]
+            for c in df.columns:
+                if df[c].dtype == object:
+                    df[c] = df[c].astype("string")
+            pezzi.append(df)
+            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+            log.info("%s: %d righe giocatore-partita", stagione, len(df))
+        except Exception as exc:
+            log.warning("%s: %s — proseguo con la prossima stagione",
+                        stagione, type(exc).__name__)
+
+    out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
+    log.info("%-22s %6d righe -> %s", "fbref_player_match", len(out), dst)
+    return out
 
 
 def applica_locale_whoscored() -> None:
@@ -445,21 +481,74 @@ def applica_locale_whoscored() -> None:
     whoscored_patch.applica()
 
 
-def ingest_missing() -> pd.DataFrame:
+def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
     """
     Infortunati e squalificati per singola partita, da WhoScored.
 
-    Questo e' il pezzo chiave per il modello T-24h: sono informazioni note
-    PRIMA della formazione ufficiale, quindi utilizzabili con anticipo reale.
+    E' il pezzo chiave del blocco B: sono informazioni note PRIMA della
+    formazione ufficiale, quindi dentro l'orizzonte T-24h. E' anche l'unico
+    posto dove il mercato puo' essere strutturalmente lento — il calendario si
+    sa da mesi, un infortunio di giovedi' no.
 
-    RICHIEDE UN BROWSER: WhoScored ha protezioni anti-bot e soccerdata usa
-    Selenium. Serve Chrome/Chromium installato. Se fallisce, saltalo per ora.
+    RICHIEDE UN BROWSER (Selenium + Chrome) ED E' LENTO: ~11 secondi per
+    partita, misurati. Sei stagioni sono circa sette ore.
+
+    UNA STAGIONE PER VOLTA, CON PAUSA. Chiedere tutte le stagioni in una sola
+    sessione fa scattare il captcha di WhoScored, e in headless il risolutore
+    non puo' nemmeno comparire: l'errore che ne esce e' un `IndexError` dentro
+    soccerdata, che non somiglia per niente a "sei stato bloccato". Con
+    un'istanza per stagione e una pausa in mezzo il problema non si presenta.
+
+    SALVA A OGNI STAGIONE. Sette ore di scraping non si rifanno per un errore
+    all'ultima riga, e il file gia' scritto viene riletto e completato: si puo'
+    interrompere e riprendere quando si vuole.
     """
+    import time
+
     applica_locale_whoscored()
-    ws = sd.WhoScored(leagues=LEAGUE, seasons=SEASONS)
-    df = ws.read_missing_players()
-    save(df, "whoscored_missing")
-    return df
+    seasons = seasons or SEASONS
+    dst = RAW / "whoscored_missing.parquet"
+    viste_path = RAW / "whoscored_missing_viste.parquet"
+
+    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    viste = [pd.read_parquet(viste_path)] if viste_path.exists() else []
+    fatte = set(viste[0]["game_id"].astype(int)) if viste else set()
+    if fatte:
+        log.info("gia' scaricate %d partite: le salto", len(fatte))
+
+    for stagione in seasons:
+        try:
+            ws = sd.WhoScored(leagues=LEAGUE, seasons=[stagione], headless=True)
+            sched = ws.read_schedule().reset_index()
+        except Exception as exc:
+            log.warning("%s: calendario non disponibile (%s), stagione saltata",
+                        stagione, type(exc).__name__)
+            continue
+
+        ids = [i for i in sched["game_id"].dropna().astype(int) if i not in fatte]
+        if not ids:
+            continue
+        t0 = time.time()
+        try:
+            miss = ws.read_missing_players(match_id=ids).reset_index()
+            pezzi.append(miss)
+            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+            # Le partite senza assenti non producono righe: senza registrare
+            # QUALI sono state interrogate non si distingue "nessun assente"
+            # da "non scaricata", e ogni statistica a valle sarebbe calcolata
+            # sulle sole partite con assenze.
+            viste.append(pd.DataFrame({"season": stagione, "game_id": ids}))
+            pd.concat(viste, ignore_index=True).to_parquet(viste_path, index=False)
+            log.info("%s: %d partite -> %d assenti (%.0f min)",
+                     stagione, len(ids), len(miss), (time.time() - t0) / 60)
+        except Exception as exc:
+            log.warning("%s: %s — proseguo con la prossima stagione",
+                        stagione, type(exc).__name__)
+        time.sleep(20)
+
+    out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
+    log.info("%-22s %6d righe -> %s", "whoscored_missing", len(out), dst)
+    return out
 
 
 # ---------------------------------------------------------------------------

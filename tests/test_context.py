@@ -23,6 +23,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from src import config  # noqa: E402
 from src.features import context  # noqa: E402
 
+# I calendari di questi test sono sintetici: le coppe vere non c'entrano, e
+# caricarle farebbe ereditare alle squadre inventate le partite europee delle
+# squadre omonime. Il conteggio con le coppe ha il suo test apposta.
+SENZA_COPPE = pd.DataFrame(columns=["team", "date"])
+
 
 def calendario() -> pd.DataFrame:
     """
@@ -55,7 +60,7 @@ def calendario() -> pd.DataFrame:
 
 def test_riposo() -> None:
     """I giorni dall'ultima partita, contati a mano."""
-    out = context.build(calendario(), save=False)
+    out = context.build(calendario(), save=False, coppe=SENZA_COPPE)
     nap = out[out["home_team"] == "Napoli"].sort_values("date")
 
     atteso = [np.nan, 3.0, 4.0, 7.0, 15.0]
@@ -75,7 +80,7 @@ def test_congestione_esclude_la_partita_stessa() -> None:
     errore, nessun sintomo, e una feature che sa qualcosa della partita che
     deve predire.
     """
-    out = context.build(calendario(), save=False)
+    out = context.build(calendario(), save=False, coppe=SENZA_COPPE)
     nap = out[out["home_team"] == "Napoli"].sort_values("date")
     ottenuto = nap["home_matches_14d"].tolist()
 
@@ -102,7 +107,7 @@ def test_troncamento_riposo() -> None:
         "home_team": "Napoli", "away_team": "Roma",
         "date": datetime(2026, 8, 20),          # un anno dopo
     }
-    out = context.build(df, save=False)
+    out = context.build(df, save=False, coppe=SENZA_COPPE)
     valore = out[out["date"] == datetime(2026, 8, 20)]["home_rest_days"].iloc[0]
     assert valore == context.RIPOSO_MASSIMO, \
         f"riposo non troncato: {valore} invece di {context.RIPOSO_MASSIMO}"
@@ -125,7 +130,7 @@ def test_derby_non_ordinato() -> None:
         {"league": "ITA-Serie A", "season": "2526", "home_team": "Napoli",
          "away_team": "Udinese", "date": datetime(2025, 9, 1)},
     ])
-    out = context.build(df, save=False)
+    out = context.build(df, save=False, coppe=SENZA_COPPE)
     assert out["is_derby"].tolist() == [1, 1, 0], out["is_derby"].tolist()
     assert out["derby_intensity"].tolist() == [3, 3, 0], \
         "il derby di Milano dev'essere 'city' in entrambi i versi"
@@ -144,7 +149,7 @@ def test_derby_assente_non_inventa() -> None:
     try:
         with tempfile.TemporaryDirectory() as tmp:
             config.DERBIES = Path(tmp) / "non_esiste.csv"
-            out = context.build(calendario(), save=False)
+            out = context.build(calendario(), save=False, coppe=SENZA_COPPE)
             assert "is_derby" not in out.columns, \
                 "senza derbies.csv la colonna non deve comparire"
             assert "home_rest_days" in out.columns, \
@@ -169,15 +174,43 @@ def test_partite_future() -> None:
         "home_team": "Napoli", "away_team": "Torino",
         "date": datetime(2025, 9, 3),           # non giocata: nessun risultato
     }
-    out = context.build(df, save=False)
+    out = context.build(df, save=False, coppe=SENZA_COPPE)
     futura = out[out["date"] == datetime(2025, 9, 3)].iloc[0]
     assert futura["home_rest_days"] == 4.0, futura["home_rest_days"]
     assert futura["home_matches_14d"] == 1, futura["home_matches_14d"]
     print("  riga futura: riposo 4 giorni, 1 partita in 14        ok")
 
 
+def test_coppe_contano() -> None:
+    """
+    Una partita di coppa fra due di campionato accorcia il riposo.
+
+    E' il meccanismo per cui il blocco A e' stato riaperto: senza le coppe,
+    riposo e congestione misurano il calendario di Serie A — uguale per tutti
+    — invece dell'affaticamento. Qui si verifica che una riga di coppa entri
+    nei conteggi pur non producendo nessuna riga di output.
+    """
+    df = calendario()
+    coppe = pd.DataFrame([{"team": "Napoli", "date": datetime(2025, 8, 12)}])
+    senza = context.build(df, save=False, coppe=SENZA_COPPE)
+    con = context.build(df, save=False, coppe=coppe)
+
+    assert len(con) == len(senza), "le coppe non devono creare righe di output"
+
+    q = con[con["date"] == datetime(2025, 8, 15)].iloc[0]
+    r = senza[senza["date"] == datetime(2025, 8, 15)].iloc[0]
+    # Senza coppa il Napoli riposava dal 8 agosto (7 giorni); con la coppa del
+    # 12 riposa 3 giorni, e la partita europea entra nella finestra.
+    assert r["home_rest_days"] == 7.0, r["home_rest_days"]
+    assert q["home_rest_days"] == 3.0, q["home_rest_days"]
+    assert q["home_matches_14d"] == r["home_matches_14d"] + 1
+    assert q["home_cup_14d"] == 1 and r["home_cup_14d"] == 0
+    print("  coppa fra due partite: riposo 7 -> 3, cup_14d 0 -> 1   ok")
+
+
 def main() -> None:
     test_riposo()
+    test_coppe_contano()
     test_congestione_esclude_la_partita_stessa()
     test_troncamento_riposo()
     test_derby_non_ordinato()

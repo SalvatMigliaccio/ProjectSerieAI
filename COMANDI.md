@@ -170,6 +170,7 @@ python ingest.py --stage matches      # risultati appena giocati
 python ingest.py --stage understat
 python ingest.py --stage schedule
 python ingest.py --stage fixtures     # quote del turno imminente
+python ingest.py --stage cups         # calendario Champions/Europa/Conference
 python -m src.normalize --build
 python -m src.features.form
 python -m src.features.market

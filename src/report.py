@@ -112,6 +112,11 @@ def _esc(s) -> str:
 
 TRIVIALI = {"over 0.5", "under 0.5", "over 4.5", "under 4.5", "under 1.5"}
 
+# I soli mercati per cui il registro conserva la quota vera del bookmaker.
+# Gli altri si potrebbero solo stimare applicando un margine medio, che
+# sarebbe un numero inventato con l'aria di essere misurato.
+QUOTE_BOOK = {"1": "odds_home", "X": "odds_draw", "2": "odds_away"}
+
 
 def _etichetta(mercato: str, r: pd.Series) -> str:
     """Nomi leggibili: '1X' da solo non dice quale squadra."""
@@ -161,8 +166,15 @@ def selezioni(preds: pd.DataFrame, minimo: float = 0.65) -> pd.DataFrame:
                 "kickoff": r.get("kickoff"),
                 "partita": f"{r['home_team']} - {r['away_team']}",
                 "mercato": _etichetta(mercato, r),
+                # Il nome grezzo serve a ritrovare la quota del book: le
+                # etichette leggibili ("1 (Napoli)") non si rimappano.
+                "mercato_raw": mercato,
                 "probabilita": float(p),
                 "quota_equa": float(fair_odds(p)),
+                # Il book quota solo l'1X2: per doppia chance, over/under e
+                # gol-gol non abbiamo il suo prezzo, e stimarlo applicando un
+                # margine medio sarebbe inventarlo. Meglio lasciarlo vuoto.
+                "quota_book": QUOTE_BOOK.get(mercato) and r.get(QUOTE_BOOK[mercato]),
             })
     tab = pd.DataFrame(righe)
     if tab.empty:
@@ -773,6 +785,143 @@ def _html_target(preds: pd.DataFrame) -> str:
     return "".join(blocchi)
 
 
+def _html_una_per_partita(preds: pd.DataFrame) -> str:
+    """
+    Una selezione sola per partita: la piu' probabile fra tutti i mercati.
+
+    PERCHE' SEPARATA DALLA CLASSIFICA. La classifica generale ordina tutti i
+    mercati di tutte le partite insieme: una partita squilibrata ci compare
+    tre volte e una equilibrata non ci compare affatto. Serve a vedere dove
+    stanno le probabilita' piu' alte del turno, non a dire cosa fare partita
+    per partita — che e' la domanda diversa a cui risponde questa tabella.
+
+    LA SOGLIA QUI NON SI APPLICA. `selezioni` scarta sotto il 65% perche' la
+    classifica non si riempia di roba mediocre, ma qui scartare significherebbe
+    lasciare una partita SENZA riga, cioe' non rispondere proprio dove la
+    risposta e' meno ovvia. Si prende il massimo disponibile, qualunque sia, e
+    la colonna della probabilita' dice da sola quanto e' poco.
+    """
+    if preds.empty:
+        return ""
+    tab = selezioni(preds, minimo=0.0)
+    if tab.empty:
+        return ""
+    scelte = (tab.sort_values("probabilita", ascending=False)
+                 .drop_duplicates("partita"))
+
+    righe = "".join(
+        f"<tr><td class='l q'>{_esc(quando(r['kickoff']))}</td>"
+        f"<td class='l'>{_esc(r['partita'])}</td>"
+        f"<td class='l'><strong>{_esc(r['mercato'])}</strong></td>"
+        f"<td>{r['probabilita']:.1%}</td>"
+        f"<td class='q'>{r['quota_equa']:.2f}</td></tr>"
+        for _, r in scelte.iterrows()
+    )
+    return (
+        "<h3>Una selezione per partita</h3><div class='card'>"
+        "<table><thead><tr><th class='l'>quando</th><th class='l'>partita</th>"
+        "<th class='l'>mercato piu' probabile</th><th>probabilita'</th>"
+        f"<th>quota equa</th></tr></thead><tbody>{righe}</tbody></table></div>"
+        "<p class='nota'>Il mercato piu' probabile di ogni partita, fra 1X2, "
+        "doppia chance, over/under, gol-gol e squadra che segna. "
+        "<strong>Non e' un consiglio di giocata</strong>: e' la stessa "
+        "distribuzione della tabella qui sopra, letta una partita alla volta. "
+        "Tutte le righe hanno valore atteso negativo contro le quote del book, "
+        "e le probabilita' basse in fondo alla colonna dicono quali partite "
+        "il modello non sa come leggere.</p>"
+    )
+
+
+def _html_con_quota(preds: pd.DataFrame,
+                    minima: float = config.QUOTA_MINIMA_SELEZIONE) -> str:
+    """
+    Una selezione per partita fra quelle che pagano almeno `minima`.
+
+    LA DOMANDA A CUI RISPONDE. La tabella precedente da' il mercato piu'
+    probabile, e quasi sempre e' una quasi-certezza che paga 1.07: probabile
+    quanto si vuole, ma non la si gioca. Qui si scarta tutto cio' che sta
+    sotto la quota minima e si prende, fra quel che resta, la probabilita'
+    piu' alta — cioe' il miglior compromesso fra quanto e' probabile e quanto
+    paga.
+
+    QUELLO CHE QUESTA SEZIONE NON FA, E VA DETTO OGNI VOLTA. Alzare la quota
+    **non migliora il valore atteso**. Il margine del book e' identico su
+    tutti i mercati derivati dalle stesse quote — 5.19% misurato — quindi
+    filtrare per quota sposta la varianza e la vincita potenziale, non il
+    vantaggio, che resta negativo dappertutto. E' misurato, non dedotto: sul
+    test set nessuna soglia di probabilita' produce profitto, e la doppia
+    chance piu' sicura vince l'80.6% delle volte rendendo -2.9%, con
+    intervallo che esclude lo zero.
+
+    Il filtro e' sulla quota EQUA, l'unica che esiste per tutti i mercati.
+
+    LE DUE COLONNE NON SI CONFRONTANO COME MARGINE. Verrebbe da leggere lo
+    scarto fra quota equa e quota B365 come il margine del book, e sarebbe
+    sbagliato: la quota equa non e' la quota de-viggata, e' `1/p` con `p`
+    ricostruita dalla matrice Poisson. M1 parte dalle quote, le de-vigga, ne
+    ricava due lambda incrociando supremazia e totale, e da quei lambda
+    rifa' l'1X2 — e un Poisson indipendente non riproduce esattamente una
+    terzina qualsiasi. Lo scarto e' quindi margine PIU' errore di
+    ricostruzione, e i due possono avere segno opposto: su Atalanta-Cagliari
+    l'equa vale 1.63 contro 1.57 del book, cioe' il modello crede alla
+    squadra di casa MENO della quota lorda di margine. Non e' un'occasione al
+    contrario, e' la ricostruzione.
+    """
+    if preds.empty:
+        return ""
+    tab = selezioni(preds, minimo=0.0)
+    if tab.empty:
+        return ""
+    tab = tab[tab["quota_equa"] >= minima]
+    if tab.empty:
+        return (f"<h3>Selezioni con quota almeno {minima:.2f}</h3>"
+                f"<p class='sub'>Nessun mercato di questa giornata paga "
+                f"{minima:.2f} o piu'.</p>")
+
+    scelte = (tab.sort_values("probabilita", ascending=False)
+                 .drop_duplicates("partita"))
+
+    righe = []
+    for _, r in scelte.iterrows():
+        book = (f"{float(r['quota_book']):.2f}" if pd.notna(r["quota_book"])
+                else "<span class='q'>-</span>")
+        righe.append(
+            f"<tr><td class='l q'>{_esc(quando(r['kickoff']))}</td>"
+            f"<td class='l'>{_esc(r['partita'])}</td>"
+            f"<td class='l'><strong>{_esc(r['mercato'])}</strong></td>"
+            f"<td>{r['probabilita']:.1%}</td>"
+            f"<td class='q'>{r['quota_equa']:.2f}</td>"
+            f"<td>{book}</td></tr>"
+        )
+    return (
+        f"<h3>Selezioni con quota almeno {minima:.2f}</h3><div class='card'>"
+        "<table><thead><tr><th class='l'>quando</th><th class='l'>partita</th>"
+        "<th class='l'>mercato</th><th>probabilita'</th><th>quota equa</th>"
+        f"<th>quota B365</th></tr></thead><tbody>{''.join(righe)}</tbody>"
+        "</table></div>"
+        f"<p class='nota'><strong>Alzare la quota non migliora il valore "
+        f"atteso.</strong> Il margine del bookmaker e' identico su tutti i "
+        f"mercati derivati dalle stesse quote — 5.19% misurato — quindi questo "
+        f"filtro sposta la vincita potenziale e la varianza, non il vantaggio: "
+        f"resta negativo su ogni riga. Sul test set nessuna soglia produce "
+        f"profitto, e la doppia chance piu' sicura vince l'80.6% delle volte "
+        f"rendendo <strong>-2.9%</strong>, con intervallo che esclude lo zero.</p>"
+        f"<p class='nota'><strong>Le due colonne di quota non si confrontano "
+        f"come margine.</strong> La quota equa e' 1/p con p ricostruita dalla "
+        f"matrice Poisson, non la quota de-viggata: il modello parte dalle "
+        f"quote, ne ricava i gol attesi incrociando supremazia e totale, e da "
+        f"li' rifa' l'1X2 — e un Poisson indipendente non riproduce esattamente "
+        f"una terzina qualsiasi. Lo scarto fra le colonne e' quindi margine "
+        f"<em>piu'</em> errore di ricostruzione, e i due possono avere segno "
+        f"opposto: dove l'equa e' piu' alta della quota B365, il modello crede "
+        f"a quell'esito meno di quanto faccia il book gia' al lordo del "
+        f"margine. Non e' un'occasione al contrario, e' la ricostruzione. "
+        f"La colonna B365 resta vuota dove il registro non ha la quota del "
+        f"book: si quota solo l'1X2, e stimare le altre con un margine medio "
+        f"significherebbe inventare un numero con l'aria di essere misurato.</p>"
+    )
+
+
 def _html_selezioni(preds: pd.DataFrame) -> str:
     tab = selezioni(preds)
     if tab.empty:
@@ -1101,6 +1250,8 @@ modello <code>{_esc(esito.model_version)}</code></p>
 
 <h2><span class="n">1</span>Giornata in arrivo</h2>
 {_html_giornata(preds)}
+{_html_una_per_partita(preds)}
+{_html_con_quota(preds)}
 {_html_target(preds)}
 {_html_selezioni(preds)}
 

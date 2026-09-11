@@ -82,9 +82,24 @@ def test_contro_football_data(soglia: float = 0.98) -> None:
     fd = pd.read_parquet(master)[KEYS + ["date"]].rename(columns={"date": "fd"})
     fd["season"] = fd["season"].astype(str)
     j = sched[KEYS + ["kickoff"]].merge(fd, on=KEYS, how="inner")
-    # football-data mette mezzanotte quando non ha l'orario: quelle righe non
-    # dicono niente sul fuso e vanno escluse.
-    j = j[j["fd"].dt.time != pd.Timestamp("00:00").time()]
+
+    # SI SCARTANO LE STAGIONI SENZA ORARIO VERO, non un valore segnaposto.
+    # football-data pubblica l'orario solo dal 2019/20: prima mette la stessa
+    # ora finta su tutte le partite della stagione — 12:00, ma e' cambiata nel
+    # tempo ed era 00:00. Inseguire il valore rende il test fragile: se il
+    # segnaposto cambia ancora, quelle 1900 righe rientrano nel confronto e il
+    # test fallisce dando la colpa al fuso orario, che invece e' giusto. E'
+    # gia' successo.
+    #
+    # Il criterio robusto e' strutturale: una stagione in cui TUTTE le partite
+    # hanno la stessa ora sull'orologio non porta informazione di orario,
+    # qualunque sia quell'ora.
+    ore = j.groupby("season")["fd"].transform(
+        lambda s: s.dt.strftime("%H:%M").nunique())
+    scartate = sorted(j.loc[ore <= 1, "season"].unique())
+    if scartate:
+        print(f"   (stagioni senza orario vero, escluse: {', '.join(scartate)})")
+    j = j[ore > 1]
     if len(j) < 100:
         print(f"   (saltato: solo {len(j)} partite con orario su entrambe)")
         return

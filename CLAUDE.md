@@ -169,6 +169,21 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   Su 4940 partite fanno **circa 15 ore**. La cache e' persistente e il lavoro
   e' riprendibile. Copertura verificata anche sulle stagioni vecchie: 1516 e
   1920 rispondono entrambe.
+- **football-data pubblica l'ORARIO solo dal 2019/20.** Prima mette la stessa
+  ora finta su tutte e 380 le partite della stagione: oggi `12:00`, in passato
+  `00:00`. Si riconosce dal fatto che la stagione ha **una sola ora distinta**
+  — dal 1920 in poi ce ne sono fra 6 e 13.
+
+  Perche' e' scritto qui: `test_kickoff` scartava le righe a mezzanotte, e
+  quando il segnaposto e' diventato `12:00` quelle 1900 righe sono rientrate
+  nel confronto facendo crollare l'accordo fra le fonti dal 99.5% al 58.3%.
+  Il test accusava il fuso orario, che era giusto. Ora il criterio e'
+  strutturale — si scarta la stagione con una sola ora distinta, qualunque
+  essa sia — e i due orari coincidono al minuto sul **99.48% di 2691 partite**
+  dal 2019/20.
+
+  Non tocca la produzione: `predict.kickoff` e `backtest_log.flag_post_kickoff`
+  leggono l'orario da `fbref_schedule`, non da `matches_master`.
 - **Non esiste la colonna `referee`.** Era una feature debole, si rinuncia.
 - **ClubElo era irraggiungibile** al momento dell'ingestion (502 su tutte le
   squadre). Lo stage `elo` e' opzionale: l'Elo proprio, calcolato dai
@@ -576,7 +591,7 @@ tocchi almeno il 16% delle partite con uno shift da 0.10 gol. I Big 5 restano
 la leva piu' grande (2.2x) e servono per i sottoinsiemi piccoli — il derby
 all'11% non arriva alla soglia in Serie A.
 
-### Blocco A — contesto — MISURATO E SCARTATO
+### Blocco A — contesto — MISURATO DUE VOLTE E SCARTATO
 
 `python -m src.evaluate --blocco contesto`, 8 settembre 2026. Nove colonne:
 riposo, congestione su finestra (d-14, d), infrasettimanale, derby.
@@ -627,11 +642,55 @@ entrano nel modello. Tenerle "male che vada non fanno danno" sarebbe sbagliato
 con 3400 righe di training, e la diluizione e' gia' stata osservata su
 M4-con-mercato.
 
-**Cosa NON e' stato misurato, e va detto**: le coppe europee infrasettimanali
-non sono nel blocco perche' non sono derivabili dal calendario di campionato
-(vedi `features/context.py`). Il blocco A misurato e' quindi la sua meta'
-povera — riposo e congestione **di campionato**. Se un giorno arriva il
-calendario UEFA, il blocco va rimisurato, non dato per chiuso.
+### Seconda misura: con le coppe europee — il blocco completo
+
+La prima misura era **monca**, e va detto chiaro: riposo e congestione di solo
+campionato sono quasi uguali per tutti, perche' le date delle giornate non
+cambiano quando una squadra gioca in Europa. Il meccanismo — giocare il
+martedi' in Champions e la domenica in campionato — era proprio la parte che
+mancava.
+
+`python ingest.py --stage cups` scarica Champions, Europa e Conference League
+da FBref: **solo calendario, una richiesta per competizione e stagione, niente
+browser** (4140 partite). Le tre coppe sono chiavi nuove in `LEAGUE_DICT`,
+registrate a runtime da `ingest.registra_coppe` — vedi `config.FBREF_CUPS`, e i
+nomi devono essere quelli esatti della pagina `fbref.com/en/comps/`.
+
+`features/context.py` ora conta le coppe dentro riposo e congestione, e
+aggiunge `home/away/diff_cup_14d`. Aggancio verificato: 12 squadre italiane
+in Europa, Roma 131 presenze, Juventus 120, Napoli 108; Napoli e Inter
+2023/24 hanno 15 partite con una coppa nei 14 giorni prima, l'Empoli zero.
+**Il 23.6% delle partite di Serie A ha una coppa nei 14 giorni precedenti.**
+
+| misura | differenza | IC 95% | semiampiezza |
+|---|---|---|---|
+| senza coppe | +0.00008 | [-0.00007, +0.00024] | 0.00016 |
+| **con coppe** | **-0.00004** | **[-0.00014, +0.00007]** | **0.00010** |
+
+Il verdetto non cambia e l'intervallo si **stringe**: minimo rilevabile
+0.00015, contro i 0.00060 attesi da uno shift di 0.10 gol. E' un null ben
+potenziato, ora sul blocco completo.
+
+**L'importanza dice la cosa piu' interessante.** Con le coppe dentro:
+
+```
+home_rest_days   1.48%  27/64      is_derby         0.64%  50/64
+diff_rest_days   1.43%  28/64      derby_intensity  0.27%  58/64
+away_matches_14d 0.49%  54/64      home_cup_14d     0.05%  61/64
+away_rest_days   0.43%  57/64      diff_cup_14d     0.01%  63/64
+home_matches_14d 0.16%  59/64      away_cup_14d     0.00%  64/64
+```
+
+Le colonne di coppa sono le **ultime tre** su sessantaquattro: il modello non
+ci trova niente. E `diff_rest_days` **scende dal 5o al 28o posto** quando il
+meccanismo vero entra nel dataset — la sua importanza nella prima misura era
+struttura spuria, non segnale. Totale del blocco: 5.0% del guadagno con il
+18.8% delle colonne, ancora piu' sotto la sua quota di prima (8.2% contro
+14.8%).
+
+**Ora la domanda e' chiusa davvero.** Non "il contesto non conta per il
+calcio", ma: il mercato lo ha gia' prezzato. Le quote di apertura escono
+quando il calendario, coppe comprese, e' noto da mesi.
 
 ### Il piano dei blocchi — uno alla volta, ciascuno misurato
 

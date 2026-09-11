@@ -327,7 +327,8 @@ def assert_no_leakage(out: pd.DataFrame, long: pd.DataFrame) -> None:
     )
 
 
-def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
+def build(df: pd.DataFrame | None = None, save: bool = True,
+          coppe: pd.DataFrame | None = None) -> pd.DataFrame:
     """
     `save=False` serve a src/predict.py: li' il frame contiene anche le partite
     non ancora giocate, e il risultato non deve sovrascrivere il parquet delle
@@ -343,7 +344,12 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
         log.info("caricato %s: %d righe", path.name, len(df))
 
     df = df.reset_index(drop=True)
-    long = riposo_e_congestione(to_long(df, carica_coppe()))
+    # `coppe` si puo' iniettare: un calendario sintetico non deve pescare le
+    # coppe vere, o le sue squadre inventate ereditano le partite europee di
+    # squadre omonime e i conteggi non tornano piu'.
+    if coppe is None:
+        coppe = carica_coppe()
+    long = riposo_e_congestione(to_long(df, coppe))
     out = to_wide(df, long)
     assert_no_leakage(out, long)
     out = aggiungi_derby(out, carica_derby())

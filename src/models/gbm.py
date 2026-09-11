@@ -86,20 +86,48 @@ MARKET_FEATURES = [c for c in FEATURES_T24 if not c.endswith("_source")]
 # cinquanta feature perde contro M5 ancorato di -0.0023, con intervallo netto,
 # proprio perche' le quote si diluivano).
 #
-# Blocco A, contesto. PRIMA MISURA (8 settembre 2026), senza le coppe europee:
-# M5+contesto contro M5, +0.00008 con IC 95% [-0.00007, +0.00024] su 114
-# cluster. Intervallo stretto — il minimo rilevabile di quel confronto e'
-# 0.00022, sotto i 0.00060 attesi da uno shift di 0.10 gol — ma il blocco era
-# monco: riposo e congestione di SOLO campionato sono quasi uguali per tutti,
-# perche' le date delle giornate non cambiano quando una squadra gioca in
-# Europa. La seconda misura include le coppe (`ingest --stage cups`), che sono
-# il meccanismo vero: 23.6% delle partite ha una coppa nei 14 giorni prima.
+# Blocco A, contesto. Misurato DUE volte, e la seconda e' quella che vale.
+#
+#   senza coppe (8 set 2026)   +0.00008   IC [-0.00007, +0.00024]
+#   CON coppe   (8 set 2026)   -0.00004   IC [-0.00014, +0.00007]
+#
+# La prima era monca: riposo e congestione di solo campionato sono quasi
+# uguali per tutti, perche' le date delle giornate non cambiano quando una
+# squadra gioca in Europa. La seconda include Champions, Europa e Conference
+# (`ingest --stage cups`), che sono il meccanismo vero — il 23.6% delle partite
+# ha una coppa nei 14 giorni precedenti.
+#
+# Il verdetto non cambia e l'intervallo si stringe (semiampiezza 0.00010,
+# minimo rilevabile 0.00015 contro i 0.00060 attesi da uno shift di 0.10 gol).
+# Le colonne di coppa non ricevono quasi nessuno split — ranghi 61, 63 e 64 su
+# 64 — e `diff_rest_days` SCENDE dal 5o al 28o posto quando il meccanismo vero
+# entra: la sua importanza di prima era struttura spuria, non segnale.
 BLOCCHI_SCARTATI: frozenset[str] = frozenset({
     "home_rest_days", "away_rest_days", "diff_rest_days",
     "home_matches_14d", "away_matches_14d", "diff_matches_14d",
     "home_cup_14d", "away_cup_14d", "diff_cup_14d",
     "is_midweek", "is_derby", "derby_intensity",
 })
+
+# BLOCCHI COSTRUITI MA NON ANCORA MISURATI. Fuori dal modello esattamente come
+# quelli scartati, e per la stessa ragione: la regola del piano e' che un
+# blocco entra solo se il suo intervallo appaiato sta sotto zero, e finche' la
+# misura non c'e' non puo' entrare. Tenerli dentro "intanto" significherebbe
+# diluire 52 feature con altre nove non validate, e falsare la misura del
+# blocco successivo — che partirebbe da una base diversa da quella dichiarata.
+#
+# Appena un blocco e' misurato, la sua voce si sposta: in BLOCCHI_SCARTATI se
+# l'intervallo contiene lo zero, via da entrambi gli insiemi se sta sotto.
+BLOCCHI_NON_MISURATI: frozenset[str] = frozenset({
+    "home_quota_minuti_assenti", "away_quota_minuti_assenti",
+    "diff_quota_minuti_assenti",
+    "home_quota_ga_assente", "away_quota_ga_assente",
+    "diff_quota_ga_assente",
+    "home_n_assenti", "away_n_assenti", "diff_n_assenti",
+})
+
+# Cio' che il modello di produzione non vede.
+FUORI_DAL_MODELLO: frozenset[str] = BLOCCHI_SCARTATI | BLOCCHI_NON_MISURATI
 
 # Griglia degli iperparametri. Il numero di alberi NON c'e': lo decide
 # l'arresto anticipato. Si esplora a caso invece che esaustivamente perche'
@@ -138,11 +166,12 @@ def form_features(df: pd.DataFrame,
     e il confronto resta appaiato, che e' l'unico modo di avere un intervallo
     stretto abbastanza da decidere.
 
-    `None` (il default) significa "escludi i blocchi gia' misurati e
-    scartati". Passare `()` li rimette dentro, ed e' quello che fa
-    `evaluate.misura_blocco` per poterli rimisurare.
+    `None` (il default) significa "escludi tutto cio' che non e' ancora
+    entrato nel modello": i blocchi misurati e scartati e quelli costruiti ma
+    non ancora misurati. Passare `()` li rimette dentro, ed e' quello che fa
+    `evaluate.misura_blocco` per poterli misurare.
     """
-    fuori = set(NEVER_FEATURES) | set(BLOCCHI_SCARTATI if escludi is None else escludi)
+    fuori = set(NEVER_FEATURES) | set(FUORI_DAL_MODELLO if escludi is None else escludi)
     return [
         c for c in df.columns
         if c not in fuori

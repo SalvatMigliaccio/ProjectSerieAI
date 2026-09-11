@@ -1,0 +1,2 @@
+season,matchday,n_previsioni,n_valide,rps,rps_mercato,accuratezza,file,n_cumulate,rps_cumulativo
+2627,3,8,6,0.1852643334083333,0.1815283248532695,0.3333333333333333,round_2627_03.csv,6,0.1852643334083333

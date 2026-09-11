@@ -170,6 +170,16 @@ FORM_HALFLIFE_VENUE = 10
 # si azzerano mai: si attenuano. Vedi sezione 14bis del documento master.
 SEASON_REGRESSION = 0.30
 
+# Quota equa minima per la sezione "selezioni con quota" del report. Sotto
+# questo livello la vincita e' talmente piccola che la giocata non interessa
+# nessuno, per quanto probabile sia.
+#
+# ATTENZIONE A COSA NON FA. Alzare la soglia NON migliora il valore atteso:
+# il margine del book (5.19% misurato) e' identico su tutti i mercati derivati
+# dalle stesse quote, quindi filtrare per quota sposta varianza e vincita
+# potenziale, non il vantaggio — che resta negativo ovunque.
+QUOTA_MINIMA_SELEZIONE = 1.50
+
 # Numero massimo di gol per lato nella matrice dei risultati esatti.
 MAX_GOALS = 10
 
