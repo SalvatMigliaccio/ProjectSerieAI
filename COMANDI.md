@@ -171,6 +171,8 @@ python ingest.py --stage understat
 python ingest.py --stage schedule
 python ingest.py --stage fixtures     # quote del turno imminente
 python ingest.py --stage cups         # calendario Champions/Europa/Conference
+python ingest.py --stage missing      # infortunati WhoScored: LENTO, ~11s/partita, browser
+python ingest.py --stage player_stats # minuti e gol per giocatore: LENTO, ~13s/partita
 python -m src.normalize --build
 python -m src.features.form
 python -m src.features.market
@@ -257,6 +259,7 @@ python -m src.features.form                # medie mobili leakage-safe
 python -m src.features.market              # de-vigging Shin + proporzionale
 python -m src.features.market --coverage   # copertura quote, book per stagione
 python -m src.features.context             # blocco A: riposo, congestione, derby
+python -m src.features.players             # blocco B: peso delle assenze
 ```
 
 `--coverage` va rilanciato dopo ogni ingestion: i bookmaker spariscono senza
@@ -308,8 +311,12 @@ python -m src.models.gbm --blend                      # 61s  -> config.BLEND_WEI
 # Diagnostica
 python -m src.models.gbm --importance       # 4s — cosa usa M4 senza mercato
 
-# Misura di un blocco di feature, col protocollo fissato (~4 min)
+# Misura di un blocco di feature, col protocollo fissato (~40 min)
 python -m src.evaluate --blocco contesto
+python -m src.evaluate --blocco giocatori
+
+# Il blocco spiega il contenuto o solo la disponibilita' del dato? (~10 min)
+python -m src.evaluate --blocco-nan giocatori
 
 # Potenza: quale effetto questo test set puo' vedere? (~40s)
 python -m src.power_analysis

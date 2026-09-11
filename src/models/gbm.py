@@ -118,13 +118,17 @@ BLOCCHI_SCARTATI: frozenset[str] = frozenset({
 #
 # Appena un blocco e' misurato, la sua voce si sposta: in BLOCCHI_SCARTATI se
 # l'intervallo contiene lo zero, via da entrambi gli insiemi se sta sotto.
-BLOCCHI_NON_MISURATI: frozenset[str] = frozenset({
-    "home_quota_minuti_assenti", "away_quota_minuti_assenti",
-    "diff_quota_minuti_assenti",
-    "home_quota_ga_assente", "away_quota_ga_assente",
-    "diff_quota_ga_assente",
-    "home_n_assenti", "away_n_assenti", "diff_n_assenti",
-})
+# Blocco B, giocatori: MISURATO E TENUTO, 11 settembre 2026. E' il primo
+# blocco che supera la regola. M5+giocatori contro M5, differenza -0.00027
+# con IC 95% [-0.00054, -0.00001] su 114 cluster: l'intervallo sta sotto
+# zero, ma tocca lo zero con l'estremo superiore — il 2.25% dei
+# ricampionamenti non migliora. E' un risultato al limite, non una vittoria,
+# e va riletto quando il test set sara' cresciuto.
+#
+# Quello che NON dice: il modello con i giocatori resta indistinguibile dal
+# mercato (-0.00015, IC [-0.00088, +0.00055]). Il blocco migliora M5, non
+# porta M5 sopra le quote.
+BLOCCHI_NON_MISURATI: frozenset[str] = frozenset()
 
 # Cio' che il modello di produzione non vede.
 FUORI_DAL_MODELLO: frozenset[str] = BLOCCHI_SCARTATI | BLOCCHI_NON_MISURATI

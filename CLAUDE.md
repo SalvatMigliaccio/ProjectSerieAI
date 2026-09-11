@@ -692,6 +692,120 @@ struttura spuria, non segnale. Totale del blocco: 5.0% del guadagno con il
 calcio", ma: il mercato lo ha gia' prezzato. Le quote di apertura escono
 quando il calendario, coppe comprese, e' noto da mesi.
 
+### Blocco B — giocatori e infortuni — MISURATO E TENUTO
+
+`python -m src.evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
+da `src/features/players.py`: quota di minuti indisponibili, quota di
+gol+assist indisponibili, numero di assenti, per lato e in differenza.
+
+**E' il primo blocco che supera la regola.** E va letto con la stessa
+prudenza con cui sono stati letti i risultati nulli.
+
+| modello | RPS | skill_closed | delta mercato | IC 95% |
+|---|---|---|---|---|
+| M5 ancorato, **con** giocatori | **0.1880** | 1.0038 | -0.00015 | [-0.00088, +0.00055] |
+| M1b market-only | 0.1881 | 1.000 | riferimento | — |
+| M5 ancorato, **senza** giocatori | 0.1882 | 0.997 | +0.00011 | [-0.00056, +0.00077] |
+| M0b frequenze di base | 0.2291 | 0.000 | +0.04095 | [+0.03449, +0.04741] |
+
+**Il confronto che decide:**
+
+| confronto | differenza | IC 95% | conclusione |
+|---|---|---|---|
+| **M5+giocatori − M5** | **-0.00027** | **[-0.00054, -0.00001]** | **il blocco aggiunge** |
+
+**Tre cose da non confondere.**
+
+1. **Il blocco migliora M5, non porta M5 sopra il mercato.** Contro M1b resta
+   indistinguibile: -0.00015 con IC [-0.00088, +0.00055]. `skill_closed`
+   1.0038 e' sopra 1, ma l'intervallo dice che quel sorpasso non e'
+   distinguibile dal rumore. **La soglia 0.1881 non e' stata battuta.**
+2. **L'intervallo tocca lo zero.** L'estremo superiore e' -0.00001, e il
+   2.25% dei ricampionamenti non migliora. Ha superato la regola, ma per un
+   pelo: e' un risultato da rileggere quando il test set sara' cresciuto, non
+   un fatto acquisito come i risultati nulli sulle statistiche di gioco.
+3. **E' il terzo test di blocco** (contesto due volte, giocatori una). Con
+   tre confronti a 0.05, la probabilita' di un falso positivo non e' piu' il
+   5% dichiarato. Non invalida il risultato, lo rende provvisorio.
+
+### La diagnostica sui NaN: il modello usa il contenuto
+
+`python -m src.evaluate --blocco-nan giocatori`. Il blocco ha NaN su tutto
+cio' che precede il 2021/22, e LightGBM puo' splittare su "so / non so"
+guadagnando — perche' quella separazione coincide con il tempo, non con gli
+infortuni. Si riaddestra sulle sole stagioni coperte, dove di NaN non ce ne
+sono:
+
+```
+tutto il training (con NaN)          9.8%  del guadagno
+solo stagioni coperte (senza NaN)   15.8%  del guadagno
+```
+
+L'importanza **sale**, non crolla: il modello legge il contenuto. Ed e'
+coerente — su un training dove la feature c'e' sempre, serve di piu'.
+
+### Cosa fa il lavoro, e la sorpresa
+
+Importanza per guadagno dentro M5, le nove colonne:
+
+```
+home_quota_minuti_assenti  5.17%   rango  1/61   <- prima feature su 61
+diff_quota_minuti_assenti  1.67%         23/61
+diff_n_assenti             1.09%         40/61
+diff_quota_ga_assente      0.51%         54/61
+home_quota_ga_assente      0.39%         57/61
+home_n_assenti             0.34%         58/61
+away_quota_minuti_assenti  0.25%         59/61
+away_n_assenti             0.24%         60/61
+away_quota_ga_assente      0.17%         61/61
+```
+
+**La quota di minuti della squadra di casa e' la prima feature su
+sessantuno**, e le colonne pesate per gol+assist — quelle che il piano
+chiedeva — stanno tutte in fondo. La decisione di affiancare la quota di
+minuti NON pesata si e' rivelata quella che regge il blocco: con il solo peso
+per produzione, il blocco non avrebbe avuto niente da dire.
+
+**L'asimmetria casa/trasferta e' grande e non e' spiegata.** 5.17% contro
+0.25%: le assenze della squadra di casa contano venti volte quelle della
+squadra in trasferta. Puo' essere reale — chi gioca in casa attacca di piu' e
+quindi perde di piu' a mancargli un titolare — oppure un artefatto. **Va
+indagata prima di costruirci sopra**: se fosse un artefatto, il blocco
+poggerebbe su una colonna sola e su un caso.
+
+### Limiti dichiarati
+
+- **Il peso e' gol+assist, non xG+xA.** Le statistiche giocatore-partita di
+  FBref per la Serie A non hanno colonne attese (verificato su 60325 righe).
+  Gol+assist e' molto piu' rumoroso: un attaccante che non ha ancora segnato
+  pesa zero. Vista l'importanza quasi nulla di quelle colonne, sostituirle
+  con l'xG di Understat (`--stage shots`) e' la prima cosa da provare se si
+  vuole spremere altro da qui.
+- **Chi e' fuori da agosto pesa zero.** Misurato: l'88.9% degli assenti
+  compare in rosa prima o poi; il 10.3% che non compare mai sono lungodegenti
+  veri (Deulofeu 38 partite di fila, Rog 38, Soumaoro 36). E' una scelta — la
+  feature misura il contributo perso di RECENTE — e la variante da provare e'
+  pesarli con i minuti della stagione precedente.
+- **Copertura parziale**: 39.1% delle partite in tutto il dataset, ma **91%
+  sul test set** (1037 su 1140). Le stagioni precedenti al 2021/22 restano a
+  NaN, che LightGBM tratta nativamente.
+- **L'orizzonte poggia su un assunto non verificato**: che la lista degli
+  indisponibili di WhoScored sia quella pubblicata PRIMA della partita e non
+  aggiornata a posteriori. Se cosi' non fosse, il blocco andrebbe buttato, non
+  corretto.
+
+### La predizione falsificabile sull'half-life NON e' testabile cosi'
+
+Era scritto: "quando arrivera' il layer giocatori, l'half-life ottima di M3
+deve accorciarsi". Non si puo' verificare, e vale la pena dirlo invece di
+lanciare un comando che non risponde: **M3 non ha feature**. E' un modello
+parametrico sui soli risultati, e la sua half-life non puo' cambiare perche'
+si sono aggiunte colonne a M5. La predizione era mal posta.
+
+La forma corretta sarebbe: un modello che usa le assenze dovrebbe preferire
+una memoria piu' corta di uno che non le usa. Per porla servirebbe un
+parametro di memoria dentro M5, che oggi non esiste.
+
 ### Il piano dei blocchi — uno alla volta, ciascuno misurato
 
 **Obiettivo dichiarato**: trovare il limite del ML su questo problema
@@ -732,7 +846,18 @@ indistinguibile, con potenza sufficiente. Le nove colonne sono in
 `manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
 partite) e **va rivisto**: non e' una fonte, e' un'opinione plausibile.
 
-#### Blocco B — giocatori e infortuni — IL PROSSIMO
+#### Blocco B — giocatori e infortuni — FATTO, TENUTO (al limite)
+
+Vedi la sezione dedicata sopra: -0.00027 con IC [-0.00054, -0.00001]. Supera
+la regola, ma l'intervallo tocca lo zero e il modello resta indistinguibile
+dal mercato. Le nove colonne sono entrate nel modello; `BLOCCHI_NON_MISURATI`
+e' tornato vuoto.
+
+Quello che resterebbe da fare qui, in ordine di resa attesa: capire
+l'asimmetria casa/trasferta (20x, non spiegata), sostituire gol+assist con
+l'xG di Understat, pesare i lungodegenti con la stagione precedente.
+
+#### Come era stato pianificato
 
 `ingest --stage missing`, `--stage lineups`, `--stage player_stats`. Feature:
 quota di minuti stagionali assenti **pesata per xG+xA per 90**; indice di
