@@ -118,16 +118,30 @@ BLOCCHI_SCARTATI: frozenset[str] = frozenset({
 #
 # Appena un blocco e' misurato, la sua voce si sposta: in BLOCCHI_SCARTATI se
 # l'intervallo contiene lo zero, via da entrambi gli insiemi se sta sotto.
-# Blocco B, giocatori: MISURATO E TENUTO, 11 settembre 2026. E' il primo
-# blocco che supera la regola. M5+giocatori contro M5, differenza -0.00027
-# con IC 95% [-0.00054, -0.00001] su 114 cluster: l'intervallo sta sotto
-# zero, ma tocca lo zero con l'estremo superiore — il 2.25% dei
-# ricampionamenti non migliora. E' un risultato al limite, non una vittoria,
-# e va riletto quando il test set sara' cresciuto.
+# Blocco B, giocatori: PROVVISORIO, 11 settembre 2026. NON dichiararlo
+# acquisito.
 #
-# Quello che NON dice: il modello con i giocatori resta indistinguibile dal
-# mercato (-0.00015, IC [-0.00088, +0.00055]). Il blocco migliora M5, non
-# porta M5 sopra le quote.
+# M5+giocatori contro M5: -0.00027 con IC 95% [-0.00054, -0.00001] su 114
+# cluster. Supera la regola pre-registrata, ma:
+#
+#   1. l'estremo superiore e' -0.00001: il 2.25% dei ricampionamenti non
+#      migliora, cioe' p a una coda = 0.0225 contro una soglia di 0.025;
+#   2. NON sopravvive ai confronti multipli. Con tre test di blocco gia'
+#      fatti, Bonferroni chiede p < 0.0083 e Holm si ferma al primo passo.
+#      0.0225 e' 2.7 volte troppo grande: servirebbe un intervallo al 98.3%
+#      ancora tutto sotto zero;
+#   3. il modello con i giocatori resta indistinguibile dal mercato
+#      (-0.00015, IC [-0.00088, +0.00055]). Il blocco migliora M5, non porta
+#      M5 sopra le quote;
+#   4. il guadagno poggia su UNA colonna: `home_quota_minuti_assenti` e' la
+#      prima feature su 61 (5.17%), la sua gemella in trasferta e' 59esima
+#      (0.25%). Un'asimmetria 20:1 non e' un effetto calcistico plausibile.
+#
+# Le colonne restano dentro il modello perche' la regola pre-registrata le ha
+# ammesse e cambiarla a posteriori sarebbe peggio. Ma il blocco va rimisurato
+# quando il test set cresce, e il punto 4 va spiegato prima di costruirci
+# sopra: il blocco C (valore rose) pesa le assenze, quindi ne erediterebbe la
+# fragilita'.
 BLOCCHI_NON_MISURATI: frozenset[str] = frozenset()
 
 # Cio' che il modello di produzione non vede.
