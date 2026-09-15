@@ -692,7 +692,7 @@ struttura spuria, non segnale. Totale del blocco: 5.0% del guadagno con il
 calcio", ma: il mercato lo ha gia' prezzato. Le quote di apertura escono
 quando il calendario, coppe comprese, e' noto da mesi.
 
-### Blocco B — giocatori e infortuni — MISURATO E TENUTO
+### Blocco B — giocatori e infortuni — PROVVISORIO
 
 `python -m src.evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
 da `src/features/players.py`: quota di minuti indisponibili, quota di
@@ -724,9 +724,14 @@ prudenza con cui sono stati letti i risultati nulli.
    2.25% dei ricampionamenti non migliora. Ha superato la regola, ma per un
    pelo: e' un risultato da rileggere quando il test set sara' cresciuto, non
    un fatto acquisito come i risultati nulli sulle statistiche di gioco.
-3. **E' il terzo test di blocco** (contesto due volte, giocatori una). Con
-   tre confronti a 0.05, la probabilita' di un falso positivo non e' piu' il
-   5% dichiarato. Non invalida il risultato, lo rende provvisorio.
+3. **Non sopravvive ai confronti multipli.** Tre test di blocco (contesto
+   senza coppe, contesto con coppe, giocatori), Bonferroni a una coda: soglia
+   **0.0083**, e il blocco sta a **p = 0.0225**, 2.7 volte troppo grande.
+   Holm si ferma al primo passo. Il conto e' m = 3 e non 4: la quota di
+   minuti NON pesata era nel modulo dalla prima stesura, scritta prima di
+   qualsiasi misura con la motivazione del portiere — non e' stata aggiunta
+   dopo aver visto fallire le colonne pesate. Con m = 4 la soglia scende a
+   0.00625 e la conclusione non cambia.
 
 ### La diagnostica sui NaN: il modello usa il contenuto
 
@@ -772,6 +777,48 @@ squadra in trasferta. Puo' essere reale — chi gioca in casa attacca di piu' e
 quindi perde di piu' a mancargli un titolare — oppure un artefatto. **Va
 indagata prima di costruirci sopra**: se fosse un artefatto, il blocco
 poggerebbe su una colonna sola e su un caso.
+
+### Verifiche di robustezza — 15 settembre 2026
+
+`python -m src.experiments.blocco_b_robustezza`, 15 walk-forward (3 varianti x
+5 semi). Riassunto completo e versionato in
+`experiments/output/riassunto_bloccoB_robustezza.md`. **Regola scritta prima
+dei risultati: queste verifiche possono solo declassare, mai promuovere.**
+
+**Determinismo**: il seme 0 rifatto coincide con la misura originale, scarto
+0.00e+00 su 1140 partite.
+
+**Semi** (M5+GIOCATORI − M5): -0.00027, -0.00026, -0.00016, -0.00022,
+-0.00032. **Il segno e' stabile, la significativita' no**: cinque stime su
+cinque negative, ma intervallo sotto zero solo in due semi su cinque.
+
+**Simmetria** — tolte `home_` e `away_quota_minuti_assenti`, resta la sola
+differenza: -0.00024, -0.00032, -0.00020, -0.00032, -0.00022, **intervallo
+sotto zero in cinque semi su cinque**. Media dei semi: simmetrico − completo
+= -0.00001, IC [-0.00013, +0.00011]. **Il guadagno non evapora: l'asimmetria
+20:1 era una rappresentazione.** Con due colonne quasi gemelle LightGBM ne
+sceglie una secondo il campionamento delle colonne (`colsample_bytree` 0.6),
+e l'importanza si concentra li'.
+
+**Confronti multipli, conclusione esplicita**:
+- misura pre-registrata (seme 0): p = 0.0225, **non passa** Bonferroni (0.0083);
+- stessa ipotesi con meno varianza (media 5 semi): p = 0.0159, **non passa**;
+- variante simmetrica mediata: p = 0.0021 passerebbe, **ma non e' la specifica
+  pre-registrata** e non la puo' sostituire dopo aver visto i dati.
+
+**Importanza mediata su cinque semi** (`--importanza`): quota di guadagno
+di `home_quota_minuti_assenti` contro la gemella in trasferta, per seme:
+20.7:1, 10.0:1, 6.8:1, 10.8:1, 10.4:1 — media **10.8:1**. Il 20:1 della
+diagnosi originale era il seme piu' estremo dei cinque. Il verso non si
+inverte mai (la colonna di casa resta fra le prime 15, quella in trasferta
+oltre la 45a), quindi una preferenza per il lato casa c'e'; ma la simmetrica
+che rende uguale mostra che non porta informazione in piu' della differenza.
+
+**Esito: GIOCATORI resta PROVVISORIO.** Non scartato — simmetria tenuta,
+segno stabile. Non confermato — non sopravvive alla correzione.
+
+**Criterio di promozione non raggiunto**: media dei semi con giocatori −
+mercato = -0.00011, IC [-0.00081, +0.00057]. La produzione resta su M1.
 
 ### Limiti dichiarati
 
@@ -846,7 +893,7 @@ indistinguibile, con potenza sufficiente. Le nove colonne sono in
 `manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
 partite) e **va rivisto**: non e' una fonte, e' un'opinione plausibile.
 
-#### Blocco B — giocatori e infortuni — FATTO, TENUTO (al limite)
+#### Blocco B — giocatori e infortuni — FATTO, PROVVISORIO
 
 Vedi la sezione dedicata sopra: -0.00027 con IC [-0.00054, -0.00001]. Supera
 la regola, ma l'intervallo tocca lo zero e il modello resta indistinguibile
@@ -880,6 +927,36 @@ Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
 la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
 sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
 
+#### Blocco D — forma lunga — SPECIFICA SCRITTA, NON MISURATO
+
+Scritta il 15 settembre 2026, prima di qualsiasi misura.
+
+**Conflitto da dichiarare prima.** Il risultato acquisito sopra dice "non
+aggiungere altre medie mobili, altre finestre". Il blocco D e' esattamente
+questo, e lo si fa perche' chiesto esplicitamente. **L'aspettativa a priori e'
+un nullo.** Consuma un confronto: m passa a 4, soglia a una coda **0.00625**,
+e vale anche retroattivamente per GIOCATORI.
+
+**Ambiguita' risolta.** `config.FORM_HALFLIFE_VENUE = 10` e' dichiarato e mai
+usato, e il commento lo lega a statistiche separate casa/trasferta. Il blocco
+D NON e' quello: e' una **finestra lunga** sulle stesse statistiche. Lo split
+per campo sarebbe un'altra ipotesi e un altro confronto (m = 5).
+
+**Colonne.** Le stesse 8 statistiche di BASE x 3 viste x 2 versi, con
+half-life **20 partite** fissata qui e non tarata: 48 colonne
+`<vista>_<stat>_<verso>_ewm_hl20`. Stessa regressione del 30% al confine di
+stagione, stessa logica leakage-safe. Calcolate da una copia della funzione
+EWM dentro `src/experiments/`, **senza toccare `form.py`** ne' il suo parquet.
+Il set `FORMA_LUNGA` in `sets.py` riceve la lista per esteso quando il codice
+esiste.
+
+**Misura, una sola.** Test set, `M5Set(BASE+FORMA_LUNGA)` contro `M5Set(BASE)`,
+stima = media dei 5 semi (dichiarata ora), bootstrap a cluster sulla giornata.
+Tenuto solo se l'intervallo sta sotto zero **e** p a una coda < 0.00625.
+Promosso in produzione solo se batte anche il mercato dopo la stessa
+correzione. Si riporta comunque anche il seme 0, per confronto con i blocchi
+precedenti.
+
 #### Blocco C — valore delle rose
 
 Scraper Transfermarkt, HTML statico. Valore dell'XI disponibile e della rosa.
@@ -903,6 +980,112 @@ di mercato che le pesa non contera'.
 `src/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
 di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un quarto modo
 di misurare la forza della squadra non cambierebbe il quadro.
+
+## Isolamento degli esperimenti — la produzione non si tocca
+
+**Vincolo**: `predict_round`, `close_round`, `report` e M1 devono funzionare
+esattamente come prima durante tutto il lavoro sperimentale. Se un esperimento
+richiede di cambiare un modulo condiviso, lo si duplica o lo si sottoclassa.
+
+**`tests/test_production_unchanged.py` — va lanciato prima di ogni commit.**
+Fissa su 101 partite gia' giocate le quote di ingresso, le fonti scelte da
+`pick_odds`, i lambda di `market.py`, le probabilita' di M1 e tutti i mercati
+di `all_markets`, e verifica che restino identici **bit a bit**. Il campione
+include di proposito le righe dei ripieghi (BW, BbAv, Avg, P). Distingue
+"e' cambiato il codice" da "sono cambiati i dati": le quote di ingresso si
+confrontano per prime. `--sensibilita` prova che la rete scatta: un solo bit
+spostato con `np.nextafter` fa fallire il ramo giusto. `--rigenera` solo dopo
+un cambiamento di produzione voluto e dichiarato.
+
+**Registro dei set — `src/features/sets.py`.** Ogni colonna appartiene a un set
+con uno stato: `BASE` (congelato, 52 colonne scritte per esteso),
+`CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_LUNGA` (da misurare).
+I modelli sperimentali dichiarano i set (`M5Set(sets=["BASE", "GIOCATORI"])`);
+una colonna non registrata resta fuori per default. `tests/test_sets.py`
+fallisce se BASE cambia di una colonna o se il dataset contiene colonne che
+nessun set riconosce.
+
+**Quello che il registro NON ha ancora toccato, e va saputo.** `report.py`
+costruisce M4 da `models/gbm.py` con le esclusioni di default: la sezione di
+divergenza del report vede quindi le colonne GIOCATORI da quando il blocco e'
+stato ammesso. E' produzione e non e' stato modificato. Da qui in poi le
+costanti `BLOCCHI_*` di `gbm.py` non si toccano piu'.
+
+**Esperimenti — `src/experiments/`.** Leggono tutto, scrivono solo in
+`experiments/output/`, gitignorato tranne i `riassunto_*`.
+`experiments.proteggi_produzione()` sostituisce `to_parquet` e `to_csv` nel
+processo dell'esperimento e rifiuta qualsiasi scrittura in `data/processed/` o
+`track_record/`: una convenzione regge finche' qualcuno non copia una riga da
+`evaluate.py`, la guardia no. I modelli (`experiments/modelli.py`) sottoclassano
+`MarketAnchoredGBM` senza modificarlo: `M5Set` (set dichiarati), `M5Colonne`
+(colonne derivate), `M5MediaSemi` (media dei log-lambda di piu' semi,
+ricostruibile esatta a posteriori — verificato bit a bit).
+
+**Criterio di promozione in produzione.** Un set sperimentale entra in
+`predict_round` solo se **batte il mercato** con intervallo che non tocca lo
+zero, **dopo correzione per confronti multipli**. Finche' non succede, la
+produzione resta su M1. Nessuna promozione perche' "sembra meglio".
+
+### Seed averaging — `M5MediaSemi`, 15 settembre 2026
+
+Media geometrica dei lambda di cinque LightGBM con semi diversi, modello nuovo
+accanto a M5 (che non e' stato toccato). Non e' un test di ipotesi: e' una
+riduzione di varianza della stima, e ricostruibile esatta dai cinque modelli
+singoli (verificato bit a bit). Effetto misurato sul blocco giocatori:
+l'intervallo della differenza si stringe da ±0.00027 (seme singolo) a
+±0.00022, e la stima si assesta a -0.00025, al centro dei cinque semi. **Per
+le misure future di un blocco si usa la media dei semi come stima, dichiarata
+prima**, cosi' un risultato non dipende dal seme che capita.
+
+### Collinearita' — nessuna riduzione, BASE resta com'e'
+
+`python -m src.experiments.collinearita --misura`, **in validazione**
+(2021/22, 2022/23, 759 partite), tre semi. Soglie dichiarate prima: selezione
+per correlazione assoluta sopra **0.95** (golosa, nell'ordine di BASE), PCA per
+blocco di statistica fino al **95%** della varianza. Statistiche stimate solo
+sulle stagioni precedenti alla validazione, senza burn-in e senza la stagione
+in corso. La selezione toglie esattamente le gemelle strutturali (52 -> 45);
+la PCA scende a 31 componenti.
+
+| seme | selezione45 − BASE | pca31 − BASE |
+|---|---|---|
+| 0 | +0.00009 [-0.00010, +0.00029] | +0.00008 [-0.00035, +0.00050] |
+| 1 | -0.00008 [-0.00029, +0.00012] | -0.00005 [-0.00048, +0.00039] |
+| 2 | +0.00009 [-0.00012, +0.00030] | +0.00006 [-0.00031, +0.00044] |
+
+**Nessuna delle due si distingue da BASE, e il segno oscilla fra i semi.**
+La collinearita' non sta costando niente di misurabile a M5: LightGBM la
+assorbe. BASE resta congelato com'e'. Nessun confronto sul test e' stato
+consumato.
+
+### Baseline di mercato — B365 con Shin resta, 15 settembre 2026
+
+`python -m src.experiments.baseline_mercato`, **in validazione** (2021/22,
+2022/23): anche scegliere la baseline guardando il test sarebbe una ricerca di
+specifica sul test. Funzioni nuove in `market.py` (`devig_power`,
+`devig_odds_ratio`, `consenso`, `market_block_alternativo`), fuori dal percorso
+di produzione, con non regressione verificata.
+
+**Vincolo sui book**: solo book presenti nello snapshot di produzione. B365
+(100% ovunque), BW (buco nel 2024/25, 63%), `Avg` (100% dal 2019/20). Betfair,
+BetVictor, Paddy Power e Sky Bet coprono solo le ultime stagioni; Pinnacle e'
+morto; `Max` non e' un prezzo de-viggabile.
+
+| candidata − produzione | differenza | IC 95% |
+|---|---|---|
+| B365 proporzionale | +0.00004 | [-0.00033, +0.00039] |
+| B365 potenza | +0.00003 | [-0.00013, +0.00019] |
+| B365 odds ratio | +0.00001 | [-0.00005, +0.00006] |
+| consenso B365+BW+Avg, Shin | -0.00012 | [-0.00042, +0.00018] |
+| consenso, proporzionale | -0.00007 | [-0.00059, +0.00044] |
+| consenso, potenza | -0.00010 | [-0.00040, +0.00020] |
+
+**Tutte indistinguibili dalla produzione.** Il metodo di de-vigging quasi non
+conta (odds ratio contro Shin: intervallo largo appena ±0.00005); il consenso
+fra piu' book ha la stima puntuale migliore ma non si distingue. Con i book
+disponibili il venerdi', non esiste una baseline dimostrabilmente piu' forte:
+**i confronti fatti finora contro B365/Shin non erano contro un avversario
+debole.**
 
 ## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
 

@@ -478,6 +478,150 @@ def coverage_report(df: pd.DataFrame | None = None) -> pd.DataFrame:
     return table
 
 
+# ---------------------------------------------------------------------------
+# Baseline alternative — funzioni NUOVE, fuori dal percorso di produzione
+# ---------------------------------------------------------------------------
+#
+# Niente di cio' che sta sotto e' chiamato da `build`, `market_block` o dal
+# resto della produzione: M1 continua a leggere B365 in apertura con Shin, e
+# `tests/test_production_unchanged.py` lo verifica bit a bit. Queste funzioni
+# servono a costruire baseline di confronto negli esperimenti.
+#
+# UN VINCOLO CHE NON E' STILISTICO. Una baseline alternativa puo' usare SOLO
+# book presenti nello snapshot di produzione (`fixtures_odds`). Pinnacle
+# renderebbe il backtest migliore e sarebbe inutilizzabile il venerdi': e'
+# la corrispondenza fra addestramento e produzione che la regola 6 protegge.
+# Book in produzione con storia utile, verificati stagione per stagione:
+#   B365  100% su tutte le stagioni
+#   BW    100% tranne 2024/25 (63%): dove manca, il consenso usa gli altri
+#   Avg   100% dal 2019/20, cioe' su tutta la validazione e tutto il test
+# `Max` NON e' un prezzo: e' il massimo fra i book, spesso con overround sotto
+# 1, e de-viggarlo non ha senso. Escluso di proposito.
+
+BOOKS_CONSENSO = ["B365", "BW", "Avg"]
+
+
+def _bisezione(scarto, basso: float, alto: float, n: int, iters: int = 80) -> np.ndarray:
+    """
+    Radice di `scarto(x) = 0` riga per riga, con `scarto` DECRESCENTE in x.
+
+    Vettoriale su tutte le righe insieme. Ottanta dimezzamenti portano un
+    intervallo iniziale di 50 sotto 1e-22: ben oltre la precisione che serve.
+    """
+    lo = np.full(n, basso)
+    hi = np.full(n, alto)
+    for _ in range(iters):
+        mid = 0.5 * (lo + hi)
+        positivo = scarto(mid) > 0
+        lo = np.where(positivo, mid, lo)
+        hi = np.where(positivo, hi, mid)
+    return 0.5 * (lo + hi)
+
+
+def devig_power(odds: np.ndarray) -> np.ndarray:
+    """
+    De-vigging con il metodo potenza: p_i = pi_i ** k, con k tale che la
+    somma faccia 1.
+
+    Rispetto al proporzionale scarica il margine piu' sugli esiti improbabili,
+    come Shin, ma con una forma diversa: e' la seconda opinione naturale su
+    quanto il bookmaker gonfi gli sfavoriti.
+    """
+    pi = 1.0 / np.asarray(odds, dtype=float)
+    ok = np.isfinite(pi).all(axis=1)
+    out = np.full(pi.shape, np.nan)
+    if ok.any():
+        p = pi[ok]
+        k = _bisezione(lambda x: (p ** x[:, None]).sum(axis=1) - 1.0,
+                       1e-3, 50.0, len(p))
+        out[ok] = p ** k[:, None]
+    return out
+
+
+def devig_odds_ratio(odds: np.ndarray) -> np.ndarray:
+    """
+    De-vigging con il metodo del rapporto di quote (Cheung):
+    pi/(1-pi) = OR * p/(1-p), con OR tale che la somma faccia 1.
+
+    Da cui p = pi / (OR * (1 - pi) + pi). La somma decresce in OR.
+    """
+    pi = 1.0 / np.asarray(odds, dtype=float)
+    ok = np.isfinite(pi).all(axis=1)
+    out = np.full(pi.shape, np.nan)
+    if ok.any():
+        p = pi[ok]
+        c = _bisezione(
+            lambda x: (p / (x[:, None] * (1.0 - p) + p)).sum(axis=1) - 1.0,
+            1e-3, 50.0, len(p))
+        out[ok] = p / (c[:, None] * (1.0 - p) + p)
+    return out
+
+
+METODI_DEVIG = {
+    "shin": lambda o: devig_shin(o)[0],
+    "proporzionale": devig_proportional,
+    "potenza": devig_power,
+    "odds_ratio": devig_odds_ratio,
+}
+
+
+def consenso(df: pd.DataFrame, books: list[str], cols_of, metodo: str) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Probabilita' de-viggate book per book, poi mediate fra i book disponibili.
+
+    Si de-vigga PRIMA di mediare, non dopo: ogni book ha il suo margine, e
+    mediare le quote grezze mescolerebbe margini diversi in un numero che non
+    corrisponde al prezzo di nessuno. La media e' semplice e si rinormalizza,
+    cosi' la somma resta esattamente 1 anche con un book mancante.
+
+    Restituisce (probabilita', numero di book usati per riga).
+    """
+    devig = METODI_DEVIG[metodo]
+    n = len(df)
+    k = len(cols_of(books[0]))
+    somma = np.zeros((n, k))
+    conta = np.zeros(n)
+    for book in books:
+        cols = list(cols_of(book))
+        if any(c not in df.columns for c in cols):
+            continue
+        blocco = df[cols].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+        valido = np.isfinite(blocco).all(axis=1) & (blocco > 1.0).all(axis=1)
+        if not valido.any():
+            continue
+        p = np.full((n, k), np.nan)
+        p[valido] = devig(blocco[valido])
+        somma[valido] += p[valido]
+        conta[valido] += 1
+    with np.errstate(invalid="ignore", divide="ignore"):
+        media = somma / conta[:, None]
+        media = media / media.sum(axis=1, keepdims=True)
+    media[conta == 0] = np.nan
+    return media, conta
+
+
+def market_block_alternativo(df: pd.DataFrame, books_1x2: list[str],
+                             books_ou: list[str], metodo: str) -> pd.DataFrame:
+    """
+    Lo stesso prodotto di `market_block` — probabilita' 1X2, over 2.5 e i due
+    lambda impliciti — con consenso su piu' book e de-vigging a scelta.
+
+    I lambda passano per le STESSE `implied_total_goals` e `implied_lambdas`
+    della produzione: cambia l'ingresso, non il modo di tradurlo in gol, cosi'
+    la differenza fra le baseline misura solo la differenza fra i prezzi.
+    """
+    p1x2, n1x2 = consenso(df, books_1x2, cols_1x2, metodo)
+    pou, nou = consenso(df, books_ou, cols_ou, metodo)
+    out = pd.DataFrame(index=df.index)
+    out["p_home"], out["p_draw"], out["p_away"] = p1x2[:, 0], p1x2[:, 1], p1x2[:, 2]
+    out["p_over25"] = pou[:, 0]
+    out["n_book_1x2"], out["n_book_ou"] = n1x2, nou
+    totale = implied_total_goals(pou[:, 0])
+    lam_h, lam_a = implied_lambdas(p1x2[:, 0], totale)
+    out["lambda_home"], out["lambda_away"] = lam_h, lam_a
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Feature di mercato: de-vigging delle quote")
     ap.add_argument("--coverage", action="store_true", help="stampa la copertura per stagione e esce")

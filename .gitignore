@@ -12,3 +12,11 @@ track_record/predictions_backfill.csv
 # Il report e' una vista del registro: si rigenera con 'python -m src.report',
 # e versionarne una copia nuova ogni settimana sarebbe solo rumore nel diff.
 track_record/report.html
+
+# Esperimenti: le previsioni grezze del walk-forward si rigenerano e pesano,
+# quindi restano fuori. Si versionano solo i riassunti — il numero che si e'
+# misurato e con quale codice — perche' sono quelli che servono a distanza di
+# mesi per capire perche' un set e' stato scartato o tenuto.
+experiments/output/*
+!experiments/output/riassunto_*.csv
+!experiments/output/riassunto_*.md
