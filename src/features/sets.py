@@ -107,6 +107,15 @@ _GIOCATORI_COLONNE = (
     "home_n_assenti", "away_n_assenti", "diff_n_assenti",
 )
 
+# Stesse statistiche e versi di BASE, sulla sola sede in cui la squadra gioca.
+_FORMA_VENUE_COLONNE = tuple(
+    f"{vista}_{stat}_{verso}_ewm_sede"
+    for vista in _VISTE
+    for stat in _STATISTICHE_FORMA
+    for verso in ("for", "against")
+)
+assert len(_FORMA_VENUE_COLONNE) == 48
+
 SETS: dict[str, FeatureSet] = {
     "BASE": FeatureSet(
         "BASE", CONGELATO, _BASE_COLONNE,
@@ -131,10 +140,13 @@ SETS: dict[str, FeatureSet] = {
         "rappresentazione. Non promuove: le verifiche possono solo "
         "declassare. Contro il mercato resta indistinguibile.",
     ),
-    "FORMA_LUNGA": FeatureSet(
-        "FORMA_LUNGA", DA_MISURARE, (),
-        "Blocco D: medie mobili a half-life lunga, affiancate a BASE senza "
-        "modificarlo. Nessuna colonna finche' la specifica non e' scritta.",
+    "FORMA_VENUE": FeatureSet(
+        "FORMA_VENUE", DA_MISURARE, _FORMA_VENUE_COLONNE,
+        "Blocco D: forma condizionata alla sede — la squadra di casa sulle "
+        "sue sole partite in casa, quella in trasferta sulle sole in "
+        "trasferta, half-life 10 (FORM_HALFLIFE_VENUE). Costruito in "
+        "memoria da experiments/forma_venue.py, nessun parquet. Si misura "
+        "SOLO in validazione: non consuma confronti.",
     ),
 }
 

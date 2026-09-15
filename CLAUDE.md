@@ -927,35 +927,48 @@ Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
 la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
 sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
 
-#### Blocco D — forma lunga — SPECIFICA SCRITTA, NON MISURATO
+#### Blocco D — forma per sede — IN VALIDAZIONE, NON CONSUMA CONFRONTI
 
-Scritta il 15 settembre 2026, prima di qualsiasi misura.
+**La prima stesura di questa specifica era sbagliata, e il perche' vale piu'
+della specifica.** Aveva letto `FORM_HALFLIFE_VENUE` come "finestra piu'
+lunga" e proponeva le stesse colonne di BASE con half-life 20 sul test set:
+cioe' esattamente "altre medie mobili, altre finestre", che il risultato
+acquisito sopra ha gia' chiuso. Un test confermativo speso su un nullo atteso
+alza la soglia per tutti i risultati futuri e non compra niente.
 
-**Conflitto da dichiarare prima.** Il risultato acquisito sopra dice "non
-aggiungere altre medie mobili, altre finestre". Il blocco D e' esattamente
-questo, e lo si fa perche' chiesto esplicitamente. **L'aspettativa a priori e'
-un nullo.** Consuma un confronto: m passa a 4, soglia a una coda **0.00625**,
-e vale anche retroattivamente per GIOCATORI.
+**Cosa significa davvero `FORM_HALFLIFE_VENUE = 10`**: forma **condizionata
+alla sede**. Oggi il dataset ha la forma generale della squadra di casa e di
+quella in trasferta; nessuna colonna dice come una squadra rende
+*specificamente giocando in casa*. Nel modello il vantaggio casalingo e'
+uniforme — lo stesso per chi in casa e' una fortezza e per chi non ci vince
+mai. L'half-life e' piu' lunga di quella di BASE (6) perche' restringendo alla
+sede i campioni si dimezzano.
 
-**Ambiguita' risolta.** `config.FORM_HALFLIFE_VENUE = 10` e' dichiarato e mai
-usato, e il commento lo lega a statistiche separate casa/trasferta. Il blocco
-D NON e' quello: e' una **finestra lunga** sulle stesse statistiche. Lo split
-per campo sarebbe un'altra ipotesi e un altro confronto (m = 5).
+**Colonne, 48**: le stesse 8 statistiche x 2 versi di BASE, per la squadra di
+casa sulle sue sole partite in casa (`home_<stat>_<verso>_ewm_sede`), per
+quella in trasferta sulle sole in trasferta, piu' la differenza. Half-life 10,
+non tarata. Medie di lega della regressione di fine stagione calcolate **per
+sede**: in casa si segna di piu', e tirare la forma casalinga verso la media
+di tutte le partite la sporcherebbe. Costruite in memoria da
+`src/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
+toccarle e senza scrivere nessun parquet.
 
-**Colonne.** Le stesse 8 statistiche di BASE x 3 viste x 2 versi, con
-half-life **20 partite** fissata qui e non tarata: 48 colonne
-`<vista>_<stat>_<verso>_ewm_hl20`. Stessa regressione del 30% al confine di
-stagione, stessa logica leakage-safe. Calcolate da una copia della funzione
-EWM dentro `src/experiments/`, **senza toccare `form.py`** ne' il suo parquet.
-Il set `FORMA_LUNGA` in `sets.py` riceve la lista per esteso quando il codice
-esiste.
+**Non e' una copia di BASE**: in validazione la correlazione fra una colonna
+per sede e la sua gemella generale sta fra **0.75 e 0.89**.
 
-**Misura, una sola.** Test set, `M5Set(BASE+FORMA_LUNGA)` contro `M5Set(BASE)`,
-stima = media dei 5 semi (dichiarata ora), bootstrap a cluster sulla giornata.
-Tenuto solo se l'intervallo sta sotto zero **e** p a una coda < 0.00625.
-Promosso in produzione solo se batte anche il mercato dopo la stessa
-correzione. Si riporta comunque anche il seme 0, per confronto con i blocchi
-precedenti.
+**Dove si misura: solo validazione (2122, 2223), come collinearita' e
+baseline. m resta 3.** Stima dichiarata prima: media dei 5 semi.
+- intervallo che contiene lo zero, o differenza >= 0 -> **set scartato, e la
+  questione e' chiusa a costo zero**;
+- intervallo tutto sotto zero -> **ipotesi pre-registrata** con la specifica
+  congelata com'e', da testare quando il test set sara' cresciuto o sui Big 5.
+  Non diventa un blocco tenuto e non promuove niente: la validazione non e' il
+  test.
+
+`tests/test_forma_venue.py` verifica su dati sintetici la cosa che un errore
+qui non farebbe mai gridare: la forma casalinga non deve vedere le trasferte
+(una squadra che segna 5 gol fuori casa resta a 3 nella sua colonna di casa) e
+nessuna riga deve vedere se stessa.
 
 #### Blocco C — valore delle rose
 
@@ -999,7 +1012,7 @@ un cambiamento di produzione voluto e dichiarato.
 
 **Registro dei set — `src/features/sets.py`.** Ogni colonna appartiene a un set
 con uno stato: `BASE` (congelato, 52 colonne scritte per esteso),
-`CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_LUNGA` (da misurare).
+`CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_VENUE` (da misurare).
 I modelli sperimentali dichiarano i set (`M5Set(sets=["BASE", "GIOCATORI"])`);
 una colonna non registrata resta fuori per default. `tests/test_sets.py`
 fallisce se BASE cambia di una colonna o se il dataset contiene colonne che
@@ -1086,6 +1099,43 @@ fra piu' book ha la stima puntuale migliore ma non si distingue. Con i book
 disponibili il venerdi', non esiste una baseline dimostrabilmente piu' forte:
 **i confronti fatti finora contro B365/Shin non erano contro un avversario
 debole.**
+
+## Ipotesi PRE-REGISTRATE — congelate qui, da testare su dati che ancora non esistono
+
+**A cosa serve questa sezione.** Una specifica scelta dopo aver visto i dati
+non e' un risultato, ma non e' nemmeno niente: e' un'ipotesi, e diventa
+testabile il giorno in cui arrivano dati nuovi. Scriverla qui, con la data e il
+numero osservato, e' cio' che la rende pre-registrata rispetto a quei dati.
+**Finche' resta qui non conta come risultato, non promuove niente e non entra
+in produzione.** Chi la testera' deve usare la specifica come sta scritta, su
+dati mai visti prima — test set cresciuto, o Big 5 — e contarla nel proprio m.
+
+### 1. Blocco B in forma simmetrica — registrata il 15 settembre 2026
+
+**Specifica congelata**: `M5Set(sets=["BASE", "GIOCATORI"], togli=(
+"home_quota_minuti_assenti", "away_quota_minuti_assenti"))` contro
+`M5Set(sets=["BASE"])` — cioe' il blocco giocatori senza le due colonne
+separate di minuti, con la sola `diff_quota_minuti_assenti` al loro posto.
+Stima: media di 5 semi (0-4) sui log-lambda. Confronto appaiato, bootstrap a
+cluster sulla giornata.
+
+**Osservato oggi** su test 2324-2526 (1140 partite): **-0.00026, IC
+[-0.00044, -0.00008], p = 0.0021**; per seme, intervallo sotto zero in 5 su 5.
+
+**Perche' non e' un risultato.** La variante e' nata dal test di simmetria,
+cioe' dopo aver visto che l'asimmetria 20:1 andava spiegata. Su questi dati
+non la si puo' promuovere a specifica principale: sarebbe scegliere la
+formulazione dopo il risultato. Su dati nuovi lo e' a pieno titolo.
+
+**Predizione che la falsifica**: su dati nuovi la differenza deve restare
+negativa e dello stesso ordine (fra -0.0002 e -0.0003). Se cambia segno o si
+dimezza, il guadagno del blocco B era rumore di questo test set.
+
+### 2. Forma per sede (FORMA_VENUE) — in misura sulla validazione
+
+Specifica e regola di lettura nella sezione del blocco D sopra. Entra in
+questo elenco **solo se** la validazione mostra qualcosa; se e' nulla, il set
+va marcato scartato in `sets.py` e la questione e' chiusa.
 
 ## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
 

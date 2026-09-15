@@ -343,6 +343,57 @@ abbassare il costo, il risultato riportato usa sempre stride 1).
 
 ---
 
+## 7bis. Esperimenti — fuori dal percorso di produzione
+
+Tutto quello che sta in `src/experiments/` legge i dati veri e scrive **solo**
+in `experiments/output/` (gitignorato tranne i `riassunto_*`). Una guardia a
+runtime rifiuta qualsiasi scrittura in `data/processed/` o `track_record/`,
+quindi un esperimento non puo' sporcare la produzione nemmeno per errore.
+
+**Prima di ogni commit**, e dopo ogni tocco a `market.py`, `baseline.py` o
+`gbm.py`:
+
+```bash
+python -m tests.test_production_unchanged                # M1 identico bit a bit
+python -m tests.test_production_unchanged --sensibilita  # prova che il test scatta
+python -m tests.test_production_unchanged --rigenera     # SOLO dopo un cambio voluto
+```
+
+Se fallisce, la prima riga del suo output dice se sono cambiate le **quote di
+ingresso** (dati) o i numeri a valle (codice): sono due diagnosi diverse.
+
+```bash
+python -m src.features.sets                 # stato dei set di feature sul dataset
+python -m tests.test_sets                   # BASE congelato, set disgiunti
+python -m tests.test_experiments_modelli    # M5Set, M5Colonne, media dei semi
+python -m tests.test_forma_venue            # forma per sede: niente leakage
+```
+
+**Blocco B, verifiche di robustezza** (~9 min con 8 processi; i risultati non
+promuovono il blocco, possono solo declassarlo):
+
+```bash
+python -m src.experiments.blocco_b_robustezza --lancia --paralleli 8
+python -m src.experiments.blocco_b_robustezza --analizza
+python -m src.experiments.blocco_b_robustezza --importanza   # asimmetria su 5 semi
+```
+
+**Sulla sola validazione** (2122, 2223) — non consumano confronti sul test:
+
+```bash
+python -m src.experiments.collinearita --descrivi
+python -m src.experiments.collinearita --misura         # selezione e PCA contro BASE
+python -m src.experiments.baseline_mercato              # de-vigging e consenso di book
+python -m src.experiments.forma_venue --descrivi
+python -m src.experiments.forma_venue --lancia          # 5 semi in parallelo
+python -m src.experiments.forma_venue --analizza
+```
+
+Un walk-forward gia' fatto non si rifa': `--lancia` salta i semi il cui file
+c'e' gia'. Per rifarlo, cancella il parquet in `experiments/output/`.
+
+---
+
 ## 8. Produzione
 
 ```bash
