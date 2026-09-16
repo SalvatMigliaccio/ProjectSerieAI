@@ -20,3 +20,11 @@ track_record/report.html
 experiments/output/*
 !experiments/output/riassunto_*.csv
 !experiments/output/riassunto_*.md
+
+# Log dello scheduler: si rigenerano a ogni esecuzione e crescono di un file
+# al giorno. `last_run.json` e' lo stato che legge /api/status, ed e' anch'esso
+# locale: in un clone nuovo "nessuna esecuzione registrata" e' la verita'.
+logs/
+
+# web/openapi.json INVECE e' versionato: e' il contratto passato al frontend,
+# e un contratto che vive solo in un processo non si puo' rivedere in un diff.

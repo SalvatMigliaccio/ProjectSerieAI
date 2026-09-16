@@ -1225,6 +1225,37 @@ il weekend e il **martedi' entro le 13:00** per gli infrasettimanali. Lanciare
 `predict_round` prima di quei momenti trovera' la giornata ancora `futura`, e
 lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 
+### Il track record si scrive solo da processi locali — regola, non preferenza
+
+**Le uniche cose che scrivono nel registro sono `predict_round` e
+`close_round`, lanciati sulla macchina.** Nessuna richiesta HTTP, mai. L'API in
+`backend/api/` e' una **vista**: espone solo GET, e un test fallisce all'avvio
+se una rotta dichiara un metodo diverso da GET/HEAD/OPTIONS.
+
+**Struttura del monorepo**: `src/` e' la pipeline (produzione), `backend/`
+l'API che la legge, e il frontend andra' in una cartella sua. La dipendenza e'
+a senso unico — `backend` importa `src`, mai il contrario — ed e' il motivo per
+cui spostare l'API fuori da `src/` non ha richiesto di toccare un solo modulo
+di produzione.
+
+Il motivo e' lo stesso per cui il registro e' append-only con backup e con due
+difese sul calcio d'inizio: **una previsione vale solo se e' stata scritta
+prima del fischio**, da un processo che non sapeva il risultato. Un endpoint di
+scrittura e' esattamente il modo di perdere quella garanzia — chiunque abbia
+l'URL potrebbe aggiungere una riga a partita finita, e a mesi di distanza
+nessuno saprebbe distinguerla dalle altre.
+
+Se un giorno servisse far partire una previsione da remoto, **non si aggiunge
+un POST**: si fa girare il comando locale (scheduler, o a mano). La
+disponibilita' dell'API non e' un problema del track record; la sua integrita'
+si'.
+
+Garanzie verificate, non promesse: `backend/api/__init__.py` sostituisce
+`to_csv`/`to_parquet` e rifiuta ogni scrittura sotto `track_record/` e `data/`
+— lo stesso idioma di `src/experiments/` — e `tests/test_api.py` verifica che
+nessuna rotta di scrittura esista e che `lightgbm` non finisca in
+`sys.modules`: **l'API non esegue mai modelli.**
+
 ### `predict_round` — da aperta a predetta
 
 Aggiorna dati e quote, ricostruisce dataset e feature, individua **da solo** la

@@ -14,3 +14,9 @@ scipy>=1.11
 
 # Grafici
 matplotlib>=3.7
+
+# API in sola lettura sul track record (backend/api/). Non servono a nessun altro
+# modulo: ingestion, feature, modelli e comandi di giornata girano senza.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+httpx>=0.27          # solo per TestClient in tests/test_api.py
