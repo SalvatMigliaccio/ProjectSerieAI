@@ -228,7 +228,14 @@ def load_fixtures_odds() -> tuple[pd.DataFrame, pd.Timestamp | None]:
 
     df = pd.read_parquet(path)
     scaricato = pd.to_datetime(df["downloaded_at"]).max() if "downloaded_at" in df else None
-    if scaricato is not None:
+    # Snapshot VUOTO ma esistente: e' lo stato normale fra un turno e l'altro —
+    # football-data risponde, la Serie A non e' ancora pubblicata, il file viene
+    # riscritto con zero righe e `downloaded_at` resta NaT. Senza questa
+    # guardia `strftime` su NaT solleva, e a cadere non e' solo la previsione:
+    # `attach_odds` sta anche dentro `rounds --status` e `close_round`. Un
+    # turno non ancora pubblicato non e' un errore, e deve dirlo invece di
+    # fermare tutto.
+    if scaricato is not None and pd.notna(scaricato):
         eta = (pd.Timestamp.now(tz="UTC") - scaricato).total_seconds() / 86400
         livello = log.warning if eta > config.FIXTURES_MAX_AGE_DAYS else log.info
         livello("snapshot quote del %s (%.1f giorni fa)",
@@ -238,6 +245,12 @@ def load_fixtures_odds() -> tuple[pd.DataFrame, pd.Timestamp | None]:
                         "imminente e viene sovrascritto. Rilancia "
                         "'python ingest.py --stage fixtures'.",
                         config.FIXTURES_MAX_AGE_DAYS)
+    elif df.empty:
+        log.info("snapshot quote vuoto: il turno non e' ancora pubblicato. "
+                 "football-data pubblica il venerdi' entro le 17:00 UK per il "
+                 "weekend e il martedi' entro le 13:00 per gli infrasettimanali.")
+    else:
+        log.warning("snapshot quote senza data di download: eta' ignota")
     return df, scaricato
 
 

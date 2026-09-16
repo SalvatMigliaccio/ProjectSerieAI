@@ -392,6 +392,31 @@ python -m src.experiments.forma_venue --analizza
 Un walk-forward gia' fatto non si rifa': `--lancia` salta i semi il cui file
 c'e' gia'. Per rifarlo, cancella il parquet in `experiments/output/`.
 
+### Prevedere una giornata con LightGBM (M5), senza toccare il registro
+
+```bash
+python -m src.experiments.predici_gbm                      # prima giornata utile
+python -m src.experiments.predici_gbm --matchday 5
+python -m src.experiments.predici_gbm --semi 0             # un seme solo, piu' veloce
+python -m src.experiments.predici_gbm --team Napoli
+python -m src.experiments.predici_gbm --as-of 2026-09-11 --matchday 4
+```
+
+Addestra M5 (GBM Poisson ancorato al mercato, media di 5 semi, le 52 colonne di
+BASE) su tutto lo storico giocato, poi riusa `predict.py` invariato con
+`dry_run=True`. Stampa M5 accanto a M1 ordinato per scarto sull'1X2 e scrive
+`experiments/output/previsioni_m5_<stagione>_<NN>.csv`. **Non scrive nel
+registro**: il track record resta di M1, che e' il modello di produzione.
+
+`--as-of` rifa' una giornata gia' giocata con le quote di allora **e taglia il
+training a quella data**, altrimenti il modello si addestrerebbe anche sulla
+giornata che dice di prevedere.
+
+Serve che le quote del turno ci siano: `python ingest.py --stage fixtures`.
+Se football-data non ha ancora pubblicato la Serie A, il file ha zero righe, il
+comando lo dice e non predice niente — non e' un errore, e' il turno non ancora
+uscito.
+
 ---
 
 ## 8. Produzione

@@ -927,7 +927,7 @@ Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
 la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
 sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
 
-#### Blocco D — forma per sede — IN VALIDAZIONE, NON CONSUMA CONFRONTI
+#### Blocco D — forma per sede — MISURATO IN VALIDAZIONE E SCARTATO, A COSTO ZERO
 
 **La prima stesura di questa specifica era sbagliata, e il perche' vale piu'
 della specifica.** Aveva letto `FORM_HALFLIFE_VENUE` come "finestra piu'
@@ -969,6 +969,33 @@ baseline. m resta 3.** Stima dichiarata prima: media dei 5 semi.
 qui non farebbe mai gridare: la forma casalinga non deve vedere le trasferte
 (una squadra che segna 5 gol fuori casa resta a 3 nella sua colonna di casa) e
 nessuna riga deve vedere se stessa.
+
+**Esito, 16 settembre 2026** (`--lancia`, `--analizza`; 759 partite di
+validazione, 76 cluster):
+
+| stima | differenza | IC 95% |
+|---|---|---|
+| **media dei 5 semi** | **+0.00001** | **[-0.00035, +0.00039]** |
+| semi singoli | +0.00005, -0.00008, -0.00007, +0.00008, +0.00008 | tutti a cavallo dello zero |
+
+**Nullo, e il set e' SCARTATO** secondo la regola scritta prima. Non entra fra
+le ipotesi pre-registrate e non costa niente: nessun confronto sul test
+consumato, **m resta 3**.
+
+**La diagnosi e' la parte che vale.** Il modello quelle colonne le usa eccome:
+**il 50.5% del guadagno con il 48% delle colonne**, cioe' esattamente la loro
+quota — non vengono ignorate, sostituiscono le gemelle di BASE. Con
+correlazioni 0.75-0.89 sono un altro modo di dire la stessa cosa, non
+informazione nuova. E' lo stesso schema gia' visto due volte: `diff_rest_days`
+quinta su 61 nel blocco A, `home_quota_minuti_assenti` prima su 61 nel blocco
+B. **Un'importanza alta non e' un miglioramento**: dice dove il modello
+guarda, non se indovina di piu'.
+
+**Limite onesto**: la validazione e' meta' del test set, e la semiampiezza
+dell'intervallo e' 0.00037. Esclude un effetto dell'ordine dei 0.00060 attesi
+da uno shift di 0.10 gol, **non** un effetto piccolo come quello del blocco B
+(0.00027). Se un giorno arrivano i Big 5, la specifica e' congelata in
+`sets.py` e si puo' rimisurare senza riscrivere niente.
 
 #### Blocco C — valore delle rose
 
@@ -1038,6 +1065,31 @@ ricostruibile esatta a posteriori — verificato bit a bit).
 `predict_round` solo se **batte il mercato** con intervallo che non tocca lo
 zero, **dopo correzione per confronti multipli**. Finche' non succede, la
 produzione resta su M1. Nessuna promozione perche' "sembra meglio".
+
+### Prevedere una giornata con M5 senza promuoverlo
+
+`src/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
+calendario, stesse quote, stesse feature, stesse protezioni sul calcio
+d'inizio — passandogli `M5MediaSemi(["BASE"])` e `dry_run=True`. Stampa M5
+accanto a M1 con lo scarto per partita e non tocca il registro.
+
+**Perche' non e' una scorciatoia verso la produzione.** M5 sul test set e'
+indistinguibile dal mercato: il criterio di promozione non e' soddisfatto e
+`predict_round` resta su M1. Questo comando serve a vedere **dove** M5 si
+scosta, come la sezione 3 del report ma con il modello giusto (il report usa
+M4 senza mercato, che parte da zero e diverge ovunque).
+
+**Quanto si scosta, misurato sulla giornata 4 della 2026/27** (`--as-of
+2026-09-11`, training tagliato alla stessa data): scarto massimo sull'1X2
+**0.013**, mediano **0.005**. Lecce-Monza e Genoa-Frosinone i due estremi,
+Atalanta-Cagliari praticamente identico (0.001). E' la conferma pratica di
+cio' che il test set dice in forma statistica: **ancorato al mercato e senza
+segnale nuovo, M5 resta incollato al mercato.**
+
+**Il blocco GIOCATORI non entra in questa previsione**, ed e' voluto: per una
+partita futura le assenze non sono nel dataset (servirebbe `ingest --stage
+missing` sul turno in arrivo), quindi un M5 con quelle colonne girerebbe con
+NaN dove in addestramento aveva dati.
 
 ### Seed averaging — `M5MediaSemi`, 15 settembre 2026
 
@@ -1131,11 +1183,12 @@ formulazione dopo il risultato. Su dati nuovi lo e' a pieno titolo.
 negativa e dello stesso ordine (fra -0.0002 e -0.0003). Se cambia segno o si
 dimezza, il guadagno del blocco B era rumore di questo test set.
 
-### 2. Forma per sede (FORMA_VENUE) — in misura sulla validazione
+### 2. Forma per sede (FORMA_VENUE) — NON entrata: nulla in validazione
 
-Specifica e regola di lettura nella sezione del blocco D sopra. Entra in
-questo elenco **solo se** la validazione mostra qualcosa; se e' nulla, il set
-va marcato scartato in `sets.py` e la questione e' chiusa.
+Misurata il 16 settembre 2026 e scartata (+0.00001, IC [-0.00035, +0.00039]),
+vedi la sezione del blocco D. Resta qui come esempio del funzionamento:
+l'elenco si popola solo quando la validazione mostra qualcosa, e in questo caso
+la questione si e' chiusa senza spendere un confronto.
 
 ## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
 
@@ -1305,6 +1358,21 @@ si recuperano piu'. Da qui l'avviso quando lo snapshot ha piu' di
 giornata richiesta non e' coperta — chiedere la giornata 12 a settembre non
 produce un errore, produce zero quote, e senza messaggio si cercherebbe il
 problema nel posto sbagliato.
+
+**Lo snapshot VUOTO e' lo stato normale fra un turno e l'altro, e faceva
+cadere tutto.** Quando football-data risponde ma la Serie A non e' ancora
+pubblicata — mercoledi', per dire — `--stage fixtures` riscrive il file con
+**zero righe** e `downloaded_at` resta NaT. `load_fixtures_odds` ci faceva
+`strftime` sopra: `ValueError: NaTType does not support strftime`. Non cadeva
+solo la previsione: `attach_odds` sta anche dentro `rounds --status` e
+`close_round`, quindi il 16 settembre 2026 nessuno dei tre partiva. Corretto
+con una guardia su `pd.notna(scaricato)` piu' un messaggio esplicito: un turno
+non ancora pubblicato non e' un errore e lo deve dire. `predict.py` e'
+produzione, quindi la correzione e' stata verificata con
+`tests/test_production_unchanged.py` — M1 identico bit a bit, impronta
+invariata. **Il bug non si vede il venerdi'**, quando lo snapshot e' pieno: si
+vede solo quando il file c'e' ed e' vuoto, ed e' il motivo per cui era rimasto
+li'.
 
 **Ripiego manuale.** `manual/upcoming_odds.csv` resta come rete di sicurezza
 per le partite che lo snapshot non copre o quando il sito e' giu' (succede:

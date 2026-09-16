@@ -141,12 +141,15 @@ SETS: dict[str, FeatureSet] = {
         "declassare. Contro il mercato resta indistinguibile.",
     ),
     "FORMA_VENUE": FeatureSet(
-        "FORMA_VENUE", DA_MISURARE, _FORMA_VENUE_COLONNE,
+        "FORMA_VENUE", SCARTATO, _FORMA_VENUE_COLONNE,
         "Blocco D: forma condizionata alla sede — la squadra di casa sulle "
         "sue sole partite in casa, quella in trasferta sulle sole in "
         "trasferta, half-life 10 (FORM_HALFLIFE_VENUE). Costruito in "
-        "memoria da experiments/forma_venue.py, nessun parquet. Si misura "
-        "SOLO in validazione: non consuma confronti.",
+        "memoria da experiments/forma_venue.py, nessun parquet. Misurato "
+        "SOLO in validazione (16 set 2026), quindi a costo zero: media di 5 "
+        "semi +0.00001, IC [-0.00035, +0.00039]. Nullo, e il modello le usa "
+        "eccome — 50.5% del guadagno con il 48% delle colonne: sono un altro "
+        "modo di dire la stessa cosa di BASE, non informazione nuova.",
     ),
 }
 
