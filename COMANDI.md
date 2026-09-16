@@ -170,6 +170,9 @@ python ingest.py --stage matches      # risultati appena giocati
 python ingest.py --stage understat
 python ingest.py --stage schedule
 python ingest.py --stage fixtures     # quote del turno imminente
+python ingest.py --stage cups         # calendario Champions/Europa/Conference
+python ingest.py --stage missing      # infortunati WhoScored: LENTO, ~11s/partita, browser
+python ingest.py --stage player_stats # minuti e gol per giocatore: LENTO, ~13s/partita
 python -m src.normalize --build
 python -m src.features.form
 python -m src.features.market
@@ -255,10 +258,24 @@ mancano voci in `manual/team_name_map.json`.
 python -m src.features.form                # medie mobili leakage-safe
 python -m src.features.market              # de-vigging Shin + proporzionale
 python -m src.features.market --coverage   # copertura quote, book per stagione
+python -m src.features.context             # blocco A: riposo, congestione, derby
+python -m src.features.players             # blocco B: peso delle assenze
 ```
 
 `--coverage` va rilanciato dopo ogni ingestion: i bookmaker spariscono senza
 preavviso (Pinnacle si e' spento nel 2025/26 a meta' stagione).
+
+`context` legge `manual/derbies.csv` (colonne `home_team, away_team,
+intensity` con intensity in city/regional/rivalry, coppia NON ordinata). Se il
+file manca, le due colonne del derby non vengono prodotte e lo dice: non finge
+che nessuna partita sia un derby, che sarebbe un dato falso invece che assente.
+
+**Le coppe europee infrasettimanali NON ci sono**, e non e' una dimenticanza:
+`fbref_schedule` contiene la sola Serie A, quindi una partita di Champions del
+martedi' non compare da nessuna parte. Servirebbe una ingestion nuova col
+calendario UEFA. Dedurre chi gioca in Europa dalla classifica dell'anno prima
+sarebbe una funzione dei risultati passati, cioe' proprio cio' che il piano
+esclude.
 
 ---
 
@@ -294,14 +311,111 @@ python -m src.models.gbm --blend                      # 61s  -> config.BLEND_WEI
 # Diagnostica
 python -m src.models.gbm --importance       # 4s — cosa usa M4 senza mercato
 
-# Potenza statistica: serve allargare ai Big 5? (~30s)
+# Misura di un blocco di feature, col protocollo fissato (~40 min)
+python -m src.evaluate --blocco contesto
+python -m src.evaluate --blocco giocatori
+
+# Il blocco spiega il contenuto o solo la disponibilita' del dato? (~10 min)
+python -m src.evaluate --blocco-nan giocatori
+
+# Potenza: quale effetto questo test set puo' vedere? (~40s)
 python -m src.power_analysis
-python -m src.power_analysis --shift-lambda 0.20 --minuti-assenti 0.20
+python -m src.power_analysis --quota-partite 0.15 --shift-lambda 0.20
 ```
+
+**Da lanciare PRIMA di costruire un blocco di feature**, non dopo. Misura la
+correlazione dentro la giornata (`rho`, oggi 0.004) e ne ricava l'effetto
+minimo rilevabile nei tre scenari — Serie A, Big 5 per giornata, Big 5 per
+settimana.
+
+`--quota-partite` e' la **frazione di partite** che il sottoinsieme seleziona,
+**non** la soglia che lo definisce: "oltre il 15% dei minuti indisponibili" e'
+la soglia, e quante partite la superino si sa solo dopo aver costruito il
+blocco. Confonderle non da' errore, da' numeri sbagliati e plausibili.
+
+La tabella da leggere e' **la soglia di rottura**: per ogni dimensione del
+sottoinsieme, quale shift di lambda servirebbe. Restringere il sottoinsieme
+alza il minimo rilevabile, non lo abbassa.
 
 Opzioni utili di `--tune`: `--configs N` (quante configurazioni provare, default
 24), `--stride N` (giornate per blocco durante la ricerca, default 3 — solo per
 abbassare il costo, il risultato riportato usa sempre stride 1).
+
+---
+
+## 7bis. Esperimenti — fuori dal percorso di produzione
+
+Tutto quello che sta in `src/experiments/` legge i dati veri e scrive **solo**
+in `experiments/output/` (gitignorato tranne i `riassunto_*`). Una guardia a
+runtime rifiuta qualsiasi scrittura in `data/processed/` o `track_record/`,
+quindi un esperimento non puo' sporcare la produzione nemmeno per errore.
+
+**Prima di ogni commit**, e dopo ogni tocco a `market.py`, `baseline.py` o
+`gbm.py`:
+
+```bash
+python -m tests.test_production_unchanged                # M1 identico bit a bit
+python -m tests.test_production_unchanged --sensibilita  # prova che il test scatta
+python -m tests.test_production_unchanged --rigenera     # SOLO dopo un cambio voluto
+```
+
+Se fallisce, la prima riga del suo output dice se sono cambiate le **quote di
+ingresso** (dati) o i numeri a valle (codice): sono due diagnosi diverse.
+
+```bash
+python -m src.features.sets                 # stato dei set di feature sul dataset
+python -m tests.test_sets                   # BASE congelato, set disgiunti
+python -m tests.test_experiments_modelli    # M5Set, M5Colonne, media dei semi
+python -m tests.test_forma_venue            # forma per sede: niente leakage
+```
+
+**Blocco B, verifiche di robustezza** (~9 min con 8 processi; i risultati non
+promuovono il blocco, possono solo declassarlo):
+
+```bash
+python -m src.experiments.blocco_b_robustezza --lancia --paralleli 8
+python -m src.experiments.blocco_b_robustezza --analizza
+python -m src.experiments.blocco_b_robustezza --importanza   # asimmetria su 5 semi
+```
+
+**Sulla sola validazione** (2122, 2223) — non consumano confronti sul test:
+
+```bash
+python -m src.experiments.collinearita --descrivi
+python -m src.experiments.collinearita --misura         # selezione e PCA contro BASE
+python -m src.experiments.baseline_mercato              # de-vigging e consenso di book
+python -m src.experiments.forma_venue --descrivi
+python -m src.experiments.forma_venue --lancia          # 5 semi in parallelo
+python -m src.experiments.forma_venue --analizza
+```
+
+Un walk-forward gia' fatto non si rifa': `--lancia` salta i semi il cui file
+c'e' gia'. Per rifarlo, cancella il parquet in `experiments/output/`.
+
+### Prevedere una giornata con LightGBM (M5), senza toccare il registro
+
+```bash
+python -m src.experiments.predici_gbm                      # prima giornata utile
+python -m src.experiments.predici_gbm --matchday 5
+python -m src.experiments.predici_gbm --semi 0             # un seme solo, piu' veloce
+python -m src.experiments.predici_gbm --team Napoli
+python -m src.experiments.predici_gbm --as-of 2026-09-11 --matchday 4
+```
+
+Addestra M5 (GBM Poisson ancorato al mercato, media di 5 semi, le 52 colonne di
+BASE) su tutto lo storico giocato, poi riusa `predict.py` invariato con
+`dry_run=True`. Stampa M5 accanto a M1 ordinato per scarto sull'1X2 e scrive
+`experiments/output/previsioni_m5_<stagione>_<NN>.csv`. **Non scrive nel
+registro**: il track record resta di M1, che e' il modello di produzione.
+
+`--as-of` rifa' una giornata gia' giocata con le quote di allora **e taglia il
+training a quella data**, altrimenti il modello si addestrerebbe anche sulla
+giornata che dice di prevedere.
+
+Serve che le quote del turno ci siano: `python ingest.py --stage fixtures`.
+Se football-data non ha ancora pubblicato la Serie A, il file ha zero righe, il
+comando lo dice e non predice niente — non e' un errore, e' il turno non ancora
+uscito.
 
 ---
 

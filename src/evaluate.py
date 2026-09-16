@@ -100,8 +100,15 @@ def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_dataset(with_form: bool = True) -> pd.DataFrame:
-    """Risultati, giornata e feature (mercato e forma) in un unico frame ordinato."""
+def load_dataset(with_form: bool = True, with_context: bool = True) -> pd.DataFrame:
+    """
+    Risultati, giornata e feature (mercato, forma, contesto) in un frame solo.
+
+    `with_context` non serve a misurare il blocco A — quello si fa escludendo
+    le colonne dal modello, non dal dataset, cosi' i due modelli girano sulle
+    STESSE righe e il confronto resta appaiato. Serve solo se il parquet del
+    contesto non e' ancora stato costruito.
+    """
     matches = pd.read_parquet(config.INTERIM / "matches_master.parquet")
     base = matches[KEYS + ["date", "FTHG", "FTAG", "FTR"]].copy()
 
@@ -113,6 +120,18 @@ def load_dataset(with_form: bool = True) -> pd.DataFrame:
         form = pd.read_parquet(config.PROCESSED / "features_form.parquet")
         form = form.drop(columns=[c for c in form.columns if c == "date"])
         df = df.merge(form, on=KEYS, how="left", validate="one_to_one")
+
+    if with_context:
+        for nome, comando in (("features_context", "src.features.context"),
+                              ("features_players", "src.features.players")):
+            path = config.PROCESSED / f"{nome}.parquet"
+            if not path.exists():
+                log.warning("%s assente: quel blocco non e' disponibile. "
+                            "Lancia 'python -m %s'.", path.name, comando)
+                continue
+            extra = pd.read_parquet(path)
+            extra = extra.drop(columns=[c for c in extra.columns if c == "date"])
+            df = df.merge(extra, on=KEYS, how="left", validate="one_to_one")
 
     df = add_matchday(df)
     df["date"] = pd.to_datetime(df["date"])
@@ -679,6 +698,142 @@ def report(preds: pd.DataFrame, reference: str = "M1b market-only (diretto)") ->
     return out
 
 
+# ---------------------------------------------------------------------------
+# Misura di un blocco di feature
+# ---------------------------------------------------------------------------
+
+def colonne_blocco(nome: str, df: pd.DataFrame) -> list[str]:
+    """Le colonne che un blocco aggiunge, quelle presenti nel dataset."""
+    from .features.context import FEATURES_CONTEXT, FEATURES_DERBY
+    from .features.players import FEATURES_PLAYERS
+
+    blocchi = {
+        "contesto": FEATURES_CONTEXT + FEATURES_DERBY,
+        "giocatori": FEATURES_PLAYERS,
+    }
+    if nome not in blocchi:
+        raise ValueError(f"blocco ignoto '{nome}': disponibili {sorted(blocchi)}")
+    return [c for c in blocchi[nome] if c in df.columns]
+
+
+def misura_blocco(nome: str, floor: bool = True) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Il protocollo di misura di un blocco, in un pezzo solo.
+
+    TRE MODELLI SULLE STESSE RIGHE
+      M1b     il mercato, riferimento;
+      M5      ancorato al mercato, SENZA le colonne del blocco;
+      M5+     lo stesso, con le colonne.
+
+    Perche' M5 e non M4: l'ancoraggio elimina il lavoro di ricostruire il
+    mercato dagli ingressi, quindi tutta la capacita' del modello punta sul
+    residuo — che e' l'unica cosa che il blocco puo' spiegare. E se non c'e'
+    segnale M5 degenera esattamente nel mercato (verificato: azzerando le
+    feature l'arresto anticipato si ferma a 1 albero e lo scarto logaritmico e'
+    0.00000), quindi un risultato nullo e' un risultato, non un difetto.
+
+    Le colonne si tolgono dal MODELLO, non dal dataset: cosi' le due varianti
+    girano sulle stesse partite e il confronto e' appaiato riga per riga.
+
+    IL CONFRONTO CHE DECIDE E' M5+ CONTRO M5, non contro il mercato. Contro il
+    mercato si misura il livello del modello; contro M5 si misura il blocco, ed
+    e' l'unica differenza in cui il blocco e' l'unica cosa cambiata.
+    """
+    from .models.baseline import BaseRate, MarketDirect
+    from .models.gbm import MarketAnchoredGBM
+
+    df = load_dataset()
+    colonne = colonne_blocco(nome, df)
+    if not colonne:
+        raise ValueError(
+            f"nessuna colonna del blocco '{nome}' nel dataset: "
+            f"il parquet delle feature e' stato costruito?"
+        )
+    log.info("blocco '%s': %d colonne -> %s", nome, len(colonne), colonne)
+
+    # La base e' il modello di produzione: tutte le feature tranne i blocchi
+    # gia' misurati e scartati. La variante aggiunge SOLO il blocco in esame —
+    # non anche gli altri blocchi bocciati, che tornerebbero dentro di
+    # straforo e renderebbero la differenza non attribuibile.
+    from .models.gbm import FUORI_DAL_MODELLO
+
+    senza = MarketAnchoredGBM(escludi=tuple(FUORI_DAL_MODELLO | set(colonne)),
+                              **config.GBM_PARAMS_ANCHORED)
+    senza.suffisso = f" (senza {nome})"
+    con = MarketAnchoredGBM(escludi=tuple(FUORI_DAL_MODELLO - set(colonne)),
+                            **config.GBM_PARAMS_ANCHORED)
+    con.suffisso = f" (con {nome})"
+
+    modelli = [MarketDirect(), senza, con]
+    if floor:
+        # Serve solo a dare un senso a skill_closed: senza il pavimento, la
+        # quota di distanza coperta non e' calcolabile.
+        modelli.insert(0, BaseRate())
+
+    preds = walk_forward(df, modelli)
+    coppie = [(con.name, senza.name),
+              (con.name, "M1b market-only (diretto)"),
+              (senza.name, "M1b market-only (diretto)")]
+    return preds, paired_pairs(preds, coppie)
+
+
+def diagnostica_nan(nome: str) -> pd.DataFrame:
+    """
+    Il blocco spiega il CONTENUTO, o solo la disponibilita' del dato?
+
+    IL PROBLEMA. Un blocco a copertura parziale ha NaN su tutte le stagioni
+    che lo scraping non raggiunge. LightGBM tratta il NaN come una direzione
+    di split: puo' separare "so" da "non so" e guadagnare, perche' quella
+    separazione coincide con "prima o dopo il 2021/22" — cioe' con il tempo,
+    non con gli infortuni. L'importanza risulterebbe alta e il blocco
+    sembrerebbe informativo mentre sta solo leggendo un calendario.
+
+    LA VERIFICA. Si addestra due volte: su tutto il training, e sulle sole
+    stagioni dove il blocco e' coperto — dove di NaN non ce ne sono. Se
+    l'importanza delle colonne nuove regge, il modello usa il contenuto. Se
+    crolla, stava splittando sulla disponibilita'.
+
+    Non e' un test sul RPS e non decide se tenere il blocco: decide come
+    leggere la sua importanza.
+    """
+    from .models.gbm import FUORI_DAL_MODELLO, MarketAnchoredGBM
+
+    df = load_dataset()
+    colonne = colonne_blocco(nome, df)
+    presente = df[colonne[0]].notna()
+    stagioni_coperte = sorted(df.loc[presente, "season"].unique())
+    log.info("blocco '%s' coperto nelle stagioni %s", nome, stagioni_coperte)
+
+    played = df[df["FTR"].notna() & ~df["season"].isin(config.BURN_IN_SEASONS)]
+    escludi = tuple(FUORI_DAL_MODELLO - set(colonne))
+
+    righe = []
+    for etichetta, dati in (
+        ("tutto il training (con NaN)", played),
+        ("solo stagioni coperte (senza NaN)",
+         played[played["season"].isin(stagioni_coperte)]),
+    ):
+        quote = []
+        for stagione in config.TEST_SEASONS:
+            cutoff = df.loc[df["season"] == stagione, "date"].min()
+            train = dati[dati["date"] < cutoff]
+            if len(train) < 500:
+                log.warning("%s, stagione %s: solo %d righe, saltata",
+                            etichetta, stagione, len(train))
+                continue
+            m = MarketAnchoredGBM(escludi=escludi,
+                                  **config.GBM_PARAMS_ANCHORED).fit(train)
+            if m.model_home_ is None:
+                continue
+            for mod in (m.model_home_, m.model_away_):
+                gain = mod.booster_.feature_importance(importance_type="gain")
+                s = pd.Series(gain / max(gain.sum(), 1e-12), index=m.features_)
+                quote.append(s.reindex(colonne).fillna(0.0).sum())
+        righe.append({"training": etichetta, "n_fit": len(quote),
+                      "quota_blocco": float(np.mean(quote)) if quote else np.nan})
+    return pd.DataFrame(righe)
+
+
 def all_models() -> list[Model]:
     """
     Il roster completo. Sta qui e non in baseline.py perche' dixon_coles e gbm
@@ -716,6 +871,12 @@ def main() -> None:
     ap.add_argument("--calibration", action="store_true", help="curve di calibrazione ed ECE per modello")
     ap.add_argument("--bias", action="store_true", help="distorsione favorito-sfavorito per stagione")
     ap.add_argument("--no-save", action="store_true", help="non scrivere le previsioni su disco")
+    ap.add_argument("--blocco", help="misura un blocco di feature con M5 ancorato "
+                                     "(oggi: 'contesto', 'giocatori')")
+    ap.add_argument("--blocco-nan", dest="blocco_nan",
+                    help="il blocco spiega il contenuto o solo la "
+                         "disponibilita' del dato? Riaddestra sulle sole "
+                         "stagioni coperte e confronta l'importanza")
     args = ap.parse_args()
 
     pd.set_option("display.width", 200)
@@ -723,6 +884,54 @@ def main() -> None:
 
     if args.bias:
         bias_report(load_dataset())
+        return
+
+    if args.blocco_nan:
+        tab = diagnostica_nan(args.blocco_nan)
+        print(f"\n=== BLOCCO '{args.blocco_nan.upper()}': CONTENUTO O "
+              f"DISPONIBILITA'? ===")
+        print("Quota del guadagno presa dalle colonne del blocco, media sui "
+              "fit di test.\n")
+        print(tab.to_string(index=False))
+        if tab["quota_blocco"].notna().all() and len(tab) == 2:
+            con, senza = tab["quota_blocco"]
+            if con > 0 and senza / con < 0.5:
+                print("\n-> L'importanza CROLLA senza i NaN: il modello stava "
+                      "splittando\n   sulla disponibilita' del dato, non sul "
+                      "contenuto.")
+            else:
+                print("\n-> L'importanza regge anche senza NaN: il modello usa "
+                      "il contenuto.")
+        return
+
+    if args.blocco:
+        preds, coppie = misura_blocco(args.blocco)
+        if not args.no_save:
+            dst = config.PROCESSED / f"walk_forward_blocco_{args.blocco}.parquet"
+            preds.to_parquet(dst, index=False)
+            log.info("scritto %s", dst.name)
+
+        print(f"\n=== BLOCCO '{args.blocco.upper()}' — walk-forward sul test set ===")
+        print(report(preds).to_string())
+
+        print("\n=== CONFRONTI APPAIATI (bootstrap a cluster sulla giornata) ===")
+        print("Il primo e' quello che decide: e' l'unica differenza in cui il")
+        print("blocco e' l'unica cosa cambiata.\n")
+        print(coppie.round(5).to_string())
+
+        decisivo = coppie.iloc[0]
+        print(f"\n=== VERDETTO SUL BLOCCO '{args.blocco}' ===")
+        print(f"differenza {decisivo['differenza']:+.5f}  "
+              f"IC 95% [{decisivo['ic_basso']:+.5f}, {decisivo['ic_alto']:+.5f}]  "
+              f"su {int(decisivo['n_cluster'])} cluster")
+        if decisivo["ic_alto"] < 0:
+            print("-> L'INTERVALLO STA SOTTO ZERO: il blocco aggiunge. Si tiene.")
+        elif decisivo["ic_basso"] > 0:
+            print("-> L'intervallo sta sopra zero: il blocco PEGGIORA. Va rimosso.")
+        else:
+            print("-> L'intervallo contiene lo zero: il blocco non e' distinguibile")
+            print("   dal rumore. Va RIMOSSO, non tenuto 'male che vada non fa")
+            print("   danno': con 3400 righe di training diluisce e basta.")
         return
 
     preds = run(save=not args.no_save)

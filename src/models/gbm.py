@@ -78,6 +78,75 @@ NEVER_FEATURES = {
 # che dicono da quale book arriva la quota.
 MARKET_FEATURES = [c for c in FEATURES_T24 if not c.endswith("_source")]
 
+# BLOCCHI MISURATI E SCARTATI. Restano nel dataset — servono a rimisurarli, per
+# esempio su un perimetro piu' largo — ma NON entrano nel modello.
+#
+# Tenerli "male che vada non fanno danno" sarebbe sbagliato: con ~3400 righe di
+# training la diluizione e' reale e gia' osservata (M4 con il mercato fra
+# cinquanta feature perde contro M5 ancorato di -0.0023, con intervallo netto,
+# proprio perche' le quote si diluivano).
+#
+# Blocco A, contesto. Misurato DUE volte, e la seconda e' quella che vale.
+#
+#   senza coppe (8 set 2026)   +0.00008   IC [-0.00007, +0.00024]
+#   CON coppe   (8 set 2026)   -0.00004   IC [-0.00014, +0.00007]
+#
+# La prima era monca: riposo e congestione di solo campionato sono quasi
+# uguali per tutti, perche' le date delle giornate non cambiano quando una
+# squadra gioca in Europa. La seconda include Champions, Europa e Conference
+# (`ingest --stage cups`), che sono il meccanismo vero — il 23.6% delle partite
+# ha una coppa nei 14 giorni precedenti.
+#
+# Il verdetto non cambia e l'intervallo si stringe (semiampiezza 0.00010,
+# minimo rilevabile 0.00015 contro i 0.00060 attesi da uno shift di 0.10 gol).
+# Le colonne di coppa non ricevono quasi nessuno split — ranghi 61, 63 e 64 su
+# 64 — e `diff_rest_days` SCENDE dal 5o al 28o posto quando il meccanismo vero
+# entra: la sua importanza di prima era struttura spuria, non segnale.
+BLOCCHI_SCARTATI: frozenset[str] = frozenset({
+    "home_rest_days", "away_rest_days", "diff_rest_days",
+    "home_matches_14d", "away_matches_14d", "diff_matches_14d",
+    "home_cup_14d", "away_cup_14d", "diff_cup_14d",
+    "is_midweek", "is_derby", "derby_intensity",
+})
+
+# BLOCCHI COSTRUITI MA NON ANCORA MISURATI. Fuori dal modello esattamente come
+# quelli scartati, e per la stessa ragione: la regola del piano e' che un
+# blocco entra solo se il suo intervallo appaiato sta sotto zero, e finche' la
+# misura non c'e' non puo' entrare. Tenerli dentro "intanto" significherebbe
+# diluire 52 feature con altre nove non validate, e falsare la misura del
+# blocco successivo — che partirebbe da una base diversa da quella dichiarata.
+#
+# Appena un blocco e' misurato, la sua voce si sposta: in BLOCCHI_SCARTATI se
+# l'intervallo contiene lo zero, via da entrambi gli insiemi se sta sotto.
+# Blocco B, giocatori: PROVVISORIO, 11 settembre 2026. NON dichiararlo
+# acquisito.
+#
+# M5+giocatori contro M5: -0.00027 con IC 95% [-0.00054, -0.00001] su 114
+# cluster. Supera la regola pre-registrata, ma:
+#
+#   1. l'estremo superiore e' -0.00001: il 2.25% dei ricampionamenti non
+#      migliora, cioe' p a una coda = 0.0225 contro una soglia di 0.025;
+#   2. NON sopravvive ai confronti multipli. Con tre test di blocco gia'
+#      fatti, Bonferroni chiede p < 0.0083 e Holm si ferma al primo passo.
+#      0.0225 e' 2.7 volte troppo grande: servirebbe un intervallo al 98.3%
+#      ancora tutto sotto zero;
+#   3. il modello con i giocatori resta indistinguibile dal mercato
+#      (-0.00015, IC [-0.00088, +0.00055]). Il blocco migliora M5, non porta
+#      M5 sopra le quote;
+#   4. il guadagno poggia su UNA colonna: `home_quota_minuti_assenti` e' la
+#      prima feature su 61 (5.17%), la sua gemella in trasferta e' 59esima
+#      (0.25%). Un'asimmetria 20:1 non e' un effetto calcistico plausibile.
+#
+# Le colonne restano dentro il modello perche' la regola pre-registrata le ha
+# ammesse e cambiarla a posteriori sarebbe peggio. Ma il blocco va rimisurato
+# quando il test set cresce, e il punto 4 va spiegato prima di costruirci
+# sopra: il blocco C (valore rose) pesa le assenze, quindi ne erediterebbe la
+# fragilita'.
+BLOCCHI_NON_MISURATI: frozenset[str] = frozenset()
+
+# Cio' che il modello di produzione non vede.
+FUORI_DAL_MODELLO: frozenset[str] = BLOCCHI_SCARTATI | BLOCCHI_NON_MISURATI
+
 # Griglia degli iperparametri. Il numero di alberi NON c'e': lo decide
 # l'arresto anticipato. Si esplora a caso invece che esaustivamente perche'
 # 144 combinazioni per due varianti non sono sostenibili, e su sei dimensioni
@@ -105,11 +174,25 @@ ANCHORED_SEARCH_SPACE: dict[str, list] = {
 }
 
 
-def form_features(df: pd.DataFrame) -> list[str]:
-    """Le colonne prodotte da features/form.py: medie mobili e contatori."""
+def form_features(df: pd.DataFrame,
+                  escludi: tuple[str, ...] | None = None) -> list[str]:
+    """
+    Le colonne non di mercato: medie mobili, contatori, contesto.
+
+    `escludi` serve a misurare un blocco di feature isolandolo. Si toglie dal
+    MODELLO, non dal dataset: cosi' le due varianti girano sulle stesse righe
+    e il confronto resta appaiato, che e' l'unico modo di avere un intervallo
+    stretto abbastanza da decidere.
+
+    `None` (il default) significa "escludi tutto cio' che non e' ancora
+    entrato nel modello": i blocchi misurati e scartati e quelli costruiti ma
+    non ancora misurati. Passare `()` li rimette dentro, ed e' quello che fa
+    `evaluate.misura_blocco` per poterli misurare.
+    """
+    fuori = set(NEVER_FEATURES) | set(FUORI_DAL_MODELLO if escludi is None else escludi)
     return [
         c for c in df.columns
-        if c not in NEVER_FEATURES
+        if c not in fuori
         and not c.startswith(("mkt_", "close_", "drift_"))
         and pd.api.types.is_numeric_dtype(df[c])
     ]
@@ -140,8 +223,12 @@ class PoissonGBM(Model):
         es_holdout: int = 380,
         rho: float = config.DC_RHO,
         seed: int = 0,
+        escludi: tuple[str, ...] | None = None,
     ) -> None:
         self.use_market = use_market
+        # Le colonne da NON dare al modello. None = i blocchi gia' scartati;
+        # una tupla (anche vuota) sovrascrive, ed e' come si misura un blocco.
+        self.escludi = escludi if escludi is None else tuple(escludi)
         self.learning_rate = learning_rate
         self.num_leaves = num_leaves
         self.min_child_samples = min_child_samples
@@ -163,9 +250,15 @@ class PoissonGBM(Model):
     # Sovrascritto da M5: dice se il modello parte da un init_score esterno.
     anchored = False
 
+    # Etichetta che distingue una variante ridotta nel frame del
+    # walk-forward, che indicizza per nome: senza, due varianti si
+    # sovrascriverebbero a vicenda senza dare errore.
+    suffisso: str = ""
+
     @property
     def name(self) -> str:
-        return f"M4 GBM {'con' if self.use_market else 'senza'} mercato"
+        return (f"M4 GBM {'con' if self.use_market else 'senza'} mercato"
+                f"{self.suffisso}")
 
     def _params(self, n_estimators: int) -> dict:
         return dict(
@@ -225,7 +318,7 @@ class PoissonGBM(Model):
 
     def fit(self, train: pd.DataFrame) -> "PoissonGBM":
         df = train.dropna(subset=["FTHG", "FTAG"]).sort_values("date")
-        self.features_ = form_features(df)
+        self.features_ = form_features(df, self.escludi)
         if self.use_market:
             self.features_ = self.features_ + [c for c in MARKET_FEATURES if c in df.columns]
 
@@ -292,11 +385,11 @@ class MarketAnchoredGBM(PoissonGBM):
 
     @property
     def name(self) -> str:
-        return "M5 GBM ancorato al mercato"
+        return f"M5 GBM ancorato al mercato{self.suffisso}"
 
     def fit(self, train: pd.DataFrame) -> "MarketAnchoredGBM":
         df = train.dropna(subset=["FTHG", "FTAG", *MKT_LAMBDA]).sort_values("date")
-        self.features_ = form_features(df)
+        self.features_ = form_features(df, self.escludi)
 
         n_head = len(df) - self.es_holdout
         if df.empty or not self.features_ or n_head < 200:
@@ -539,9 +632,16 @@ def feature_importance(
     df: pd.DataFrame,
     gbm_params: dict | None = None,
     seasons: list[str] | None = None,
+    anchored: bool = False,
 ) -> pd.DataFrame:
     """
     Importanza per guadagno delle feature di M4 senza mercato.
+
+    `anchored=True` usa invece M5, il GBM ancorato al mercato. E' la vista
+    giusta per misurare un blocco nuovo: in M4 le feature competono per
+    spiegare il LIVELLO dei gol, e vincono sempre quelle di forza; in M5 il
+    livello lo mette gia' il mercato, quindi l'importanza si legge sul
+    residuo — cioe' sull'unica cosa che un blocco nuovo puo' spiegare.
 
     Per guadagno e non per numero di split: contare gli split premia le
     variabili continue con molti valori distinti, che vengono usate spesso per
@@ -551,7 +651,8 @@ def feature_importance(
     Si media su un fit per stagione di test, presi al primo taglio di ciascuna:
     una sola istantanea sarebbe la fotografia di un addestramento particolare.
     """
-    gbm_params = gbm_params or config.GBM_PARAMS_NO_MARKET
+    gbm_params = gbm_params or (config.GBM_PARAMS_ANCHORED if anchored
+                                else config.GBM_PARAMS_NO_MARKET)
     seasons = seasons or config.TEST_SEASONS
     played = df[df["FTR"].notna()]
 
@@ -559,7 +660,11 @@ def feature_importance(
     for season in seasons:
         cutoff = df.loc[df["season"] == season, "date"].min()
         train = played[(played["date"] < cutoff) & (~played["season"].isin(config.BURN_IN_SEASONS))]
-        model = PoissonGBM(use_market=False, **gbm_params).fit(train)
+        model = (MarketAnchoredGBM(**gbm_params) if anchored
+                 else PoissonGBM(use_market=False, **gbm_params)).fit(train)
+        if model.model_home_ is None:
+            log.warning("stagione %s: modello non addestrato, saltata", season)
+            continue
         for lato, m in (("casa", model.model_home_), ("fuori", model.model_away_)):
             gain = m.booster_.feature_importance(importance_type="gain")
             frames.append(pd.Series(gain / gain.sum(), index=model.features_,
@@ -579,6 +684,10 @@ def main() -> None:
     ap.add_argument("--tune", action="store_true", help="ricerca iperparametri sulla validazione")
     ap.add_argument("--blend", action="store_true", help="peso della miscela log sulla validazione")
     ap.add_argument("--importance", action="store_true", help="importanza feature di M4 senza mercato")
+    ap.add_argument("--anchored", action="store_true",
+                    help="con --importance: usa M5 ancorato invece di M4. E' la "
+                         "vista giusta per un blocco nuovo, che puo' spiegare "
+                         "solo il residuo dal mercato")
     ap.add_argument("--configs", type=int, default=24, help="quante configurazioni provare")
     ap.add_argument("--stride", type=int, default=3, help="giornate per blocco durante la ricerca")
     ap.add_argument("--workers", type=int, default=8, help="processi paralleli")
@@ -597,8 +706,9 @@ def main() -> None:
         return
 
     if args.importance:
-        tab = feature_importance(load_dataset())
-        print("=== IMPORTANZA PER GUADAGNO, M4 SENZA MERCATO ===")
+        tab = feature_importance(load_dataset(), anchored=args.anchored)
+        quale = "M5 ANCORATO AL MERCATO" if args.anchored else "M4 SENZA MERCATO"
+        print(f"=== IMPORTANZA PER GUADAGNO, {quale} ===")
         print("media su 3 stagioni di test x 2 lati; quota del guadagno totale\n")
         print(tab.head(20).round(4).to_string())
         print("\nsomma delle prime 10: %.1f%%" % (100 * tab["quota_media"].head(10).sum()))

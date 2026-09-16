@@ -141,6 +141,49 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   del registro sono state scritte a partita gia' iniziata (Inter-Napoli +1
   minuto, Roma-Atalanta +44 minuti) e l'assert non ha protestato.
   `backtest_log.flag_post_kickoff` ora le riconosce e le esclude.
+- **WhoScored risponde in ITALIANO, e questo rompe soccerdata in due punti.**
+  Il sito localizza le pagine sulla geolocalizzazione di chi chiama: da un IP
+  italiano la regione e' `Italia` (non `Italy`) e il link al calendario e'
+  `Partite` (non `Fixtures`). Nessuno dei due errori dice la verita':
+  - `KeyError: "None of [Index(['ITA-Serie A'])] are in the [index]"` sembra
+    una lega non supportata. La lega c'e', si chiama in un'altra lingua.
+    Rimedio: `config.WHOSCORED_LEAGUE_OVERRIDE`, che sovrascrive **solo** il
+    campo WhoScored del dizionario leghe. Scrivere in
+    `~/soccerdata/config/league_dict.json` NON va bene: soccerdata fa
+    `dict.update` al primo livello e si porterebbe via anche le mappe di
+    FBref, Understat e MatchHistory.
+  - `IndexError: list index out of range` a `whoscored.py:290` e' il link
+    "Fixtures" che non esiste. Rimedio: `src/whoscored_patch.py`, che cerca
+    l'href invece del testo — gli URL restano in inglese in ogni lingua.
+    **Attenzione alle maiuscole**: l'href e' `/fixtures` minuscolo e XPath 1.0
+    non ha `lower-case()`, quindi serve `translate()`. Cercare `/Fixtures` non
+    trova niente e sembra in tutto che la patch non funzioni.
+
+  Il resto dello scraper usa id e classi CSS, che non sono tradotti: il
+  problema e' circoscritto. Nel risultato, `reason` e' in inglese
+  (`injured`, `suspended`, `injured doubtful`) perche' viene da un attributo;
+  `status` e' tradotto (`Indisponibile`, `In dubbio`). **Usare `reason`**, che
+  e' strutturale, non `status`, che cambia con la lingua del sito.
+- **Costo misurato di WhoScored: ~11.6 secondi per partita**, una richiesta
+  Selenium ciascuna, piu' ~110 secondi per il calendario di ogni stagione.
+  Su 4940 partite fanno **circa 15 ore**. La cache e' persistente e il lavoro
+  e' riprendibile. Copertura verificata anche sulle stagioni vecchie: 1516 e
+  1920 rispondono entrambe.
+- **football-data pubblica l'ORARIO solo dal 2019/20.** Prima mette la stessa
+  ora finta su tutte e 380 le partite della stagione: oggi `12:00`, in passato
+  `00:00`. Si riconosce dal fatto che la stagione ha **una sola ora distinta**
+  — dal 1920 in poi ce ne sono fra 6 e 13.
+
+  Perche' e' scritto qui: `test_kickoff` scartava le righe a mezzanotte, e
+  quando il segnaposto e' diventato `12:00` quelle 1900 righe sono rientrate
+  nel confronto facendo crollare l'accordo fra le fonti dal 99.5% al 58.3%.
+  Il test accusava il fuso orario, che era giusto. Ora il criterio e'
+  strutturale — si scarta la stagione con una sola ora distinta, qualunque
+  essa sia — e i due orari coincidono al minuto sul **99.48% di 2691 partite**
+  dal 2019/20.
+
+  Non tocca la produzione: `predict.kickoff` e `backtest_log.flag_post_kickoff`
+  leggono l'orario da `fbref_schedule`, non da `matches_master`.
 - **Non esiste la colonna `referee`.** Era una feature debole, si rinuncia.
 - **ClubElo era irraggiungibile** al momento dell'ingestion (502 su tutte le
   squadre). Lo stage `elo` e' opzionale: l'Elo proprio, calcolato dai
@@ -226,6 +269,15 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
   registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
   distingue un errore del modello da un prezzo cambiato
+- `src/features/context.py` — **blocco A**: riposo, congestione su finestra
+  (d-14, d) aperta da entrambi i lati, infrasettimanale, derby da
+  `manual/derbies.csv` con coppia NON ordinata. Solo calendario, nessuna
+  ingestion nuova. **Le coppe europee non ci sono e non ci possono essere**:
+  `fbref_schedule` contiene la sola Serie A, quindi una partita di Champions
+  del martedi' non compare da nessuna parte. Le due scorciatoie (dedurre chi
+  gioca in Europa dalla classifica dell'anno prima; usare l'orario di calcio
+  d'inizio come indizio) sono peggio del buco — la prima e' una funzione dei
+  risultati passati, cioe' proprio cio' che il piano esclude
 - `src/report.py` — il report settimanale in HTML statico: CSS dentro il file,
   grafici in SVG generato a mano, nessun CDN e nessun framework. Cinque
   sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
@@ -255,7 +307,10 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 - `tests/make_fixtures.py`, `tests/test_form.py`, `tests/test_kickoff.py`,
   `tests/test_market.py`, `tests/test_leakage.py`,
   `tests/test_predictions_log.py`, `tests/test_report.py`,
-  `tests/test_rounds.py` — dati sintetici e test di regressione. **Nessun test scrive nella cartella dati vera**:
+  `tests/test_rounds.py`, `tests/test_context.py` — dati sintetici e test di
+  regressione. `test_context` ha gia' trovato un confine sbagliato: la
+  finestra della congestione includeva la partita di esattamente 14 giorni
+  prima, cioe' un'unita' in piu' in ogni turno regolare, senza nessun sintomo. **Nessun test scrive nella cartella dati vera**:
   `test_form` passava `save=True` per errore e sovrascriveva
   `features_form.parquet` con 90 righe sintetiche, senza alcun errore —
   il merge di `load_dataset` riempiva di NaN tutte le feature di forma e M4
@@ -478,63 +533,662 @@ contro il 95% nominale.
   indagato quello, non accettato il risultato. Ritarare sempre con
   `python -m src.models.dixon_coles --tune` dopo ogni nuovo blocco di feature.
 
-### Il test set non ha la potenza per misurare il layer giocatori
+### Potenza: cosa questo test set puo' vedere — rifatto due volte
 
-`python -m src.power_analysis`, con la deviazione standard della differenza
-appaiata gia' misurata (0.00354 per cluster, su 114 cluster osservati):
+`python -m src.power_analysis`. Tre errori corretti, e ognuno cambiava la
+conclusione. Il terzo la ribalta.
 
-| perimetro | cluster | n | MDE (80%, 5%) | effetto atteso |
-|---|---|---|---|---|
-| Serie A | giornata = settimana | 114 | **0.00240** | 0.00060 |
-| Big 5 | giornata di campionato | 570 | **0.00107** | 0.00060 |
-| Big 5 | settimana di calendario | 114 | **0.00240** | 0.00060 |
+**1. Soglia e quota non sono la stessa cosa.** "Oltre il 15% dei minuti
+indisponibili" e' la **soglia** che definisce il sottoinsieme; la **quota** e'
+la frazione di partite che quella soglia seleziona, e finche' il blocco non
+esiste non si conosce. Il modulo usava lo stesso numero per entrambe:
+risultati plausibili e sbagliati. Ora la quota e' un parametro che si fa
+variare, e per il contesto e' misurata (11% derby, 11% infrasettimanali).
 
-**Nessuno dei due perimetri basta.** Il minimo rilevabile e' 4 volte l'effetto
-atteso in Serie A, e ancora 1.8 volte con i Big 5 nell'ipotesi ottimistica.
+**2. La correlazione dentro la giornata e' ~0, ed e' misurata, non assunta.**
+ANOVA a una via sulle differenze appaiate raggruppate per giornata; la formula
+del design effect — `Var(media di k) = sigma^2 (1+(k-1)rho)/k` — riproduce la
+sd osservata entro il 7%. **Questo smentisce quanto era scritto prima**: "i
+Big 5 non aggiungono potenza, aggiungono solo partite dentro gli stessi 114
+cluster" vale solo se rho ~ 1. Con rho ~ 0 allargare il cluster abbassa
+davvero la varianza della sua media, e le due definizioni di cluster — che
+sembravano distare un fattore sqrt(5) — danno in pratica lo stesso numero.
 
-**La definizione di cluster cambia il risultato di sqrt(5).** Se ogni lega ha
-un modello proprio, i Big 5 danno 5 volte i cluster (giornata di campionato).
-Se il modello e' unico — ed e' il caso, `config.LEAGUES` e' una lista sola —
-le giornate della stessa settimana condividono lo stesso addestramento e
-contano per **un** cluster: i Big 5 non aggiungono potenza, aggiungono solo
-partite dentro gli stessi 114 cluster.
+**3. La coppia di riferimento era sbagliata, e questo cambiava tutto.**
+Il rumore veniva misurato su M5 ancorato **contro il mercato**. Ma un blocco
+di feature non si decide contro il mercato: si decide sulla differenza fra due
+modelli **annidati**, lo stesso M5 con e senza le colonne nuove. I due
+condividono quasi tutto, quindi la loro differenza e' molto meno rumorosa.
 
-Quanto servirebbe, per dimensione dell'effetto:
-
-| shift di lambda | effetto RPS | cluster necessari | stagioni Serie A |
+| coppia | sd/partita | sd/cluster | MDE (Serie A, tutte) |
 |---|---|---|---|
-| 0.05 gol | 0.00015 | 28 974 | 762 |
-| **0.10 gol** | **0.00060** | **1 839** | **48** |
-| 0.15 gol | 0.00127 | 410 | 11 |
-| 0.20 gol | 0.00196 | 171 | 4.5 |
-| 0.30 gol | 0.00522 | 24 | 0.6 |
+| M5 − mercato (livello) | 0.01102 | 0.00354 | 0.00093 |
+| **M5+blocco − M5 (blocco)** | **0.00280** | **0.00083** | **0.00023** |
 
-Il ginocchio della curva sta fra 0.15 e 0.20 gol. **Sotto quella soglia
-l'effetto non e' dimostrabile con i dati che questo progetto potra' mai
-avere**; sopra, bastano poche stagioni di Serie A.
+Il confronto annidato e' **4.3 volte** meno rumoroso. Usare la coppia
+sbagliata gonfiava il minimo rilevabile dello stesso fattore e faceva
+dichiarare non misurabile un test che invece lo era.
 
-### Da fare, in ordine
+### Quello che il test set vede davvero
 
-1. **Layer giocatori e infortuni** — ma prima decidere se ha senso misurarlo.
-   Il calcolo di potenza dice che un effetto da 0.10 gol richiederebbe 48
-   stagioni di Serie A, e che i Big 5 non aiutano se il modello resta unico.
-   Le opzioni oneste sono tre:
-   - **restringere il campo alle assenze grosse** (portiere titolare, o oltre
-     il 30% dei minuti pesati): meno partite ma effetto piu' grande, e il
-     ginocchio della curva e' li';
-   - **un modello per lega**, che rende i Big 5 davvero 5 volte i cluster;
-   - **costruirlo comunque senza pretendere di dimostrarlo**, dichiarandolo.
+Effetto atteso da uno shift di 0.10 gol su una partita del sottoinsieme:
+0.00060 RPS.
 
-   Quando si fara', il modo giusto di misurarlo e' **rifare M5**: l'ancoraggio
-   al mercato e' il test piu' potente disponibile e l'infrastruttura c'e'.
-   Non ripartire da M4
-2. `src/features/context.py` — giorni di riposo, congestione, coppe europee,
-   derby e cambi allenatore. **Entrambi i file manuali MANCANO**: `derbies.csv`
-   e `coach_changes.csv` non esistono in `manual/`, che contiene solo
-   `team_name_map.json` e `upcoming_odds.csv`
-3. `src/features/team_strength.py` — Elo proprio calcolato dai risultati.
-   Scende di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un
-   quarto modo di misurare la forza della squadra non cambiera' il quadro
+| perimetro | cluster | MDE sul 20% | vede? |
+|---|---|---|---|
+| Serie A | giornata | 0.00052 | **si** |
+| Big 5 | giornata di campionato | 0.00023 | si |
+| Big 5 | settimana di calendario | 0.00024 | si |
+
+Quota minima perche' un effetto da 0.10 gol si veda: **16% delle partite in
+Serie A**, 4% con i Big 5. Sotto quella quota il sottoinsieme e' troppo
+piccolo, e restringerlo ancora **alza** il minimo rilevabile invece di
+abbassarlo — le partite diminuiscono. Restringere paga solo se l'effetto per
+partita cresce piu' in fretta del rumore.
+
+**Conseguenza operativa**: la Serie A da sola basta a misurare un blocco che
+tocchi almeno il 16% delle partite con uno shift da 0.10 gol. I Big 5 restano
+la leva piu' grande (2.2x) e servono per i sottoinsiemi piccoli — il derby
+all'11% non arriva alla soglia in Serie A.
+
+### Blocco A — contesto — MISURATO DUE VOLTE E SCARTATO
+
+`python -m src.evaluate --blocco contesto`, 8 settembre 2026. Nove colonne:
+riposo, congestione su finestra (d-14, d), infrasettimanale, derby.
+
+| modello | RPS | skill_closed | delta mercato | IC 95% |
+|---|---|---|---|---|
+| M1b market-only | 0.1881 | 1.000 | riferimento | — |
+| M5 ancorato, **senza** contesto | 0.1882 | 0.997 | +0.00011 | [-0.00056, +0.00077] |
+| M5 ancorato, **con** contesto | 0.1883 | 0.995 | +0.00020 | [-0.00052, +0.00089] |
+| M0b frequenze di base | 0.2291 | 0.000 | +0.04095 | [+0.03449, +0.04741] |
+
+**Il confronto che decide** — l'unico in cui il blocco e' l'unica cosa
+cambiata:
+
+| confronto | differenza | IC 95% | conclusione |
+|---|---|---|---|
+| **M5+contesto − M5** | **+0.00008** | **[-0.00007, +0.00024]** | **indistinguibili** |
+
+L'intervallo contiene lo zero. **E non e' un test debole**: il minimo
+rilevabile di quel confronto e' 0.00022, sotto i 0.00060 attesi da uno shift
+di 0.10 gol. Il blocco e' stato misurato con potenza sufficiente e non c'e'.
+
+**Cosa usa il modello, e perche' non basta.** Importanza per guadagno di M5
+ancorato (`--importance --anchored`), le nove colonne del blocco:
+
+```
+diff_rest_days     3.30%   rango 5/61      is_derby           0.77%   53/61
+home_rest_days     1.71%        24/61      away_rest_days     0.66%   55/61
+away_matches_14d   1.09%        39/61      home_matches_14d   0.36%   58/61
+derby_intensity    0.31%        59/61      is_midweek         0.00%   60/61
+                                           diff_matches_14d   0.00%   61/61
+```
+
+Totale 8.2% del guadagno con 9 colonne su 61, contro il 14.8% che avrebbero
+se contassero come le altre. **Il differenziale di riposo e' la quinta feature
+su sessantuno** — il modello lo usa parecchio — e nonostante questo la
+previsione non migliora. `is_midweek` e `diff_matches_14d` non ricevono
+nemmeno uno split: guadagno esattamente zero.
+
+La lettura e' la stessa del risultato acquisito sulle statistiche di gioco:
+non che riposo e derby non contino per il calcio, ma che **il mercato li ha
+gia' prezzati**. Le quote di apertura escono quando il calendario e' noto da
+mesi: chi le fa sa benissimo chi ha giocato mercoledi'.
+
+**Rimosso, non tenuto.** Le nove colonne sono in `gbm.BLOCCHI_SCARTATI`:
+restano nel dataset per poterle rimisurare su un perimetro piu' largo, ma non
+entrano nel modello. Tenerle "male che vada non fanno danno" sarebbe sbagliato
+con 3400 righe di training, e la diluizione e' gia' stata osservata su
+M4-con-mercato.
+
+### Seconda misura: con le coppe europee — il blocco completo
+
+La prima misura era **monca**, e va detto chiaro: riposo e congestione di solo
+campionato sono quasi uguali per tutti, perche' le date delle giornate non
+cambiano quando una squadra gioca in Europa. Il meccanismo — giocare il
+martedi' in Champions e la domenica in campionato — era proprio la parte che
+mancava.
+
+`python ingest.py --stage cups` scarica Champions, Europa e Conference League
+da FBref: **solo calendario, una richiesta per competizione e stagione, niente
+browser** (4140 partite). Le tre coppe sono chiavi nuove in `LEAGUE_DICT`,
+registrate a runtime da `ingest.registra_coppe` — vedi `config.FBREF_CUPS`, e i
+nomi devono essere quelli esatti della pagina `fbref.com/en/comps/`.
+
+`features/context.py` ora conta le coppe dentro riposo e congestione, e
+aggiunge `home/away/diff_cup_14d`. Aggancio verificato: 12 squadre italiane
+in Europa, Roma 131 presenze, Juventus 120, Napoli 108; Napoli e Inter
+2023/24 hanno 15 partite con una coppa nei 14 giorni prima, l'Empoli zero.
+**Il 23.6% delle partite di Serie A ha una coppa nei 14 giorni precedenti.**
+
+| misura | differenza | IC 95% | semiampiezza |
+|---|---|---|---|
+| senza coppe | +0.00008 | [-0.00007, +0.00024] | 0.00016 |
+| **con coppe** | **-0.00004** | **[-0.00014, +0.00007]** | **0.00010** |
+
+Il verdetto non cambia e l'intervallo si **stringe**: minimo rilevabile
+0.00015, contro i 0.00060 attesi da uno shift di 0.10 gol. E' un null ben
+potenziato, ora sul blocco completo.
+
+**L'importanza dice la cosa piu' interessante.** Con le coppe dentro:
+
+```
+home_rest_days   1.48%  27/64      is_derby         0.64%  50/64
+diff_rest_days   1.43%  28/64      derby_intensity  0.27%  58/64
+away_matches_14d 0.49%  54/64      home_cup_14d     0.05%  61/64
+away_rest_days   0.43%  57/64      diff_cup_14d     0.01%  63/64
+home_matches_14d 0.16%  59/64      away_cup_14d     0.00%  64/64
+```
+
+Le colonne di coppa sono le **ultime tre** su sessantaquattro: il modello non
+ci trova niente. E `diff_rest_days` **scende dal 5o al 28o posto** quando il
+meccanismo vero entra nel dataset — la sua importanza nella prima misura era
+struttura spuria, non segnale. Totale del blocco: 5.0% del guadagno con il
+18.8% delle colonne, ancora piu' sotto la sua quota di prima (8.2% contro
+14.8%).
+
+**Ora la domanda e' chiusa davvero.** Non "il contesto non conta per il
+calcio", ma: il mercato lo ha gia' prezzato. Le quote di apertura escono
+quando il calendario, coppe comprese, e' noto da mesi.
+
+### Blocco B — giocatori e infortuni — PROVVISORIO
+
+`python -m src.evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
+da `src/features/players.py`: quota di minuti indisponibili, quota di
+gol+assist indisponibili, numero di assenti, per lato e in differenza.
+
+**E' il primo blocco che supera la regola.** E va letto con la stessa
+prudenza con cui sono stati letti i risultati nulli.
+
+| modello | RPS | skill_closed | delta mercato | IC 95% |
+|---|---|---|---|---|
+| M5 ancorato, **con** giocatori | **0.1880** | 1.0038 | -0.00015 | [-0.00088, +0.00055] |
+| M1b market-only | 0.1881 | 1.000 | riferimento | — |
+| M5 ancorato, **senza** giocatori | 0.1882 | 0.997 | +0.00011 | [-0.00056, +0.00077] |
+| M0b frequenze di base | 0.2291 | 0.000 | +0.04095 | [+0.03449, +0.04741] |
+
+**Il confronto che decide:**
+
+| confronto | differenza | IC 95% | conclusione |
+|---|---|---|---|
+| **M5+giocatori − M5** | **-0.00027** | **[-0.00054, -0.00001]** | **il blocco aggiunge** |
+
+**Tre cose da non confondere.**
+
+1. **Il blocco migliora M5, non porta M5 sopra il mercato.** Contro M1b resta
+   indistinguibile: -0.00015 con IC [-0.00088, +0.00055]. `skill_closed`
+   1.0038 e' sopra 1, ma l'intervallo dice che quel sorpasso non e'
+   distinguibile dal rumore. **La soglia 0.1881 non e' stata battuta.**
+2. **L'intervallo tocca lo zero.** L'estremo superiore e' -0.00001, e il
+   2.25% dei ricampionamenti non migliora. Ha superato la regola, ma per un
+   pelo: e' un risultato da rileggere quando il test set sara' cresciuto, non
+   un fatto acquisito come i risultati nulli sulle statistiche di gioco.
+3. **Non sopravvive ai confronti multipli.** Tre test di blocco (contesto
+   senza coppe, contesto con coppe, giocatori), Bonferroni a una coda: soglia
+   **0.0083**, e il blocco sta a **p = 0.0225**, 2.7 volte troppo grande.
+   Holm si ferma al primo passo. Il conto e' m = 3 e non 4: la quota di
+   minuti NON pesata era nel modulo dalla prima stesura, scritta prima di
+   qualsiasi misura con la motivazione del portiere — non e' stata aggiunta
+   dopo aver visto fallire le colonne pesate. Con m = 4 la soglia scende a
+   0.00625 e la conclusione non cambia.
+
+### La diagnostica sui NaN: il modello usa il contenuto
+
+`python -m src.evaluate --blocco-nan giocatori`. Il blocco ha NaN su tutto
+cio' che precede il 2021/22, e LightGBM puo' splittare su "so / non so"
+guadagnando — perche' quella separazione coincide con il tempo, non con gli
+infortuni. Si riaddestra sulle sole stagioni coperte, dove di NaN non ce ne
+sono:
+
+```
+tutto il training (con NaN)          9.8%  del guadagno
+solo stagioni coperte (senza NaN)   15.8%  del guadagno
+```
+
+L'importanza **sale**, non crolla: il modello legge il contenuto. Ed e'
+coerente — su un training dove la feature c'e' sempre, serve di piu'.
+
+### Cosa fa il lavoro, e la sorpresa
+
+Importanza per guadagno dentro M5, le nove colonne:
+
+```
+home_quota_minuti_assenti  5.17%   rango  1/61   <- prima feature su 61
+diff_quota_minuti_assenti  1.67%         23/61
+diff_n_assenti             1.09%         40/61
+diff_quota_ga_assente      0.51%         54/61
+home_quota_ga_assente      0.39%         57/61
+home_n_assenti             0.34%         58/61
+away_quota_minuti_assenti  0.25%         59/61
+away_n_assenti             0.24%         60/61
+away_quota_ga_assente      0.17%         61/61
+```
+
+**La quota di minuti della squadra di casa e' la prima feature su
+sessantuno**, e le colonne pesate per gol+assist — quelle che il piano
+chiedeva — stanno tutte in fondo. La decisione di affiancare la quota di
+minuti NON pesata si e' rivelata quella che regge il blocco: con il solo peso
+per produzione, il blocco non avrebbe avuto niente da dire.
+
+**L'asimmetria casa/trasferta e' grande e non e' spiegata.** 5.17% contro
+0.25%: le assenze della squadra di casa contano venti volte quelle della
+squadra in trasferta. Puo' essere reale — chi gioca in casa attacca di piu' e
+quindi perde di piu' a mancargli un titolare — oppure un artefatto. **Va
+indagata prima di costruirci sopra**: se fosse un artefatto, il blocco
+poggerebbe su una colonna sola e su un caso.
+
+### Verifiche di robustezza — 15 settembre 2026
+
+`python -m src.experiments.blocco_b_robustezza`, 15 walk-forward (3 varianti x
+5 semi). Riassunto completo e versionato in
+`experiments/output/riassunto_bloccoB_robustezza.md`. **Regola scritta prima
+dei risultati: queste verifiche possono solo declassare, mai promuovere.**
+
+**Determinismo**: il seme 0 rifatto coincide con la misura originale, scarto
+0.00e+00 su 1140 partite.
+
+**Semi** (M5+GIOCATORI − M5): -0.00027, -0.00026, -0.00016, -0.00022,
+-0.00032. **Il segno e' stabile, la significativita' no**: cinque stime su
+cinque negative, ma intervallo sotto zero solo in due semi su cinque.
+
+**Simmetria** — tolte `home_` e `away_quota_minuti_assenti`, resta la sola
+differenza: -0.00024, -0.00032, -0.00020, -0.00032, -0.00022, **intervallo
+sotto zero in cinque semi su cinque**. Media dei semi: simmetrico − completo
+= -0.00001, IC [-0.00013, +0.00011]. **Il guadagno non evapora: l'asimmetria
+20:1 era una rappresentazione.** Con due colonne quasi gemelle LightGBM ne
+sceglie una secondo il campionamento delle colonne (`colsample_bytree` 0.6),
+e l'importanza si concentra li'.
+
+**Confronti multipli, conclusione esplicita**:
+- misura pre-registrata (seme 0): p = 0.0225, **non passa** Bonferroni (0.0083);
+- stessa ipotesi con meno varianza (media 5 semi): p = 0.0159, **non passa**;
+- variante simmetrica mediata: p = 0.0021 passerebbe, **ma non e' la specifica
+  pre-registrata** e non la puo' sostituire dopo aver visto i dati.
+
+**Importanza mediata su cinque semi** (`--importanza`): quota di guadagno
+di `home_quota_minuti_assenti` contro la gemella in trasferta, per seme:
+20.7:1, 10.0:1, 6.8:1, 10.8:1, 10.4:1 — media **10.8:1**. Il 20:1 della
+diagnosi originale era il seme piu' estremo dei cinque. Il verso non si
+inverte mai (la colonna di casa resta fra le prime 15, quella in trasferta
+oltre la 45a), quindi una preferenza per il lato casa c'e'; ma la simmetrica
+che rende uguale mostra che non porta informazione in piu' della differenza.
+
+**Esito: GIOCATORI resta PROVVISORIO.** Non scartato — simmetria tenuta,
+segno stabile. Non confermato — non sopravvive alla correzione.
+
+**Criterio di promozione non raggiunto**: media dei semi con giocatori −
+mercato = -0.00011, IC [-0.00081, +0.00057]. La produzione resta su M1.
+
+### Limiti dichiarati
+
+- **Il peso e' gol+assist, non xG+xA.** Le statistiche giocatore-partita di
+  FBref per la Serie A non hanno colonne attese (verificato su 60325 righe).
+  Gol+assist e' molto piu' rumoroso: un attaccante che non ha ancora segnato
+  pesa zero. Vista l'importanza quasi nulla di quelle colonne, sostituirle
+  con l'xG di Understat (`--stage shots`) e' la prima cosa da provare se si
+  vuole spremere altro da qui.
+- **Chi e' fuori da agosto pesa zero.** Misurato: l'88.9% degli assenti
+  compare in rosa prima o poi; il 10.3% che non compare mai sono lungodegenti
+  veri (Deulofeu 38 partite di fila, Rog 38, Soumaoro 36). E' una scelta — la
+  feature misura il contributo perso di RECENTE — e la variante da provare e'
+  pesarli con i minuti della stagione precedente.
+- **Copertura parziale**: 39.1% delle partite in tutto il dataset, ma **91%
+  sul test set** (1037 su 1140). Le stagioni precedenti al 2021/22 restano a
+  NaN, che LightGBM tratta nativamente.
+- **L'orizzonte poggia su un assunto non verificato**: che la lista degli
+  indisponibili di WhoScored sia quella pubblicata PRIMA della partita e non
+  aggiornata a posteriori. Se cosi' non fosse, il blocco andrebbe buttato, non
+  corretto.
+
+### La predizione falsificabile sull'half-life NON e' testabile cosi'
+
+Era scritto: "quando arrivera' il layer giocatori, l'half-life ottima di M3
+deve accorciarsi". Non si puo' verificare, e vale la pena dirlo invece di
+lanciare un comando che non risponde: **M3 non ha feature**. E' un modello
+parametrico sui soli risultati, e la sua half-life non puo' cambiare perche'
+si sono aggiunte colonne a M5. La predizione era mal posta.
+
+La forma corretta sarebbe: un modello che usa le assenze dovrebbe preferire
+una memoria piu' corta di uno che non le usa. Per porla servirebbe un
+parametro di memoria dentro M5, che oggi non esiste.
+
+### Il piano dei blocchi — uno alla volta, ciascuno misurato
+
+**Obiettivo dichiarato**: trovare il limite del ML su questo problema
+aggiungendo blocchi di informazione uno per volta e misurando ciascuno.
+
+**Regola generale, non negoziabile.** Ogni blocco si misura **rifacendo M5**,
+il GBM ancorato al mercato: e' il test piu' potente disponibile, l'ancoraggio
+elimina il lavoro di ricostruire il mercato dagli ingressi, e se non c'e'
+segnale M5 degenera esattamente nel mercato (verificato: azzerando le feature
+si ferma a 1 albero, scarto logaritmico 0.00000). Confronto appaiato con
+bootstrap a cluster sulla giornata. **Un blocco si tiene solo se l'intervallo
+sta tutto sotto zero.**
+
+**Non accumulare blocchi non misurati.** Con ~3400 righe di training la
+diluizione e' reale ed e' gia' stata osservata: M4 con il mercato fra
+cinquanta feature perde contro M5 ancorato di -0.0023 con intervallo netto,
+esattamente perche' le quote si diluivano. Se un blocco non supera
+l'intervallo va **rimosso**, non tenuto "male che vada non fa danno": con
+questa numerosita' fa danno.
+
+**Al termine di ogni blocco si riporta**: RPS, `skill_closed`, differenza
+appaiata contro il mercato con intervallo, e l'importanza delle feature nuove.
+
+#### Fase 0 — potenza — FATTA
+
+Vedi le due sezioni sopra. In sintesi: la Serie A da sola basta a misurare un
+blocco che tocchi almeno il **16% delle partite** con uno shift da 0.10 gol.
+I Big 5 valgono 2.2x e servono per i sottoinsiemi piu' piccoli. La coppia di
+riferimento giusta e' quella **annidata** (M5 con e senza il blocco), non M5
+contro il mercato: sbagliarla gonfia il minimo rilevabile di 4.3 volte.
+
+#### Blocco A — contesto — FATTO, SCARTATO
+
+Vedi la sezione dedicata sopra. `+0.00008` con IC `[-0.00007, +0.00024]`:
+indistinguibile, con potenza sufficiente. Le nove colonne sono in
+`gbm.BLOCCHI_SCARTATI` e non entrano nel modello.
+
+`manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
+partite) e **va rivisto**: non e' una fonte, e' un'opinione plausibile.
+
+#### Blocco B — giocatori e infortuni — FATTO, PROVVISORIO
+
+Vedi la sezione dedicata sopra: -0.00027 con IC [-0.00054, -0.00001]. Supera
+la regola, ma l'intervallo tocca lo zero e il modello resta indistinguibile
+dal mercato. Le nove colonne sono entrate nel modello; `BLOCCHI_NON_MISURATI`
+e' tornato vuoto.
+
+Quello che resterebbe da fare qui, in ordine di resa attesa: capire
+l'asimmetria casa/trasferta (20x, non spiegata), sostituire gol+assist con
+l'xG di Understat, pesare i lungodegenti con la stagione precedente.
+
+#### Come era stato pianificato
+
+`ingest --stage missing`, `--stage lineups`, `--stage player_stats`. Feature:
+quota di minuti stagionali assenti **pesata per xG+xA per 90**; indice di
+turnover rispetto alla partita precedente.
+
+**Sottoinsieme di misura dichiarato PRIMA di guardare i risultati**: partite
+con oltre il **15% dei minuti pesati indisponibili**. La quota di partite che
+questa soglia seleziona e' ignota finche' il blocco non esiste: appena lo si
+sa, va sostituita nel calcolo di potenza al posto del 20% assunto. Serve che
+superi il **16%**, altrimenti in Serie A l'effetto non si vede e conviene
+allargare ai Big 5 prima di misurare.
+
+**Perche' ha senso provarlo dopo che A e' fallito.** Il contesto e' noto al
+mercato da mesi — il calendario si pubblica in estate. Un infortunio a due
+giorni dalla partita no: e' l'unico posto dove il mercato puo' essere
+strutturalmente lento, ed e' per questo che era il candidato migliore fin
+dall'inizio.
+
+Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
+la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
+sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
+
+#### Blocco D — forma per sede — MISURATO IN VALIDAZIONE E SCARTATO, A COSTO ZERO
+
+**La prima stesura di questa specifica era sbagliata, e il perche' vale piu'
+della specifica.** Aveva letto `FORM_HALFLIFE_VENUE` come "finestra piu'
+lunga" e proponeva le stesse colonne di BASE con half-life 20 sul test set:
+cioe' esattamente "altre medie mobili, altre finestre", che il risultato
+acquisito sopra ha gia' chiuso. Un test confermativo speso su un nullo atteso
+alza la soglia per tutti i risultati futuri e non compra niente.
+
+**Cosa significa davvero `FORM_HALFLIFE_VENUE = 10`**: forma **condizionata
+alla sede**. Oggi il dataset ha la forma generale della squadra di casa e di
+quella in trasferta; nessuna colonna dice come una squadra rende
+*specificamente giocando in casa*. Nel modello il vantaggio casalingo e'
+uniforme — lo stesso per chi in casa e' una fortezza e per chi non ci vince
+mai. L'half-life e' piu' lunga di quella di BASE (6) perche' restringendo alla
+sede i campioni si dimezzano.
+
+**Colonne, 48**: le stesse 8 statistiche x 2 versi di BASE, per la squadra di
+casa sulle sue sole partite in casa (`home_<stat>_<verso>_ewm_sede`), per
+quella in trasferta sulle sole in trasferta, piu' la differenza. Half-life 10,
+non tarata. Medie di lega della regressione di fine stagione calcolate **per
+sede**: in casa si segna di piu', e tirare la forma casalinga verso la media
+di tutte le partite la sporcherebbe. Costruite in memoria da
+`src/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
+toccarle e senza scrivere nessun parquet.
+
+**Non e' una copia di BASE**: in validazione la correlazione fra una colonna
+per sede e la sua gemella generale sta fra **0.75 e 0.89**.
+
+**Dove si misura: solo validazione (2122, 2223), come collinearita' e
+baseline. m resta 3.** Stima dichiarata prima: media dei 5 semi.
+- intervallo che contiene lo zero, o differenza >= 0 -> **set scartato, e la
+  questione e' chiusa a costo zero**;
+- intervallo tutto sotto zero -> **ipotesi pre-registrata** con la specifica
+  congelata com'e', da testare quando il test set sara' cresciuto o sui Big 5.
+  Non diventa un blocco tenuto e non promuove niente: la validazione non e' il
+  test.
+
+`tests/test_forma_venue.py` verifica su dati sintetici la cosa che un errore
+qui non farebbe mai gridare: la forma casalinga non deve vedere le trasferte
+(una squadra che segna 5 gol fuori casa resta a 3 nella sua colonna di casa) e
+nessuna riga deve vedere se stessa.
+
+**Esito, 16 settembre 2026** (`--lancia`, `--analizza`; 759 partite di
+validazione, 76 cluster):
+
+| stima | differenza | IC 95% |
+|---|---|---|
+| **media dei 5 semi** | **+0.00001** | **[-0.00035, +0.00039]** |
+| semi singoli | +0.00005, -0.00008, -0.00007, +0.00008, +0.00008 | tutti a cavallo dello zero |
+
+**Nullo, e il set e' SCARTATO** secondo la regola scritta prima. Non entra fra
+le ipotesi pre-registrate e non costa niente: nessun confronto sul test
+consumato, **m resta 3**.
+
+**La diagnosi e' la parte che vale.** Il modello quelle colonne le usa eccome:
+**il 50.5% del guadagno con il 48% delle colonne**, cioe' esattamente la loro
+quota — non vengono ignorate, sostituiscono le gemelle di BASE. Con
+correlazioni 0.75-0.89 sono un altro modo di dire la stessa cosa, non
+informazione nuova. E' lo stesso schema gia' visto due volte: `diff_rest_days`
+quinta su 61 nel blocco A, `home_quota_minuti_assenti` prima su 61 nel blocco
+B. **Un'importanza alta non e' un miglioramento**: dice dove il modello
+guarda, non se indovina di piu'.
+
+**Limite onesto**: la validazione e' meta' del test set, e la semiampiezza
+dell'intervallo e' 0.00037. Esclude un effetto dell'ordine dei 0.00060 attesi
+da uno shift di 0.10 gol, **non** un effetto piccolo come quello del blocco B
+(0.00027). Se un giorno arrivano i Big 5, la specifica e' congelata in
+`sets.py` e si puo' rimisurare senza riscrivere niente.
+
+#### Blocco C — valore delle rose
+
+Scraper Transfermarkt, HTML statico. Valore dell'XI disponibile e della rosa.
+**Solo se il blocco B ha dato segnale**: se le assenze non contano, il valore
+di mercato che le pesa non contera'.
+
+#### Cosa NON aggiungere, e perche'
+
+- **Posizione in classifica e partite giocate.** Sono funzioni dei risultati
+  passati, gia' catturate meglio da Elo, dai coefficienti Dixon-Coles e dalle
+  medie mobili — in forma continua invece che ordinale. Aggiungerle porta
+  collinearita', non informazione.
+- **Arbitri.** La colonna `referee` non e' nel dataset (verificato).
+  Servirebbe una fonte nuova ed e' il blocco con l'effetto atteso piu' basso:
+  rimandato, o incluso gratis se emerge da un'altra ingestion.
+- **Altre statistiche aggregate di gioco.** Chiuso, vedi il risultato
+  acquisito sopra: sono la stessa informazione delle quote, prezzata peggio.
+
+#### Fuori dal piano
+
+`src/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
+di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un quarto modo
+di misurare la forza della squadra non cambierebbe il quadro.
+
+## Isolamento degli esperimenti — la produzione non si tocca
+
+**Vincolo**: `predict_round`, `close_round`, `report` e M1 devono funzionare
+esattamente come prima durante tutto il lavoro sperimentale. Se un esperimento
+richiede di cambiare un modulo condiviso, lo si duplica o lo si sottoclassa.
+
+**`tests/test_production_unchanged.py` — va lanciato prima di ogni commit.**
+Fissa su 101 partite gia' giocate le quote di ingresso, le fonti scelte da
+`pick_odds`, i lambda di `market.py`, le probabilita' di M1 e tutti i mercati
+di `all_markets`, e verifica che restino identici **bit a bit**. Il campione
+include di proposito le righe dei ripieghi (BW, BbAv, Avg, P). Distingue
+"e' cambiato il codice" da "sono cambiati i dati": le quote di ingresso si
+confrontano per prime. `--sensibilita` prova che la rete scatta: un solo bit
+spostato con `np.nextafter` fa fallire il ramo giusto. `--rigenera` solo dopo
+un cambiamento di produzione voluto e dichiarato.
+
+**Registro dei set — `src/features/sets.py`.** Ogni colonna appartiene a un set
+con uno stato: `BASE` (congelato, 52 colonne scritte per esteso),
+`CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_VENUE` (da misurare).
+I modelli sperimentali dichiarano i set (`M5Set(sets=["BASE", "GIOCATORI"])`);
+una colonna non registrata resta fuori per default. `tests/test_sets.py`
+fallisce se BASE cambia di una colonna o se il dataset contiene colonne che
+nessun set riconosce.
+
+**Quello che il registro NON ha ancora toccato, e va saputo.** `report.py`
+costruisce M4 da `models/gbm.py` con le esclusioni di default: la sezione di
+divergenza del report vede quindi le colonne GIOCATORI da quando il blocco e'
+stato ammesso. E' produzione e non e' stato modificato. Da qui in poi le
+costanti `BLOCCHI_*` di `gbm.py` non si toccano piu'.
+
+**Esperimenti — `src/experiments/`.** Leggono tutto, scrivono solo in
+`experiments/output/`, gitignorato tranne i `riassunto_*`.
+`experiments.proteggi_produzione()` sostituisce `to_parquet` e `to_csv` nel
+processo dell'esperimento e rifiuta qualsiasi scrittura in `data/processed/` o
+`track_record/`: una convenzione regge finche' qualcuno non copia una riga da
+`evaluate.py`, la guardia no. I modelli (`experiments/modelli.py`) sottoclassano
+`MarketAnchoredGBM` senza modificarlo: `M5Set` (set dichiarati), `M5Colonne`
+(colonne derivate), `M5MediaSemi` (media dei log-lambda di piu' semi,
+ricostruibile esatta a posteriori — verificato bit a bit).
+
+**Criterio di promozione in produzione.** Un set sperimentale entra in
+`predict_round` solo se **batte il mercato** con intervallo che non tocca lo
+zero, **dopo correzione per confronti multipli**. Finche' non succede, la
+produzione resta su M1. Nessuna promozione perche' "sembra meglio".
+
+### Prevedere una giornata con M5 senza promuoverlo
+
+`src/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
+calendario, stesse quote, stesse feature, stesse protezioni sul calcio
+d'inizio — passandogli `M5MediaSemi(["BASE"])` e `dry_run=True`. Stampa M5
+accanto a M1 con lo scarto per partita e non tocca il registro.
+
+**Perche' non e' una scorciatoia verso la produzione.** M5 sul test set e'
+indistinguibile dal mercato: il criterio di promozione non e' soddisfatto e
+`predict_round` resta su M1. Questo comando serve a vedere **dove** M5 si
+scosta, come la sezione 3 del report ma con il modello giusto (il report usa
+M4 senza mercato, che parte da zero e diverge ovunque).
+
+**Quanto si scosta, misurato sulla giornata 4 della 2026/27** (`--as-of
+2026-09-11`, training tagliato alla stessa data): scarto massimo sull'1X2
+**0.013**, mediano **0.005**. Lecce-Monza e Genoa-Frosinone i due estremi,
+Atalanta-Cagliari praticamente identico (0.001). E' la conferma pratica di
+cio' che il test set dice in forma statistica: **ancorato al mercato e senza
+segnale nuovo, M5 resta incollato al mercato.**
+
+**Il blocco GIOCATORI non entra in questa previsione**, ed e' voluto: per una
+partita futura le assenze non sono nel dataset (servirebbe `ingest --stage
+missing` sul turno in arrivo), quindi un M5 con quelle colonne girerebbe con
+NaN dove in addestramento aveva dati.
+
+### Seed averaging — `M5MediaSemi`, 15 settembre 2026
+
+Media geometrica dei lambda di cinque LightGBM con semi diversi, modello nuovo
+accanto a M5 (che non e' stato toccato). Non e' un test di ipotesi: e' una
+riduzione di varianza della stima, e ricostruibile esatta dai cinque modelli
+singoli (verificato bit a bit). Effetto misurato sul blocco giocatori:
+l'intervallo della differenza si stringe da ±0.00027 (seme singolo) a
+±0.00022, e la stima si assesta a -0.00025, al centro dei cinque semi. **Per
+le misure future di un blocco si usa la media dei semi come stima, dichiarata
+prima**, cosi' un risultato non dipende dal seme che capita.
+
+### Collinearita' — nessuna riduzione, BASE resta com'e'
+
+`python -m src.experiments.collinearita --misura`, **in validazione**
+(2021/22, 2022/23, 759 partite), tre semi. Soglie dichiarate prima: selezione
+per correlazione assoluta sopra **0.95** (golosa, nell'ordine di BASE), PCA per
+blocco di statistica fino al **95%** della varianza. Statistiche stimate solo
+sulle stagioni precedenti alla validazione, senza burn-in e senza la stagione
+in corso. La selezione toglie esattamente le gemelle strutturali (52 -> 45);
+la PCA scende a 31 componenti.
+
+| seme | selezione45 − BASE | pca31 − BASE |
+|---|---|---|
+| 0 | +0.00009 [-0.00010, +0.00029] | +0.00008 [-0.00035, +0.00050] |
+| 1 | -0.00008 [-0.00029, +0.00012] | -0.00005 [-0.00048, +0.00039] |
+| 2 | +0.00009 [-0.00012, +0.00030] | +0.00006 [-0.00031, +0.00044] |
+
+**Nessuna delle due si distingue da BASE, e il segno oscilla fra i semi.**
+La collinearita' non sta costando niente di misurabile a M5: LightGBM la
+assorbe. BASE resta congelato com'e'. Nessun confronto sul test e' stato
+consumato.
+
+### Baseline di mercato — B365 con Shin resta, 15 settembre 2026
+
+`python -m src.experiments.baseline_mercato`, **in validazione** (2021/22,
+2022/23): anche scegliere la baseline guardando il test sarebbe una ricerca di
+specifica sul test. Funzioni nuove in `market.py` (`devig_power`,
+`devig_odds_ratio`, `consenso`, `market_block_alternativo`), fuori dal percorso
+di produzione, con non regressione verificata.
+
+**Vincolo sui book**: solo book presenti nello snapshot di produzione. B365
+(100% ovunque), BW (buco nel 2024/25, 63%), `Avg` (100% dal 2019/20). Betfair,
+BetVictor, Paddy Power e Sky Bet coprono solo le ultime stagioni; Pinnacle e'
+morto; `Max` non e' un prezzo de-viggabile.
+
+| candidata − produzione | differenza | IC 95% |
+|---|---|---|
+| B365 proporzionale | +0.00004 | [-0.00033, +0.00039] |
+| B365 potenza | +0.00003 | [-0.00013, +0.00019] |
+| B365 odds ratio | +0.00001 | [-0.00005, +0.00006] |
+| consenso B365+BW+Avg, Shin | -0.00012 | [-0.00042, +0.00018] |
+| consenso, proporzionale | -0.00007 | [-0.00059, +0.00044] |
+| consenso, potenza | -0.00010 | [-0.00040, +0.00020] |
+
+**Tutte indistinguibili dalla produzione.** Il metodo di de-vigging quasi non
+conta (odds ratio contro Shin: intervallo largo appena ±0.00005); il consenso
+fra piu' book ha la stima puntuale migliore ma non si distingue. Con i book
+disponibili il venerdi', non esiste una baseline dimostrabilmente piu' forte:
+**i confronti fatti finora contro B365/Shin non erano contro un avversario
+debole.**
+
+## Ipotesi PRE-REGISTRATE — congelate qui, da testare su dati che ancora non esistono
+
+**A cosa serve questa sezione.** Una specifica scelta dopo aver visto i dati
+non e' un risultato, ma non e' nemmeno niente: e' un'ipotesi, e diventa
+testabile il giorno in cui arrivano dati nuovi. Scriverla qui, con la data e il
+numero osservato, e' cio' che la rende pre-registrata rispetto a quei dati.
+**Finche' resta qui non conta come risultato, non promuove niente e non entra
+in produzione.** Chi la testera' deve usare la specifica come sta scritta, su
+dati mai visti prima — test set cresciuto, o Big 5 — e contarla nel proprio m.
+
+### 1. Blocco B in forma simmetrica — registrata il 15 settembre 2026
+
+**Specifica congelata**: `M5Set(sets=["BASE", "GIOCATORI"], togli=(
+"home_quota_minuti_assenti", "away_quota_minuti_assenti"))` contro
+`M5Set(sets=["BASE"])` — cioe' il blocco giocatori senza le due colonne
+separate di minuti, con la sola `diff_quota_minuti_assenti` al loro posto.
+Stima: media di 5 semi (0-4) sui log-lambda. Confronto appaiato, bootstrap a
+cluster sulla giornata.
+
+**Osservato oggi** su test 2324-2526 (1140 partite): **-0.00026, IC
+[-0.00044, -0.00008], p = 0.0021**; per seme, intervallo sotto zero in 5 su 5.
+
+**Perche' non e' un risultato.** La variante e' nata dal test di simmetria,
+cioe' dopo aver visto che l'asimmetria 20:1 andava spiegata. Su questi dati
+non la si puo' promuovere a specifica principale: sarebbe scegliere la
+formulazione dopo il risultato. Su dati nuovi lo e' a pieno titolo.
+
+**Predizione che la falsifica**: su dati nuovi la differenza deve restare
+negativa e dello stesso ordine (fra -0.0002 e -0.0003). Se cambia segno o si
+dimezza, il guadagno del blocco B era rumore di questo test set.
+
+### 2. Forma per sede (FORMA_VENUE) — NON entrata: nulla in validazione
+
+Misurata il 16 settembre 2026 e scartata (+0.00001, IC [-0.00035, +0.00039]),
+vedi la sezione del blocco D. Resta qui come esempio del funzionamento:
+l'elenco si popola solo quando la validazione mostra qualcosa, e in questo caso
+la questione si e' chiusa senza spendere un confronto.
 
 ## Il ciclo di vita della giornata — due comandi, nessun giorno della settimana
 
@@ -705,6 +1359,21 @@ giornata richiesta non e' coperta — chiedere la giornata 12 a settembre non
 produce un errore, produce zero quote, e senza messaggio si cercherebbe il
 problema nel posto sbagliato.
 
+**Lo snapshot VUOTO e' lo stato normale fra un turno e l'altro, e faceva
+cadere tutto.** Quando football-data risponde ma la Serie A non e' ancora
+pubblicata — mercoledi', per dire — `--stage fixtures` riscrive il file con
+**zero righe** e `downloaded_at` resta NaT. `load_fixtures_odds` ci faceva
+`strftime` sopra: `ValueError: NaTType does not support strftime`. Non cadeva
+solo la previsione: `attach_odds` sta anche dentro `rounds --status` e
+`close_round`, quindi il 16 settembre 2026 nessuno dei tre partiva. Corretto
+con una guardia su `pd.notna(scaricato)` piu' un messaggio esplicito: un turno
+non ancora pubblicato non e' un errore e lo deve dire. `predict.py` e'
+produzione, quindi la correzione e' stata verificata con
+`tests/test_production_unchanged.py` — M1 identico bit a bit, impronta
+invariata. **Il bug non si vede il venerdi'**, quando lo snapshot e' pieno: si
+vede solo quando il file c'e' ed e' vuoto, ed e' il motivo per cui era rimasto
+li'.
+
 **Ripiego manuale.** `manual/upcoming_odds.csv` resta come rete di sicurezza
 per le partite che lo snapshot non copre o quando il sito e' giu' (succede:
 risponde 503 su tutto il dominio). Stesse colonne, precedenza piu' bassa.
@@ -748,15 +1417,18 @@ mettere il codice in un file.
 
 ## Cosa manca dall'utente
 
-**Verificato il 5 settembre 2026**: in `manual/` ci sono solo
-`team_name_map.json`, `team_name_map_suggested.json` e `upcoming_odds.csv`.
-Una versione precedente di questo documento dava `derbies.csv` per fatto: non
-c'e'. Chi scrive `context.py` non deve darlo per scontato.
+**Aggiornato l'8 settembre 2026.**
 
-- `manual/derbies.csv` — **MANCANTE**. Colonne `home_team, away_team,
-  intensity` con intensity in (city/regional/rivalry). ~48 coppie per la
-  Serie A. La coppia va trattata come NON ordinata:
-  `tuple(sorted([casa, trasferta]))`
+- `manual/derbies.csv` — **C'E', MA VA RIVISTO.** 55 coppie compilate durante
+  il blocco A perche' senza il file il derby non era misurabile: 5 `city`,
+  42 `regional`, 8 `rivalry`, che agganciano 503 partite su 4580 (11.0%).
+  **Non e' una fonte, e' un'opinione plausibile**: le coppie `regional` sono
+  generose (mezza Lombardia con mezza Lombardia) e le `rivalry` sono
+  discrezionali. Se il blocco A dovesse dipendere da questa colonna, il primo
+  posto dove guardare e' questo file. La coppia e' trattata come NON ordinata,
+  `tuple(sorted([casa, trasferta]))`, e `context.py` funziona anche senza il
+  file: in quel caso le due colonne del derby non vengono prodotte, invece di
+  essere messe a zero — assente e falso non sono la stessa cosa
 - `manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
   date, coach_out, coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
 - `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
