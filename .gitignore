@@ -28,3 +28,10 @@ logs/
 
 # web/openapi.json INVECE e' versionato: e' il contratto passato al frontend,
 # e un contratto che vive solo in un processo non si puo' rivedere in un diff.
+
+# Frontend: dipendenze e build si rigenerano da package-lock.json.
+# `.env.local` contiene l'URL del tunnel, che e' effimero e personale: fuori.
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+frontend/.env

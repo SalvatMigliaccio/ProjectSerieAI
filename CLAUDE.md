@@ -1233,10 +1233,15 @@ lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 se una rotta dichiara un metodo diverso da GET/HEAD/OPTIONS.
 
 **Struttura del monorepo**: `src/` e' la pipeline (produzione), `backend/`
-l'API che la legge, e il frontend andra' in una cartella sua. La dipendenza e'
-a senso unico — `backend` importa `src`, mai il contrario — ed e' il motivo per
-cui spostare l'API fuori da `src/` non ha richiesto di toccare un solo modulo
-di produzione.
+l'API che la legge, `frontend/` la dashboard (React + TypeScript, Vite). La
+dipendenza e' a senso unico — `frontend` -> `backend` -> `src`, mai il
+contrario — ed e' il motivo per cui spostare l'API fuori da `src/` non ha
+richiesto di toccare un solo modulo di produzione.
+
+Il frontend parla con l'API **solo via HTTP e solo in GET**: non importa nulla
+di Python e non conosce i percorsi dei file. I tipi in `frontend/src/api/types.ts`
+ricalcano `web/openapi.json`, che e' il contratto e va riesportato quando gli
+schemi cambiano (`tests/test_api.py` fallisce se diverge).
 
 Il motivo e' lo stesso per cui il registro e' append-only con backup e con due
 difese sul calcio d'inizio: **una previsione vale solo se e' stata scritta
@@ -1255,6 +1260,48 @@ Garanzie verificate, non promesse: `backend/api/__init__.py` sostituisce
 — lo stesso idioma di `src/experiments/` — e `tests/test_api.py` verifica che
 nessuna rotta di scrittura esista e che `lightgbm` non finisca in
 `sys.modules`: **l'API non esegue mai modelli.**
+
+### Le selezioni si mostrano, il valore atteso no — regola
+
+Il progetto **mostra le selezioni** su tutti i mercati (`report.selezioni`,
+tabella di `predict_round`, sezione del report, `GET /api/selections`), con
+probabilita' e **quota equa** accanto. Serve a scegliere cosa giocare sapendo
+quanto e' probabile e quanto pagherebbe a valore atteso zero.
+
+**Quello che non si espone mai, da nessuna parte: valore atteso, puntata
+consigliata, stake, "value".** Non e' prudenza, e' aritmetica misurata: M1 *e'*
+la linea di apertura del book con il margine tolto, quindi l'EV calcolato sulle
+sue probabilita' contro quelle stesse quote e' **-5.2% su ogni riga**, e zero
+giocate su 3420 risultano positive. Un numero del genere in interfaccia
+sarebbe circolare e falso insieme.
+
+**Filtrare per quota sposta la varianza, non il margine.** Vale per la soglia
+minima del report (1.50) come per il tetto della dashboard (1.20): il margine
+del book e' identico su tutti i mercati derivati dalle stesse quote. Misurato:
+la doppia chance piu' sicura vince l'80.6% delle volte e rende -2.9%, con
+intervallo che esclude lo zero.
+
+**La linea principale e' quella di M1, e non si ritaglia a richiesta.**
+`GET /api/picks` non accetta parametri di quota: usa
+`config.QUOTA_MINIMA_SELEZIONE` e restituisce le stesse selezioni che
+`predict_round` stampa il venerdi' e che il report pubblica. La banda
+regolabile (`/api/selections`) e' una lettura **secondaria**, dichiarata tale
+anche in pagina. Se una soglia scelta nell'interfaccia potesse ridefinire le
+selezioni del modello, il track record misurerebbe una cosa e la dashboard ne
+mostrerebbe un'altra — ed e' il modo piu' rapido di rendere insensato tutto il
+resto. `tests/test_api.py` verifica che nessun parametro le sposti.
+
+**La "selezione migliore" si ricalcola, non si salva.** Una per partita, la
+piu' probabile dentro la banda di quota richiesta. Il registro conserva i due
+lambda, e da quelli ogni mercato si ricostruisce esatto: congelare la scelta
+significherebbe non poter piu' cambiare il criterio sulle giornate gia' chiuse
+— ed e' proprio il criterio la cosa che si vorra' ritoccare. Vale anche per
+`predict_round`: il registro resta la distribuzione, mai la giocata.
+
+**La quota del book esiste solo per l'1X2**, ed e' l'unica che il registro
+conserva. Per doppia chance, over/under e mercati gol resta vuota: stimarla
+applicando un margine medio sarebbe inventare un numero con l'aria di essere
+misurato — vale per il report come per l'API.
 
 ### `predict_round` — da aperta a predetta
 

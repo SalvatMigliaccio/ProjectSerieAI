@@ -22,7 +22,13 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Query
 
-from . import schemas, status as status_mod, store
+from . import (
+    schemas,
+    selections as selections_mod,
+    standings as standings_mod,
+    status as status_mod,
+    store,
+)
 
 log = logging.getLogger("api.routes")
 
@@ -111,6 +117,65 @@ def get_track_record(season: str) -> dict:
     if record is None:  # pragma: no cover
         raise HTTPException(status_code=404, detail=f"season '{season}' not found")
     return record
+
+
+@router.get("/standings/{season}", response_model=schemas.Standings,
+            summary="League table from played matches")
+def get_standings(season: str) -> dict:
+    """
+    The table, computed from results — a fact, not a forecast.
+
+    Tied teams are separated head-to-head first, as Serie A does, and not by
+    goal difference: the shortcut produces a table that looks right and is
+    wrong exactly when the standings matter.
+    """
+    table = standings_mod.standings(season)
+    if table is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no played match for season '{season}': the table is empty",
+        )
+    return table
+
+
+@router.get("/picks/{season}", response_model=schemas.Picks,
+            summary="The canonical M1 selections — no threshold to move")
+def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> dict:
+    """
+    The main line, and it takes no odds parameter on purpose.
+
+    These are the selections `predict_round` prints on Friday and the weekly
+    report shows, with `config.QUOTA_MINIMA_SELEZIONE` as the declared floor.
+    The band explorer (`/api/selections`) sits beside them as an adjustable
+    second reading: if a threshold chosen in the interface could redefine the
+    main line, the track record would be measuring one thing while the
+    dashboard advertised another.
+    """
+    _known_season(season)
+    return selections_mod.picks(season, matchday=matchday)
+
+
+@router.get("/selections/{season}", response_model=schemas.Selections,
+            summary="Markets priced under a ceiling on the odds")
+def get_selections(
+    season: str,
+    max_odds: float = Query(1.40, gt=1.0, le=100.0,
+                            description="Ceiling on the FAIR odds, 1/p"),
+    min_odds: float | None = Query(
+        1.30, gt=1.0, le=100.0,
+        description="Floor on the fair odds. Below it the market pays too "
+                    "little to be worth a bet; the band is the useful filter"),
+    matchday: int | None = Query(None, ge=1, le=38),
+) -> dict:
+    _known_season(season)
+    if min_odds is not None and min_odds > max_odds:
+        raise HTTPException(
+            status_code=404,
+            detail=f"min_odds ({min_odds}) is above max_odds ({max_odds}): "
+                   f"that band is empty",
+        )
+    return selections_mod.selections(
+        season, max_odds=max_odds, min_odds=min_odds, matchday=matchday)
 
 
 @router.get("/status", response_model=schemas.Status,

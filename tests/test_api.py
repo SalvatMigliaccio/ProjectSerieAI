@@ -30,6 +30,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -54,6 +55,12 @@ REQUIRED_SEASON_FIELDS = [
     "season", "model_version", "matches_predicted", "matches_resolved",
     "rps_production", "rps_backtest_reference", "hits", "hits_denominator",
     "hit_rate", "sample_significant", "significance",
+]
+
+REQUIRED_SELECTION_FIELDS = [
+    "matchday", "kickoff_utc", "home_team", "away_team", "market", "market_label",
+    "probability", "fair_odds", "book_odds", "status", "valid",
+    "goals_home", "goals_away", "won",
 ]
 
 FORBIDDEN_FIELDS = ["expected_value", "ev", "stake", "bet", "edge", "value"]
@@ -149,6 +156,176 @@ def test_season_summary_matches_the_archive() -> None:
     assert summary["rps_backtest_reference"] == config.TEST_RPS_REFERENCE
 
 
+def test_standings_arithmetic_holds() -> None:
+    """
+    The table is arithmetic, so it can be checked as arithmetic.
+
+    Every invariant here would break silently in a table that still looks
+    plausible: a match counted once, a draw scored as a win, a goal credited to
+    one side only.
+    """
+    payload = client.get(f"/api/standings/{SEASON}").json()
+    table = payload["table"]
+    assert len(table) == payload["teams"]
+    assert sum(row["played"] for row in table) == 2 * payload["matches_played"]
+    assert sum(row["goals_for"] for row in table) == sum(
+        row["goals_against"] for row in table)
+
+    for row in table:
+        assert row["played"] == row["won"] + row["drawn"] + row["lost"], row["team"]
+        assert row["points"] == 3 * row["won"] + row["drawn"], row["team"]
+        assert row["goal_difference"] == row["goals_for"] - row["goals_against"]
+
+
+def test_standings_are_ordered_and_numbered() -> None:
+    table = client.get(f"/api/standings/{SEASON}").json()["table"]
+    assert [row["position"] for row in table] == list(range(1, len(table) + 1))
+    points = [row["points"] for row in table]
+    assert points == sorted(points, reverse=True), "points must never go back up"
+
+
+def test_standings_404_when_nothing_was_played() -> None:
+    response = client.get("/api/standings/1999-00")
+    assert response.status_code == 404
+    assert "1999-00" in response.json()["detail"]
+
+
+def test_picks_use_the_threshold_the_project_declared() -> None:
+    """The main line comes from config, not from the caller."""
+    payload = client.get(f"/api/picks/{SEASON}").json()
+    assert payload["min_odds"] == config.QUOTA_MINIMA_SELEZIONE
+    for selection in payload["with_min_odds"]:
+        assert selection["fair_odds"] >= config.QUOTA_MINIMA_SELEZIONE
+
+
+def test_picks_cannot_be_recut_by_the_request() -> None:
+    """
+    Query parameters must not move the main line.
+
+    If they could, the dashboard would advertise one set of selections while
+    the track record measured another — which is the whole reason this endpoint
+    takes no odds parameter.
+    """
+    plain = client.get(f"/api/picks/{SEASON}").json()
+    tampered = client.get(
+        f"/api/picks/{SEASON}?min_odds=1.20&max_odds=1.30&quota=1.10").json()
+    assert plain == tampered
+
+
+def test_picks_are_one_row_per_match() -> None:
+    payload = client.get(f"/api/picks/{SEASON}").json()
+    for view in ("most_probable", "with_min_odds"):
+        rows = payload[view]
+        assert rows, view
+        keys = [(r["matchday"], r["home_team"], r["away_team"]) for r in rows]
+        assert len(keys) == len(set(keys)), f"{view}: a match must appear once"
+
+    scored = [r for r in payload["with_min_odds"] if r["won"] is not None and r["valid"]]
+    assert payload["with_min_odds_resolved"] == len(scored)
+    assert payload["with_min_odds_won"] == sum(1 for r in scored if r["won"])
+
+
+def test_default_band_is_the_declared_one() -> None:
+    """1.30-1.40 by default: below it the market pays too little to be a bet."""
+    payload = client.get(f"/api/selections/{SEASON}").json()
+    assert payload["min_odds"] == 1.30
+    assert payload["max_odds"] == 1.40
+    assert all(1.30 <= s["fair_odds"] <= 1.40 for s in payload["selections"])
+
+
+def test_selections_respect_the_band() -> None:
+    payload = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.30&max_odds=1.40").json()
+    assert payload["count"] > 0, "rounds 3 and 4 have selections in this band"
+
+    for selection in payload["selections"]:
+        assert 1.30 <= selection["fair_odds"] <= 1.40
+        for field in REQUIRED_SELECTION_FIELDS:
+            assert field in selection, f"missing field: {field}"
+        assert selection["market"] not in payload["excluded_markets"]
+        if selection["market"] not in ("1", "X", "2"):
+            # The register prices 1X2 and nothing else. Anything here would be
+            # an average margin dressed up as a measurement.
+            assert selection["book_odds"] is None
+
+    assert payload["won"] <= payload["resolved"] <= payload["count"]
+    assert payload["matches_covered"] <= payload["matches_total"]
+
+
+def test_best_per_match_is_one_row_per_match_and_the_most_probable() -> None:
+    """
+    The view that answers "what do I actually bet on this match".
+
+    Two invariants: one row per match, and that row is the highest probability
+    available inside the band — otherwise the panel would be showing a pick
+    that is not the best one while calling it that.
+    """
+    payload = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.30&max_odds=1.40").json()
+    best = payload["best_per_match"]
+    assert best, "the band has selections, so it has a best one per match"
+
+    keys = [(s["matchday"], s["home_team"], s["away_team"]) for s in best]
+    assert len(keys) == len(set(keys)), "a match must appear once"
+    assert len(keys) == payload["matches_covered"]
+
+    by_match: dict[tuple, float] = {}
+    for selection in payload["selections"]:
+        key = (selection["matchday"], selection["home_team"], selection["away_team"])
+        by_match[key] = max(by_match.get(key, 0.0), selection["probability"])
+    for selection in best:
+        key = (selection["matchday"], selection["home_team"], selection["away_team"])
+        assert selection["probability"] == by_match[key]
+
+    scored = [s for s in best if s["won"] is not None and s["valid"]]
+    assert payload["best_resolved"] == len(scored)
+    assert payload["best_won"] == sum(1 for s in scored if s["won"])
+
+
+def test_selections_exclude_invalid_rows_from_the_denominator() -> None:
+    """A prediction written after kickoff has a result but must not be scored."""
+    payload = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.20&max_odds=1.50").json()
+    scored = [s for s in payload["selections"] if s["won"] is not None and s["valid"]]
+    assert payload["resolved"] == len(scored)
+    assert payload["won"] == sum(1 for s in scored if s["won"])
+
+    late = [s for s in payload["selections"] if not s["valid"]]
+    if late:
+        assert all(s["goals_home"] is not None for s in late), "the result is known"
+
+
+def test_unplayed_selection_has_null_outcome() -> None:
+    payload = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.10&max_odds=2.00").json()
+    for selection in payload["selections"]:
+        if selection["status"] == store.STATUS_PREDICTED:
+            assert selection["won"] is None, "an unplayed bet has not been won"
+
+
+def test_every_market_can_be_resolved() -> None:
+    """
+    `all_markets` is allowed to grow; `resolve` must never fall behind it.
+
+    If a market were added upstream and not handled here, the dashboard would
+    quietly report "not won" on bets that won — a wrong number that raises
+    nothing. This walks the real market list instead of a copy of it.
+    """
+    from src.models.baseline import all_markets
+
+    from backend.api.selections import resolve
+
+    markets = all_markets(np.array([1.6]), np.array([1.1])).columns
+    for market in markets:
+        assert isinstance(resolve(market, 2, 1, "H"), bool), market
+
+
+def test_selection_band_is_validated() -> None:
+    response = client.get(f"/api/selections/{SEASON}?max_odds=1.10&min_odds=1.50")
+    assert response.status_code == 404
+    assert "1.5" in response.json()["detail"]
+
+
 def test_missing_data_is_404_with_a_readable_message() -> None:
     response = client.get("/api/season/1999-00")
     assert response.status_code == 404
@@ -201,6 +378,28 @@ def test_cache_headers() -> None:
     assert etag
     again = client.get(f"/api/season/{SEASON}", headers={"If-None-Match": etag})
     assert again.status_code == 304, "an unchanged track record must answer 304"
+    # A 304 must carry NO body. uvicorn sets Content-Length to 0 on it and
+    # raises if bytes follow; TestClient does not, so without this assertion
+    # the bug only shows up against the real server — as it did.
+    assert again.content == b"", "a 304 must have an empty body"
+
+
+def test_etag_identifies_the_resource() -> None:
+    """
+    One tag per URL, not one tag for the whole API.
+
+    A shared tag means a cache can answer 304 for a resource whose content it
+    never had. It also has to change when the payload's shape changes, or a
+    redeployed field stays invisible behind a stale cache.
+    """
+    season_tag = client.get(f"/api/season/{SEASON}").headers["etag"]
+    rounds_tag = client.get(f"/api/rounds/{SEASON}").headers["etag"]
+    band_tag = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.30&max_odds=1.40").headers["etag"]
+    other_band = client.get(
+        f"/api/selections/{SEASON}?min_odds=1.20&max_odds=1.50").headers["etag"]
+
+    assert len({season_tag, rounds_tag, band_tag, other_band}) == 4
 
 
 def test_openapi_file_is_in_sync() -> None:

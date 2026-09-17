@@ -461,6 +461,9 @@ sono bloccate a runtime. Il track record lo scrivono `predict_round` e
 | `GET /api/rounds/{season}/{n}` | le partite di una giornata |
 | `GET /api/matches/{season}` | tutte le partite. Filtri: `team`, `status`, `from`, `to` |
 | `GET /api/track-record/{season}` | serie per giornata e per partita, calibrazione |
+| `GET /api/standings/{season}` | la classifica calcolata dai risultati. Spareggio: punti, **scontri diretti**, differenza reti |
+| `GET /api/picks/{season}` | **le selezioni principali**: una per partita, con la soglia dichiarata in `config.QUOTA_MINIMA_SELEZIONE`. Nessun parametro di quota |
+| `GET /api/selections/{season}` | esploratore: i mercati dentro una banda. Filtri: `min_odds`/`max_odds` (default 1.30-1.40), `matchday` |
 | `GET /api/status` | ultime esecuzioni, giornata corrente, eta' dello snapshot, prossima azione |
 | `GET /api/health` | vivo/degradato e data dell'ultimo aggiornamento |
 
@@ -472,6 +475,53 @@ metriche**, e `invalid_reason` dice perche'.
 **Niente valore atteso, stake o consigli di scommessa.** Quota equa e overround
 si', sono descrittivi: l'EV calcolato sulle probabilita' di M1 contro le quote
 da cui derivano e' circolare, e misurato vale -5.2% su ogni riga.
+
+### Le selezioni sotto soglia
+
+`GET /api/selections/2627?max_odds=1.20` ricostruisce **tutti i mercati** che
+il modello prezza — 1X2, doppia chance, over/under su cinque linee, gol-gol,
+no gol, casa segna, fuori segna — e tiene quelli la cui **quota equa** sta
+sotto la soglia. Non serve nessun dato nuovo: ogni mercato e' una somma diversa
+sulla stessa matrice dei risultati, e i due lambda sono nel registro.
+
+Riusa `report.selezioni()`, la stessa funzione della tabella di
+`predict_round` e del report HTML: due implementazioni divergerebbero, e il
+primo sintomo sarebbe una dashboard che contraddice il terminale del venerdi'.
+
+Due cose da sapere leggendo la risposta:
+
+- **`book_odds` e' null su tutto tranne l'1X2.** Il registro conserva solo
+  quella. Per doppia chance e mercati gol il prezzo vero ce l'ha il tuo book:
+  stimarlo con un margine medio sarebbe un numero inventato con l'aria di
+  essere misurato.
+- **I mercati triviali non escono mai** (`over 0.5`, `under 4.5`, ...): nessun
+  book li paga abbastanza da essere una giocata, e sotto 1.20 sarebbero tre
+  quarti dell'elenco. Sono elencati in `excluded_markets`, cosi' l'esclusione
+  si vede invece di essere silenziosa.
+
+**La banda, non il tetto.** Sotto 1.20 restano quasi solo quasi-certezze che
+pagano troppo poco; il default e' **1.30-1.40**, dove probabilita' e prezzo
+stanno insieme. `min_odds` e `max_odds` cambiano la banda.
+
+**`best_per_match`**: una selezione per partita, la piu' probabile dentro la
+banda (a parita', la quota piu' alta). Non e' salvata nel registro, si
+**ricalcola** dai due lambda: congelarla significherebbe non poter piu'
+cambiare il criterio sulle giornate gia' chiuse.
+
+**`matches_covered` contro `matches_total`**: una banda stretta lascia partite
+senza nessun mercato dentro, e il buco va letto — 1.40-1.50 copre 12 partite su
+18, 1.30-1.40 ne copre 17.
+
+Misurato sulle giornate 3 e 4:
+
+| banda | selezioni | vinte | una per partita |
+|---|---|---|---|
+| 1.20 - 1.30 | 22 su 16 partite | 15/18 | — |
+| **1.30 - 1.40** | **36 su 17 partite** | **26/32** | **13/15** |
+| 1.40 - 1.50 | 20 su 12 partite | 15/19 | — |
+
+Sotto quota equa 1.20 ci sarebbero 12 selezioni (10 vinte su 11), ma con i
+mercati triviali dentro sarebbero 41, di cui 30 fra `over 0.5` e `under 4.5`.
 
 CORS: `AI_NAPLES_CORS_ORIGINS="http://localhost:5173,https://tuo-frontend"`.
 Senza variabile valgono i soli localhost di sviluppo, mai `*`.
@@ -556,6 +606,47 @@ schtasks /run /tn "AI_Naples predict_round"
 Get-Content logs\scheduler_*.log -Tail 30
 Get-Content logs\last_run.json
 ```
+
+---
+
+## 7quinquies. Frontend — React + TypeScript
+
+```bash
+cd frontend
+npm install            # solo la prima volta
+npm run dev            # http://localhost:5173
+npm run build          # typecheck + bundle in frontend/dist
+npm run preview        # serve il dist gia' costruito
+npm run typecheck      # solo tsc, senza bundle
+```
+
+Serve l'API accesa: `python -m backend.api --port 8000` dalla radice del
+repository, in un altro terminale.
+
+**L'URL dell'API e' una variabile d'ambiente.** Copia `.env.example` in
+`.env.local` e metti `VITE_API_BASE_URL`. Per provare un tunnel senza
+ricostruire, si puo' passare `?api=https://...` nella query: viene ricordato in
+`localStorage`, perche' l'URL di ngrok cambia a ogni riavvio.
+
+**La porta 5173 non e' casuale**: e' fra le origini CORS che l'API accetta per
+default. Se la cambi, aggiorna `AI_NAPLES_CORS_ORIGINS` lato backend, o il
+browser blocchera' le chiamate senza che il server se ne accorga.
+
+Due schermate, in `src/pages/`:
+
+| schermata | cosa mostra |
+|---|---|
+| `/` | cosa fa il modello, l'avvertenza sul non essere uno strumento di scommessa, e tre numeri da `/api/season` |
+| `/#/dashboard` | barra di stato, selettore delle 38 giornate, tabella partite con riga espandibile, pannello track record con RPS cumulativo |
+
+Il router e' `HashRouter`: il sito e' statico e puo' finire su qualsiasi host
+senza regole di rewrite, e con i path veri ricaricare `/dashboard` darebbe 404.
+
+**Cosa il frontend non fa, e non deve fare.** Nessuna chiamata che non sia una
+GET, nessun consiglio di scommessa, nessun valore atteso. Quota equa e
+overround si', sono descrittivi. I campi null si mostrano vuoti — mai zero, che
+su un RPS significherebbe previsione perfetta — e le percentuali portano sempre
+il denominatore: `44% (7 su 16)`, mai `44%`.
 
 ---
 

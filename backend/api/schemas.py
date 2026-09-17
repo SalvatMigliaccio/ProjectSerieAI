@@ -218,6 +218,125 @@ class TrackRecord(Base):
 # Status and health
 # ---------------------------------------------------------------------------
 
+class Selection(Base):
+    """
+    One market of one match, priced by the model.
+
+    `fair_odds` is 1/p — the price at which the bet would break even. It exists
+    for every market. `book_odds` exists only for 1X2, because that is all the
+    register stores: for double chance, over/under and goal markets the price
+    has to come from the reader's own bookmaker, and estimating it by applying
+    an average margin would be a made-up number that looks measured.
+    """
+
+    matchday: int
+    kickoff_utc: str | None = None
+    home_team: str
+    away_team: str
+    market: str = Field(description="Raw market name, e.g. 1X, over 2.5, casa segna")
+    market_label: str = Field(description="Readable label, e.g. '1X (Como o pari)'")
+    probability: float
+    fair_odds: float
+    book_odds: float | None = Field(
+        None, description="Registered bookmaker price. Only 1X2 has one")
+    status: str
+    valid: bool
+    goals_home: int | None = None
+    goals_away: int | None = None
+    won: bool | None = Field(None, description="Null while the match is unplayed")
+
+
+class StandingRow(Base):
+    position: int
+    team: str
+    played: int
+    won: int
+    drawn: int
+    lost: int
+    goals_for: int
+    goals_against: int
+    goal_difference: int
+    points: int
+
+
+class Standings(Base):
+    """
+    La classifica: aritmetica sui risultati, non una previsione.
+
+    `tie_break` dichiara come sono separate le squadre a pari punti, perche' in
+    Serie A contano prima gli scontri diretti e non la differenza reti — una
+    tabella ordinata nel modo sbagliato sembra giusta proprio nelle settimane
+    in cui qualcuno la guarda.
+    """
+
+    season: str
+    matches_played: int
+    teams: int
+    last_match_date: str | None = None
+    tie_break: str
+    table: list[StandingRow] = []
+
+
+class Picks(Base):
+    """
+    The canonical selections. No threshold field to move, by design.
+
+    `most_probable` is the most likely market of each match, whatever it pays;
+    `with_min_odds` is the most likely among those paying at least `min_odds`,
+    which comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.
+    Both are the rules the project has used since the first registered round.
+    """
+
+    season: str
+    matchday: int | None = None
+    min_odds: float = Field(
+        description="The declared floor, config.QUOTA_MINIMA_SELEZIONE. Not a "
+                    "request parameter: the main line cannot be re-cut per call")
+    matches_total: int = 0
+    most_probable: list[Selection] = []
+    most_probable_resolved: int = 0
+    most_probable_won: int = 0
+    with_min_odds: list[Selection] = []
+    with_min_odds_resolved: int = 0
+    with_min_odds_won: int = 0
+
+
+class Selections(Base):
+    """
+    Selections inside an odds band, with hits and their denominator.
+
+    The numbers travel together on purpose: "10 su 11" says what "91%" hides,
+    which is that eleven bets decide nothing. Filtering by odds moves variance,
+    not edge — M1's probabilities are the book's own line with the margin
+    removed, so expected value is minus the margin at every threshold.
+    """
+
+    season: str
+    max_odds: float
+    min_odds: float | None = None
+    matchday: int | None = None
+    excluded_markets: list[str] = Field(
+        [], description="Near-certainties never returned: no book prices them "
+                        "high enough to be a bet, and at a low ceiling they "
+                        "would crowd out everything else")
+    count: int
+    resolved: int
+    won: int
+    matches_total: int = Field(
+        0, description="Matches with a prediction in the requested scope")
+    matches_covered: int = Field(
+        0, description="Of those, how many have at least one market inside the "
+                       "band. A narrow band leaves matches uncovered, and the "
+                       "gap is reported rather than hidden")
+    best_resolved: int = 0
+    best_won: int = 0
+    selections: list[Selection] = []
+    best_per_match: list[Selection] = Field(
+        [], description="One selection per match: the most probable inside the "
+                        "band, highest odds breaking a tie. Recomputed from the "
+                        "stored lambdas, never frozen into the register")
+
+
 class LastRun(Base):
     command: str
     started_at: str | None = None

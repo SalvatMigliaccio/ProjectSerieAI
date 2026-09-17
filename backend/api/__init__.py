@@ -32,8 +32,10 @@ import hashlib
 import logging
 import os
 
+import json
+
 import pandas as pd
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -128,30 +130,56 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # The schema digest is part of every ETag, so a change to a payload's shape
+    # invalidates the browser's cache even though no data file moved. Without
+    # it, a redeployed field would stay invisible behind a 304 until the next
+    # Friday — which is exactly the kind of bug that gets blamed on the
+    # frontend.
+    schema_digest = hashlib.md5(
+        json.dumps(app.openapi(), sort_keys=True).encode()
+    ).hexdigest()[:8]
+
+    def etag_for(request: Request) -> str | None:
+        """
+        ETag over: the schema, the resource asked for, and the data on disk.
+
+        The resource belongs in it because the tag is otherwise identical on
+        every URL, and an entity tag that does not identify the entity is a
+        trap waiting for the first caching proxy.
+        """
+        try:
+            fingerprint = repr(store._fingerprint(store.default_sources()))
+        except Exception:  # noqa: BLE001 - never fail a request over an ETag
+            return None
+        material = f"{schema_digest}|{request.url.path}?{request.url.query}|{fingerprint}"
+        return '"' + hashlib.md5(material.encode()).hexdigest()[:16] + '"'
+
     @app.middleware("http")
     async def cache_headers(request: Request, call_next):
         """
         Cache-Control plus a content-derived ETag.
 
-        The ETag is the fingerprint of the source files: it changes exactly
-        when a command writes, and not once in between. A polling frontend
-        therefore gets 304 on every request between Friday and Tuesday.
+        The data changes twice a week, when `predict_round` and `close_round`
+        write, so a polling frontend gets 304 on nearly every request in
+        between and the server does no work.
         """
-        try:
-            tag = hashlib.md5(
-                repr(store._fingerprint(store.default_sources())).encode()
-            ).hexdigest()[:16]
-        except Exception:  # noqa: BLE001 - never fail a request over an ETag
-            tag = None
+        tag = etag_for(request)
 
-        if tag and request.headers.get("if-none-match") == f'"{tag}"':
-            return JSONResponse(status_code=304, content=None)
+        if tag and request.headers.get("if-none-match") == tag:
+            # A 304 CARRIES NO BODY. uvicorn forces Content-Length to 0 on it
+            # and raises "Response content longer than Content-Length" if
+            # anything is written — `JSONResponse(content=None)` writes b"null"
+            # and takes the request down. Starlette's TestClient does not
+            # enforce that rule, so this only ever failed against the real
+            # server: hence the empty-body assertion in tests/test_api.py.
+            return Response(status_code=304,
+                            headers={"ETag": tag, "Cache-Control": CACHE_CONTROL})
 
         response = await call_next(request)
         if request.method in ("GET", "HEAD") and response.status_code == 200:
             response.headers["Cache-Control"] = CACHE_CONTROL
             if tag:
-                response.headers["ETag"] = f'"{tag}"'
+                response.headers["ETag"] = tag
         return response
 
     @app.exception_handler(FileNotFoundError)

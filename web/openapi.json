@@ -294,6 +294,196 @@
         }
       }
     },
+    "/api/standings/{season}": {
+      "get": {
+        "summary": "League table from played matches",
+        "description": "The table, computed from results — a fact, not a forecast.\n\nTied teams are separated head-to-head first, as Serie A does, and not by\ngoal difference: the shortcut produces a table that looks right and is\nwrong exactly when the standings matter.",
+        "operationId": "get_standings_api_standings__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Standings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/picks/{season}": {
+      "get": {
+        "summary": "The canonical M1 selections — no threshold to move",
+        "description": "The main line, and it takes no odds parameter on purpose.\n\nThese are the selections `predict_round` prints on Friday and the weekly\nreport shows, with `config.QUOTA_MINIMA_SELEZIONE` as the declared floor.\nThe band explorer (`/api/selections`) sits beside them as an adjustable\nsecond reading: if a threshold chosen in the interface could redefine the\nmain line, the track record would be measuring one thing while the\ndashboard advertised another.",
+        "operationId": "get_picks_api_picks__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Picks"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/selections/{season}": {
+      "get": {
+        "summary": "Markets priced under a ceiling on the odds",
+        "operationId": "get_selections_api_selections__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "max_odds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 100.0,
+              "exclusiveMinimum": 1.0,
+              "description": "Ceiling on the FAIR odds, 1/p",
+              "default": 1.4,
+              "title": "Max Odds"
+            },
+            "description": "Ceiling on the FAIR odds, 1/p"
+          },
+          {
+            "name": "min_odds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100.0,
+                  "exclusiveMinimum": 1.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Floor on the fair odds. Below it the market pays too little to be worth a bet; the band is the useful filter",
+              "default": 1.3,
+              "title": "Min Odds"
+            },
+            "description": "Floor on the fair odds. Below it the market pays too little to be worth a bet; the band is the useful filter"
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Selections"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/status": {
       "get": {
         "summary": "Last scheduler runs, current round, snapshot age",
@@ -1039,6 +1229,78 @@
         "title": "OddsSnapshot",
         "description": "The upcoming-odds file. An EMPTY snapshot is a normal state between rounds,\nnot a failure: football-data answers but has not published the round yet."
       },
+      "Picks": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "min_odds": {
+            "type": "number",
+            "title": "Min Odds",
+            "description": "The declared floor, config.QUOTA_MINIMA_SELEZIONE. Not a request parameter: the main line cannot be re-cut per call"
+          },
+          "matches_total": {
+            "type": "integer",
+            "title": "Matches Total",
+            "default": 0
+          },
+          "most_probable": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Most Probable",
+            "default": []
+          },
+          "most_probable_resolved": {
+            "type": "integer",
+            "title": "Most Probable Resolved",
+            "default": 0
+          },
+          "most_probable_won": {
+            "type": "integer",
+            "title": "Most Probable Won",
+            "default": 0
+          },
+          "with_min_odds": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "With Min Odds",
+            "default": []
+          },
+          "with_min_odds_resolved": {
+            "type": "integer",
+            "title": "With Min Odds Resolved",
+            "default": 0
+          },
+          "with_min_odds_won": {
+            "type": "integer",
+            "title": "With Min Odds Won",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "min_odds"
+        ],
+        "title": "Picks",
+        "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
+      },
       "Round": {
         "properties": {
           "season": {
@@ -1369,6 +1631,223 @@
         "title": "SeasonSummary",
         "description": "Headline figures. Hits keep numerator and denominator apart on purpose: a\nbare rate hides how thin the sample is, and right now it is very thin.\n\n`rps_backtest_reference` is 0.1881, the market's RPS on the test set. A\npersistent gap from it would not be a model getting things wrong — the\nmodel *is* the opening line — it would be the production pipeline behaving\ndifferently from the backtest."
       },
+      "Selection": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market",
+            "description": "Raw market name, e.g. 1X, over 2.5, casa segna"
+          },
+          "market_label": {
+            "type": "string",
+            "title": "Market Label",
+            "description": "Readable label, e.g. '1X (Como o pari)'"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          },
+          "fair_odds": {
+            "type": "number",
+            "title": "Fair Odds"
+          },
+          "book_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Odds",
+            "description": "Registered bookmaker price. Only 1X2 has one"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won",
+            "description": "Null while the match is unplayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "home_team",
+          "away_team",
+          "market",
+          "market_label",
+          "probability",
+          "fair_odds",
+          "status",
+          "valid"
+        ],
+        "title": "Selection",
+        "description": "One market of one match, priced by the model.\n\n`fair_odds` is 1/p — the price at which the bet would break even. It exists\nfor every market. `book_odds` exists only for 1X2, because that is all the\nregister stores: for double chance, over/under and goal markets the price\nhas to come from the reader's own bookmaker, and estimating it by applying\nan average margin would be a made-up number that looks measured."
+      },
+      "Selections": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "max_odds": {
+            "type": "number",
+            "title": "Max Odds"
+          },
+          "min_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Odds"
+          },
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "excluded_markets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Markets",
+            "description": "Near-certainties never returned: no book prices them high enough to be a bet, and at a low ceiling they would crowd out everything else",
+            "default": []
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "matches_total": {
+            "type": "integer",
+            "title": "Matches Total",
+            "description": "Matches with a prediction in the requested scope",
+            "default": 0
+          },
+          "matches_covered": {
+            "type": "integer",
+            "title": "Matches Covered",
+            "description": "Of those, how many have at least one market inside the band. A narrow band leaves matches uncovered, and the gap is reported rather than hidden",
+            "default": 0
+          },
+          "best_resolved": {
+            "type": "integer",
+            "title": "Best Resolved",
+            "default": 0
+          },
+          "best_won": {
+            "type": "integer",
+            "title": "Best Won",
+            "default": 0
+          },
+          "selections": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Selections",
+            "default": []
+          },
+          "best_per_match": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Best Per Match",
+            "description": "One selection per match: the most probable inside the band, highest odds breaking a tie. Recomputed from the stored lambdas, never frozen into the register",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "max_odds",
+          "count",
+          "resolved",
+          "won"
+        ],
+        "title": "Selections",
+        "description": "Selections inside an odds band, with hits and their denominator.\n\nThe numbers travel together on purpose: \"10 su 11\" says what \"91%\" hides,\nwhich is that eleven bets decide nothing. Filtering by odds moves variance,\nnot edge — M1's probabilities are the book's own line with the margin\nremoved, so expected value is minus the margin at every threshold."
+      },
       "Significance": {
         "properties": {
           "method": {
@@ -1438,6 +1917,112 @@
         ],
         "title": "Significance",
         "description": "How far the track record is from meaning something.\n\nThe bootstrap resamples ROUNDS, not matches: the ten matches of a round are\npredicted by the same fit, and treating them as independent would shrink\nthe interval by about sqrt(10) and make anything look significant.\nUnder four rounds there is nothing to resample, and the method says so."
+      },
+      "StandingRow": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "played": {
+            "type": "integer",
+            "title": "Played"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "drawn": {
+            "type": "integer",
+            "title": "Drawn"
+          },
+          "lost": {
+            "type": "integer",
+            "title": "Lost"
+          },
+          "goals_for": {
+            "type": "integer",
+            "title": "Goals For"
+          },
+          "goals_against": {
+            "type": "integer",
+            "title": "Goals Against"
+          },
+          "goal_difference": {
+            "type": "integer",
+            "title": "Goal Difference"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "team",
+          "played",
+          "won",
+          "drawn",
+          "lost",
+          "goals_for",
+          "goals_against",
+          "goal_difference",
+          "points"
+        ],
+        "title": "StandingRow"
+      },
+      "Standings": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches_played": {
+            "type": "integer",
+            "title": "Matches Played"
+          },
+          "teams": {
+            "type": "integer",
+            "title": "Teams"
+          },
+          "last_match_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Match Date"
+          },
+          "tie_break": {
+            "type": "string",
+            "title": "Tie Break"
+          },
+          "table": {
+            "items": {
+              "$ref": "#/components/schemas/StandingRow"
+            },
+            "type": "array",
+            "title": "Table",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches_played",
+          "teams",
+          "tie_break"
+        ],
+        "title": "Standings",
+        "description": "La classifica: aritmetica sui risultati, non una previsione.\n\n`tie_break` dichiara come sono separate le squadre a pari punti, perche' in\nSerie A contano prima gli scontri diretti e non la differenza reti — una\ntabella ordinata nel modo sbagliato sembra giusta proprio nelle settimane\nin cui qualcuno la guarda."
       },
       "Status": {
         "properties": {
