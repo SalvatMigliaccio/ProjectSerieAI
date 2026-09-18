@@ -48,8 +48,8 @@ def _current_round(season: str, src: store.Sources | None) -> tuple[dict | None,
     states = store.round_states(season, src)
     if states.empty:
         warnings.append(
-            "round states unavailable: the calendar or matches_master is missing. "
-            "Run 'python -m src.normalize --build'.")
+            "Stato delle giornate non disponibile: manca il calendario o "
+            "matches_master. Lancia 'python -m src.normalize --build'.")
         return None, warnings
 
     from src.rounds import da_chiudere, da_predire
@@ -62,14 +62,14 @@ def _current_round(season: str, src: store.Sources | None) -> tuple[dict | None,
         action = {
             "command": "predict_round",
             "matchday": int(row["matchday"]),
-            "reason": f"{int(row['n_predicibili'])} matches can still be predicted",
+            "reason": f"{int(row['n_predicibili'])} partite sono ancora predicibili",
         }
     elif to_close is not None:
         row = to_close
         action = {
             "command": "close_round",
             "matchday": int(row["matchday"]),
-            "reason": "every match has a result and the round is not archived yet",
+            "reason": "tutte le partite hanno un risultato e la giornata non e' archiviata",
         }
     else:
         # Nothing to do is a normal state. Name the round anyway, or the
@@ -81,9 +81,9 @@ def _current_round(season: str, src: store.Sources | None) -> tuple[dict | None,
         # them would make the API announce matchday 1 in September.
         upcoming = states[~states["stato"].isin(("chiusa", "giocata"))]
         row = upcoming.iloc[0] if not upcoming.empty else states.iloc[-1]
-        reason = ("waiting for the odds of the upcoming round"
+        reason = ("in attesa delle quote della prossima giornata"
                   if str(row["stato"]) == "futura"
-                  else "nothing to do: no match is predictable or closable right now")
+                  else "niente da fare: nessuna partita e' predicibile o chiudibile adesso")
         action = {
             "command": None,
             "matchday": int(row["matchday"]),
@@ -114,22 +114,23 @@ def status(src: store.Sources | None = None) -> dict:
     snapshot = store.odds_snapshot(src)
     if snapshot["exists"] and snapshot.get("empty"):
         warnings.append(
-            "odds snapshot is empty: the round has not been published yet. "
-            "football-data publishes Friday by 17:00 UK and Tuesday by 13:00.")
+            "Snapshot delle quote vuoto: il turno non e' ancora stato pubblicato. "
+            "football-data pubblica il venerdi' entro le 17:00 UK e il martedi' "
+            "entro le 13:00.")
     elif snapshot.get("age_hours") is not None and snapshot["age_hours"] > SNAPSHOT_STALE_HOURS:
         warnings.append(
-            f"odds snapshot is {snapshot['age_hours'] / 24:.1f} days old: it only "
-            f"ever covers the imminent round and gets overwritten.")
+            f"Snapshot delle quote vecchio di {snapshot['age_hours'] / 24:.1f} giorni: "
+            f"copre solo il turno imminente e viene sovrascritto.")
 
     runs = last_run.read()
     for command in last_run.COMMANDS:
         entry = runs.get(command)
         if entry is None:
-            warnings.append(f"no recorded run of {command} yet")
+            warnings.append(f"Nessuna esecuzione registrata di {command}")
         elif entry.get("ok") is False:
             warnings.append(
-                f"last {command} failed with exit code {entry.get('exit_code')}: "
-                f"see logs/{entry.get('log')}")
+                f"L'ultima esecuzione di {command} e' fallita con codice "
+                f"{entry.get('exit_code')}: vedi logs/{entry.get('log')}")
 
     return {
         "season": season,

@@ -17,26 +17,16 @@ import { localDateTime } from "../lib/format";
  * "Statistiche" e "FAQ" sono ancore della landing; "Partite" e' la dashboard.
  * Una voce che apre il vuoto e' una promessa rotta al primo clic.
  */
-export function Masthead({
-  current,
-  updatedAt = null,
-}: {
-  current: "hero" | "dashboard";
-  updatedAt?: string | null;
-}) {
+export function Masthead({ current }: { current: "hero" | "dashboard" }) {
   return (
     <header className="masthead">
       <div className="wrap masthead__inner">
         <Link className="brand" to="/">
-          <span className="brand__mark" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-              <path
-                d="M12 7.5l3.2 2.3-1.2 3.7h-4l-1.2-3.7L12 7.5z"
-                fill="currentColor"
-              />
-            </svg>
-          </span>
+          {/* I file di `public/` sono serviti ALLA RADICE: il percorso e'
+              `/Logo_NoName.png`, non `public/...`. Con il prefisso si
+              risolverebbe relativo all'URL corrente e si romperebbe appena
+              cambia rotta o in build. */}
+          <img className="brand__logo" src="/Logo_NoName.png" alt="" />
           <span>
             <span className="brand__name">
               Match<em>Point</em>
@@ -57,12 +47,18 @@ export function Masthead({
           <a href="#faq">FAQ</a>
         </nav>
 
-        <span className="status__signal">
-          <i className="dot dot--ok" aria-hidden="true" />
-          <span className="small muted">
-            {updatedAt ? localDateTime(updatedAt).slice(0, 10) : "dati locali"}
-          </span>
-        </span>
+        {/* L'angolo in alto a destra e' il posto dell'azione, non di un dato:
+            una data li' e' informazione che nessuno cerca in quel punto, e la
+            stessa informazione e' gia' nel piede della pagina. */}
+        <Link className="nav-cta" to="/dashboard">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+            <rect x="3" y="3" width="7" height="9" rx="1.5" />
+            <rect x="14" y="3" width="7" height="5" rx="1.5" />
+            <rect x="14" y="12" width="7" height="9" rx="1.5" />
+            <rect x="3" y="16" width="7" height="5" rx="1.5" />
+          </svg>
+          Dashboard
+        </Link>
       </div>
     </header>
   );

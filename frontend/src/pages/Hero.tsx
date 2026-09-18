@@ -1,8 +1,8 @@
-import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Match, MatchPoint, Round, StandingRow } from "../api/types";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { ErrorState, Skeleton } from "../components/States";
@@ -23,33 +23,6 @@ import { localTime, num, prob, ratio } from "../lib/format";
  * calcolata dai risultati. Un finto screenshot sarebbe stato piu' facile e non
  * avrebbe dimostrato niente.
  */
-
-const ICONS: Record<string, ReactNode> = {
-  registro: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <rect x="4" y="3" width="16" height="18" rx="2" />
-      <path d="M8 8h8M8 12h8M8 16h5" strokeLinecap="round" />
-    </svg>
-  ),
-  mercato: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <ellipse cx="12" cy="6" rx="7" ry="3" />
-      <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />
-    </svg>
-  ),
-  mercati: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M4 19V5M4 19h16" strokeLinecap="round" />
-      <path d="M8 15l3.5-4 3 2.5L20 7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  ),
-  errore: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
-      <path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3z" strokeLinejoin="round" />
-      <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  ),
-};
 
 function lastWithPredictions(rounds: Round[] | null): Round | null {
   if (!rounds) return null;
@@ -102,57 +75,73 @@ function Spark({ points }: { points: MatchPoint[] }) {
   );
 }
 
-function Floaters({
-  points,
-  table,
-  recent,
-}: {
-  points: MatchPoint[];
-  table: StandingRow[];
-  recent: Match[];
-}) {
+function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[] }) {
   const top = table.slice(0, 3);
   const most = Math.max(1, ...top.map((row) => row.goals_for));
 
   return (
-    <div className="floaters" aria-hidden="false">
+    <div className="floaters">
       <div className="floater">
-        <h4>Andamento RPS</h4>
+        <h4>Analisi avanzata</h4>
         <Spark points={points} />
       </div>
 
       <div className="floater">
-        <h4>Gol fatti</h4>
-        <div className="floater__bars">
-          {top.map((row) => (
-            <div className="floater__bar" key={row.team}>
-              <span>{row.team.slice(0, 8)}</span>
-              <span className="floater__track">
-                <i
-                  className="floater__fill"
-                  style={{ width: `${(row.goals_for / most) * 100}%` }}
-                />
-              </span>
-              <span>{row.goals_for}</span>
-            </div>
-          ))}
+        <h4>Statistiche squadre</h4>
+        <div className="floater__row">
+          <span className="floater__glyph" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 20V10M12 20V4M18 20v-7" strokeLinecap="round" />
+            </svg>
+          </span>
+          <div className="floater__bars" style={{ flex: 1 }}>
+            {top.map((row) => (
+              <div className="floater__bar" key={row.team}>
+                <span>{row.team.slice(0, 8)}</span>
+                <span className="floater__track">
+                  <i
+                    className="floater__fill"
+                    style={{ width: `${(row.goals_for / most) * 100}%` }}
+                  />
+                </span>
+                <span>{row.goals_for}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
+      {/* Trend e forma: la SEQUENZA dei risultati, non i totali della
+          classifica. Quattro vittorie non dicono se la squadra sta salendo.
+
+          `form ?? []` non e' pignoleria: il tipo TypeScript garantisce il campo
+          a compile-time, ma l'API e' un confine di rete e puo' rispondere un
+          processo piu' vecchio del frontend. Senza la guardia, un campo assente
+          fa esplodere il componente e con lui tutta la pagina. */}
       <div className="floater">
-        <h4>Ultimi esiti</h4>
-        <div className="floater__dots">
-          {recent.slice(-6).map((match) => (
-            <span
-              key={`${match.home_team}-${match.away_team}`}
-              className={`floater__dot floater__dot--${
-                match.correct === true ? "ok" : match.correct === false ? "ko" : "idle"
-              }`}
-              title={`${match.home_team} – ${match.away_team}`}
-            />
-          ))}
-        </div>
+        <h4>Trend e forma</h4>
+        {top.slice(0, 2).map((row) => (
+          <div className="floater__form" key={row.team} style={{ marginTop: "var(--s2)" }}>
+            <span className="floater__team">{row.team.slice(0, 6)}</span>
+            {(row.form ?? []).map((result, index) => (
+              <span
+                key={`${row.team}-${index}`}
+                className={`floater__result floater__result--${result.toLowerCase()}`}
+                title={`${row.team}: ${
+                  result === "W" ? "vittoria" : result === "D" ? "pareggio" : "sconfitta"
+                }`}
+              />
+            ))}
+          </div>
+        ))}
       </div>
+
+      <p className="signature">
+        Più dati.
+        <br />
+        Più insight.
+        <em>Più MatchPoint.</em>
+      </p>
     </div>
   );
 }
@@ -173,12 +162,11 @@ export function Hero() {
   const list = matches.data ?? [];
   const head = list[0] ?? null;
   const cards = list.slice(0, 3);
-  const resolved = list.filter((match) => match.correct !== null);
 
   return (
     <>
       <div className="hero">
-        <Masthead current="hero" updatedAt={health.data?.updated_at ?? null} />
+        <Masthead current="hero" />
 
         <div className="wrap hero__grid">
           <div>
@@ -239,11 +227,7 @@ export function Hero() {
           <div className="stage">
             <div className="device">
               <div className="device__brand">
-                <span className="brand__mark" style={{ width: 24, height: 24 }} aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                </span>
+                <img className="device__logo" src="/Logo_NoName.png" alt="" />
                 Match<em>Point</em>
               </div>
 
@@ -257,20 +241,22 @@ export function Hero() {
 
               {head ? (
                 <>
-                  <span className="device__label">
-                    {round?.closed ? "Ultima giornata chiusa" : "Prossima partita"}
-                  </span>
-                  <div className="device__teams">
-                    {head.home_team} vs {head.away_team}
-                  </div>
-                  <div className="device__when">
-                    {localTime(head.kickoff_utc)} · Serie A
-                  </div>
+                  <div className="device__feature">
+                    <span className="device__label">
+                      {round?.closed ? "Ultima giornata chiusa" : "Prossima partita"}
+                    </span>
+                    <div className="device__teams">
+                      {head.home_team} <em>vs</em> {head.away_team}
+                    </div>
+                    <div className="device__when">
+                      {localTime(head.kickoff_utc)} · Serie A
+                    </div>
 
-                  <OddsRow match={head} />
-                  <Link className="device__cta" to="/dashboard">
-                    Vedi analisi completa →
-                  </Link>
+                    <OddsRow match={head} />
+                    <Link className="device__cta" to="/dashboard">
+                      Vedi analisi completa →
+                    </Link>
+                  </div>
 
                   <div className="device__section">
                     <span className="device__label">
@@ -279,7 +265,9 @@ export function Hero() {
                     <div className="device__list">
                       {list.slice(1, 5).map((match) => (
                         <div className="device__row" key={`${match.home_team}-${match.away_team}`}>
-                          <span>
+                          {/* Niente stemmi: sono marchi registrati, e i nomi
+                              bastano a riconoscere la partita. */}
+                          <span className="device__match">
                             {match.home_team} – {match.away_team}
                           </span>
                           <span className="device__probs">
@@ -292,9 +280,12 @@ export function Hero() {
                             ).map(([code, label, value]) => (
                               <span
                                 key={code}
-                                className={code === match.predicted_outcome ? "on" : undefined}
+                                className={`device__prob${
+                                  code === match.predicted_outcome ? " device__prob--on" : ""
+                                }`}
                               >
-                                {label} <b>{prob(value)}</b>
+                                <i>{label}</i>
+                                <b>{prob(value)}</b>
                               </span>
                             ))}
                           </span>
@@ -310,13 +301,14 @@ export function Hero() {
               )}
             </div>
 
-            {track.data && standings.data && (
-              <Floaters
-                points={track.data.by_match}
-                table={standings.data.table}
-                recent={resolved}
-              />
-            )}
+            {/* Le schede laterali sono decorative rispetto al messaggio della
+                pagina: se il loro dato manca, spariscono senza portarsi via
+                il titolo e la chiamata all'azione. */}
+            <ErrorBoundary label="schede laterali">
+              {track.data && standings.data && (
+                <Floaters points={track.data.by_match} table={standings.data.table} />
+              )}
+            </ErrorBoundary>
           </div>
         </div>
       </div>
@@ -346,15 +338,10 @@ export function Hero() {
                 "Ogni giornata chiusa entra nel track record con il suo RPS, anche quando è andata male.",
               ],
             ] as Array<[string, string, string]>
-          ).map(([icon, title, body]) => (
+          ).map(([, title, body]) => (
             <div className="strip__item" key={title}>
-              <span className="strip__icon" aria-hidden="true">
-                {ICONS[icon]}
-              </span>
-              <div>
-                <h3>{title}</h3>
-                <p>{body}</p>
-              </div>
+              <h3>{title}</h3>
+              <p>{body}</p>
             </div>
           ))}
         </div>
@@ -366,19 +353,20 @@ export function Hero() {
             <ErrorState error={rounds.error} what="I dati non sono raggiungibili." />
           )}
 
-          <div className="showcase">
-            <div>
+           <div className="showcase__label" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <Eyebrow>partite in evidenza</Eyebrow>
-              <h2>Le sfide di oggi</h2>
-              <p className="lead">
+              <h2>La scorsa giornata</h2>
+              <p className="lead" style={{ maxWidth: "600px" }}>
                 Le partite con le previsioni registrate, con le probabilità che il
                 modello ha scritto prima del calcio d'inizio.
               </p>
-              <Link className="link-mint" to="/dashboard">
+              <Link className="link-mint" to="/dashboard"  style={{ alignSelf: "flex-start", gap: "1rem" }}>
                 Vedi tutte le partite →
               </Link>
             </div>
 
+
+          <div className="showcase" style={{ display: "flex", flexDirection: "row", gap: "1rem" }}>
             {cards.map((match) => (
               <article className="matchcard" key={`${match.home_team}-${match.away_team}`}>
                 <div className="matchcard__head">
@@ -419,7 +407,12 @@ export function Hero() {
                   completa →
                 </Link>
               </div>
-              <StandingsPanel limit={5} />
+              <ErrorBoundary
+                label="classifica"
+                fallback={<p className="state">Classifica non disponibile.</p>}
+              >
+                <StandingsPanel limit={5} />
+              </ErrorBoundary>
             </div>
           </div>
         </section>
@@ -468,7 +461,7 @@ export function Hero() {
             </div>
           </div>
 
-          <aside className="notice" style={{ marginTop: "var(--s6)" }}>
+          {/* <aside className="notice" style={{ marginTop: "var(--s6)" }}>
             <span className="notice__label">onestà prima del marketing</span>
             <p>
               Qui non troverai mai un valore atteso, una puntata consigliata o uno
@@ -477,7 +470,7 @@ export function Hero() {
               stesse quote sarebbe circolare, e misurato vale −5,2% su ogni riga.
               Quota equa e overround sì, quelli descrivono il prezzo.
             </p>
-          </aside>
+          </aside> */}
         </section>
       </main>
 

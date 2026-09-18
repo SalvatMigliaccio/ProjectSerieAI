@@ -94,6 +94,32 @@ def _head_to_head(teams: set[str], played: pd.DataFrame) -> dict[str, tuple[int,
     return {team: (points[team], diff[team]) for team in teams}
 
 
+def _recent_form(played: pd.DataFrame, last: int = 5) -> dict[str, list[str]]:
+    """
+    Gli ultimi risultati di ogni squadra, dal piu' vecchio al piu' recente.
+
+    E' il "trend e forma" della pagina, e va preso in ORDINE DI DATA: dai
+    totali di vittorie e pareggi della classifica non si ricava, perche' la
+    sequenza e' proprio l'informazione che interessa. Quattro vittorie non
+    dicono se la squadra sta salendo o rientrando.
+    """
+    righe = []
+    for row in played.itertuples(index=False):
+        goals_home, goals_away = int(row.FTHG), int(row.FTAG)
+        esito_casa = "W" if goals_home > goals_away else "L" if goals_home < goals_away else "D"
+        esito_fuori = "W" if goals_away > goals_home else "L" if goals_away < goals_home else "D"
+        righe.append((row.date, row.home_team, esito_casa))
+        righe.append((row.date, row.away_team, esito_fuori))
+
+    frame = pd.DataFrame(righe, columns=["date", "team", "outcome"])
+    frame["date"] = pd.to_datetime(frame["date"])
+    frame = frame.sort_values("date")
+    return {
+        str(team): group["outcome"].tolist()[-last:]
+        for team, group in frame.groupby("team", sort=False)
+    }
+
+
 def _ordered(table: dict[str, dict], played: pd.DataFrame) -> list[dict]:
     rows = list(table.values())
     for row in rows:
@@ -136,6 +162,10 @@ def standings(season: str, src: store.Sources | None = None) -> dict | None:
         return None
 
     rows = _ordered(_accumulate(played), played)
+
+    form = _recent_form(played)
+    for row in rows:
+        row["form"] = form.get(row["team"], [])
 
     # Controllo di coerenza: i gol fatti in totale devono uguagliare i subiti.
     # Se un giorno non tornasse, il difetto sta nell'accumulo e non nei dati,

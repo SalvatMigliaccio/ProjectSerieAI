@@ -194,6 +194,9 @@ export interface StandingRow {
   goals_against: number;
   goal_difference: number;
   points: number;
+  /** Ultimi risultati in ordine di data, dal piu' vecchio: W, D, L. Dai totali
+   *  non si ricava — la sequenza e' proprio l'informazione che interessa. */
+  form: string[];
 }
 
 /** La classifica: aritmetica sui risultati, non una previsione. Le due cose

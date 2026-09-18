@@ -257,6 +257,10 @@ class StandingRow(Base):
     goals_against: int
     goal_difference: int
     points: int
+    form: list[str] = Field(
+        [], description="Ultimi risultati in ordine di data, dal piu' vecchio: "
+                        "W, D, L. Dai totali non si ricava — la sequenza e' "
+                        "proprio l'informazione che interessa")
 
 
 class Standings(Base):

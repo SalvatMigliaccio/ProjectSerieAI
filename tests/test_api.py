@@ -177,6 +177,24 @@ def test_standings_arithmetic_holds() -> None:
         assert row["goal_difference"] == row["goals_for"] - row["goals_against"]
 
 
+def test_standings_form_matches_the_record() -> None:
+    """
+    La forma e' una sequenza, e deve combaciare con i totali della riga.
+
+    Con quattro giornate giocate le due cose coincidono esattamente; piu'
+    avanti la forma sara' un sottoinsieme, e allora vale il solo vincolo di
+    lunghezza. Un errore qui produrrebbe una striscia plausibile e falsa.
+    """
+    table = client.get(f"/api/standings/{SEASON}").json()["table"]
+    for row in table:
+        assert len(row["form"]) == min(5, row["played"]), row["team"]
+        assert set(row["form"]) <= {"W", "D", "L"}, row["team"]
+        if row["played"] <= 5:
+            assert row["form"].count("W") == row["won"], row["team"]
+            assert row["form"].count("D") == row["drawn"], row["team"]
+            assert row["form"].count("L") == row["lost"], row["team"]
+
+
 def test_standings_are_ordered_and_numbered() -> None:
     table = client.get(f"/api/standings/{SEASON}").json()["table"]
     assert [row["position"] for row in table] == list(range(1, len(table) + 1))
