@@ -1,8 +1,62 @@
-import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import type { MouseEvent, ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
-import { localDateTime } from "../lib/format";
+
+/**
+ * Un collegamento a una sezione della landing, che funziona anche dalla
+ * dashboard.
+ *
+ * PERCHE' NON BASTA `<a href="#come-funziona">`. Il router usa l'hash per le
+ * rotte (`#/dashboard`): un'ancora scritta a mano sovrascrive quella rotta e
+ * la pagina finisce sulla landing in cima, senza scorrere da nessuna parte —
+ * dalla dashboard si perdeva anche la giornata selezionata. Qui si naviga
+ * prima e si scorre dopo, quando il nodo esiste davvero: due `rAF` perche' al
+ * primo la landing e' montata ma non ancora impaginata.
+ */
+function SectionLink({ id, children }: { id: string; children: ReactNode }) {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const vai = (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    const scorri = () =>
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    if (pathname === "/") {
+      scorri();
+      return;
+    }
+
+    navigate("/");
+
+    // Non basta aspettare un fotogramma: la landing si monta subito ma cresce
+    // mentre arrivano i dati dall'API, e scorrere in quel momento porta nel
+    // posto sbagliato — provato, si restava fermi in cima. Si aspetta che la
+    // posizione della sezione smetta di muoversi, con un tetto di 2 secondi
+    // per non restare appesi se l'API non risponde.
+    const scadenza = performance.now() + 2000;
+    let precedente = Number.NaN;
+    const quandoFerma = () => {
+      const nodo = document.getElementById(id);
+      const posizione = nodo ? Math.round(nodo.getBoundingClientRect().top + window.scrollY) : Number.NaN;
+      if (nodo && posizione === precedente) {
+        scorri();
+        return;
+      }
+      precedente = posizione;
+      if (performance.now() < scadenza) requestAnimationFrame(quandoFerma);
+      else scorri();
+    };
+    requestAnimationFrame(quandoFerma);
+  };
+
+  return (
+    <a href={`#${id}`} onClick={vai}>
+      {children}
+    </a>
+  );
+}
 
 /**
  * Testata: marchio a sinistra, menu al centro, stato a destra.
@@ -39,12 +93,12 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
           <Link to="/" className={current === "hero" ? "on" : undefined}>
             Home
           </Link>
-          <a href="#come-funziona">Come funziona</a>
-          <a href="#statistiche">Statistiche</a>
+          <SectionLink id="come-funziona">Come funziona</SectionLink>
+          <SectionLink id="statistiche">Statistiche</SectionLink>
           <Link to="/dashboard" className={current === "dashboard" ? "on" : undefined}>
             Partite
           </Link>
-          <a href="#faq">FAQ</a>
+          <SectionLink id="faq">FAQ</SectionLink>
         </nav>
 
         {/* L'angolo in alto a destra e' il posto dell'azione, non di un dato:
@@ -68,26 +122,103 @@ export function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="eyebrow">{children}</p>;
 }
 
+const REPOSITORY = "https://github.com/SalvatMigliaccio/ProjectSerieAI";
+const CONTATTO = "salvatore.migliaccio998@gmail.com";
+
 /**
- * Colophon. La versione del modello arriva da `/api/season`: `/api/health` nel
- * contratto non la espone, e prenderla da li' avrebbe voluto dire inventare un
- * campo.
+ * Il piede della pagina.
+ *
+ * LA VERSIONE DEL MODELLO ARRIVA DA `/api/season`: `/api/health` nel contratto
+ * non la espone, e prenderla da li' avrebbe voluto dire inventare un campo.
+ *
+ * LO STATO DEL SISTEMA STA QUI E NON IN TESTATA. Il modello e l'indirizzo
+ * dell'API sono informazioni che si cercano quando si vuole verificare
+ * qualcosa, non mentre si legge: il posto giusto e' la fine.
+ *
+ * L'AVVERTENZA NON E' UN ADEMPIMENTO, E' LA STESSA COSA CHE DICE IL MODELLO.
+ * Su 1140 partite fuori campione il valore atteso e' -5.2% su ogni riga: dire
+ * che sono stime e non consigli di gioco e' la lettura corretta dei numeri che
+ * la pagina mostra, non una formula messa li' per prudenza.
  */
 export function Colophon({
   modelVersion,
-  updatedAt,
   showApi = false,
 }: {
   modelVersion: string | null;
-  updatedAt: string | null;
   showApi?: boolean;
 }) {
   return (
     <footer className="colophon">
-      <div className="wrap colophon__inner">
-        {modelVersion && <span>modello {modelVersion}</span>}
-        {updatedAt && <span>aggiornato {localDateTime(updatedAt)}</span>}
-        {showApi && <span>api {baseUrl()}</span>}
+      <div className="wrap colophon__grid">
+        <div className="colophon__brand">
+          <span className="brand">
+            <img className="brand__logo" src="/Logo_NoName.png" alt="" />
+            <span>
+              <span className="brand__name">
+                Match<em>Point</em>
+              </span>
+              <span className="brand__tag">ogni partita conta</span>
+            </span>
+          </span>
+          <p className="colophon__pitch">
+            Previsioni sui gol della Serie A a partire dalle quote di apertura,
+            registrate prima del calcio d'inizio e misurate una giornata alla
+            volta.
+          </p>
+        </div>
+
+        <nav className="colophon__col" aria-label="pagine">
+          <h3>Pagine</h3>
+          <Link to="/">Home</Link>
+          <Link to="/dashboard">Partite</Link>
+          <SectionLink id="come-funziona">Come funziona</SectionLink>
+          <SectionLink id="statistiche">Statistiche</SectionLink>
+          <SectionLink id="faq">FAQ</SectionLink>
+        </nav>
+
+        <div className="colophon__col">
+          <h3>Progetto</h3>
+          <a href={REPOSITORY} target="_blank" rel="noreferrer noopener">
+            Codice su GitHub
+          </a>
+          {/* `mailto:` e non un modulo: non c'e' un server che possa ricevere
+              un invio, e un modulo che non spedisce e' peggio di nessun modulo. */}
+          <a href={`mailto:${CONTATTO}`}>{CONTATTO}</a>
+        </div>
+
+        <div className="colophon__col colophon__col--stato">
+          <h3>Sistema</h3>
+
+          {/* DUE MODELLI, E LA RIGA PICCOLA DICE QUALE DEI DUE PARLA. I numeri
+              che si vedono in pagina escono tutti da M1: il LightGBM esiste,
+              e' misurato, ma sul test set e' indistinguibile dal mercato e per
+              questo non e' promosso. Elencarli senza distinguerli lascerebbe
+              credere che le previsioni mostrate vengano da entrambi. */}
+          <span className="colophon__modello">
+            Modello M1 Market-Only
+            <em>{modelVersion ?? "quote di apertura de-viggate"} · in produzione</em>
+          </span>
+          <span className="colophon__modello">
+            Modello Machine Learning LightGBM
+            <em>M5 ancorato al mercato · in valutazione</em>
+          </span>
+
+          {showApi && <span className="colophon__api">API {baseUrl()}</span>}
+        </div>
+      </div>
+
+      <div className="wrap colophon__rule" />
+
+      <div className="wrap colophon__bottom">
+        <p>
+          Le probabilità sono <strong>stime statistiche</strong>, non consigli di
+          gioco: nessuna garanzia di vincita. Gioca responsabilmente,{" "}
+          <strong>18+</strong>.
+        </p>
+        <p className="colophon__meta">
+          MatchPoint · Serie A {new Date().getFullYear()} · dati football-data.co.uk,
+          FBref e Understat
+        </p>
       </div>
     </footer>
   );

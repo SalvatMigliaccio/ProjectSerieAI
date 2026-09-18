@@ -198,16 +198,29 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   transform-origin: center center;
 }
 
+/* Due veli, non uno. Quello obliquo scurisce il lato del testo ed e' quello di
+   sempre; quello verticale spegne la FOTO SUL BORDO BASSO. Senza il secondo,
+   l'immagine della hero finisce di netto sul filo della sezione e si vede una
+   riga dritta lunga tutta la pagina — il taglio si nota perche' e' la sola
+   linea perfettamente orizzontale in mezzo a una fotografia. */
 .hero::after {
   content: "";
   position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(
-    98deg,
-    rgba(4, 16, 15, 0.97) 0%,
-    rgba(4, 16, 15, 0.9) 34%,
-    rgba(4, 16, 15, 0.45) 62%,
-    rgba(4, 16, 15, 0.82) 100%
-  );
+  background:
+    linear-gradient(
+      180deg,
+      transparent 52%,
+      rgba(4, 16, 15, 0.35) 74%,
+      rgba(4, 16, 15, 0.74) 89%,
+      rgba(4, 16, 15, 0.93) 100%
+    ),
+    linear-gradient(
+      98deg,
+      rgba(4, 16, 15, 0.97) 0%,
+      rgba(4, 16, 15, 0.9) 34%,
+      rgba(4, 16, 15, 0.45) 62%,
+      rgba(4, 16, 15, 0.82) 100%
+    );
 }
 
 .hero__grid {
@@ -487,22 +500,269 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .floater__result--d { background: var(--warn); }
 .floater__result--l { background: var(--ko); }
 
-/* --- fascia caratteristiche ----------------------------------------------- */
+/* --- come funziona: quattro passi ------------------------------------------ */
 
-.strip { border-block: 1px solid var(--line); background: var(--bg-2); }
-
-.strip__grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: var(--s5) var(--s6); padding-block: var(--s6) var(--s7);
+/* LA FOTO PROSEGUE DALLA HERO. Lo stadio di `work-bg.png` sta sotto tutta la
+   sezione, non come decorazione ma come continuazione: la hero finisce sul
+   campo, questa riprende dalle luci. Due livelli separati, e serve che lo
+   siano: la foto sta in ::before, il velo scuro in ::after. Mettendo il velo
+   come gradiente nella stessa proprieta' della foto, per schiarirla o
+   scurirla si dovrebbero riscrivere entrambi. */
+.howto {
+  position: relative; isolation: isolate; overflow: hidden;
+  /* NESSUN BORDO, NE' SOPRA NE' SOTTO. Il velo della sezione arriva gia' al
+     fondo pieno su entrambi i lati: un filetto da 1px in mezzo a una
+     sfumatura e' l'unica linea perfettamente dritta della pagina, e si vede
+     solo lui. La separazione la fa il cambio di luce, non un tratto. */
+  background: var(--bg);
+  padding-block: var(--s8);
 }
 
-/* Niente dischetti con l'icona: un filetto sopra la colonna basta a separarla,
-   e la gerarchia la fa il titolo. I badge circolari sono decorazione, e su
-   quattro voci identiche diventano rumore. */
-.strip__item { display: grid; gap: var(--s2); padding-top: var(--s4); border-top: 1px solid var(--line-strong); }
+.howto::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -2;
+  background-image: url("/work-bg.png");
+  background-size: cover;
+  background-position: center 38%;
+  background-repeat: no-repeat;
+}
 
-.strip__item h3 { margin: 0; font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
-.strip__item p { margin: 0; font-size: 0.8125rem; color: var(--muted); max-width: 30ch; line-height: 1.55; }
+/* Il velo. Opaco ai due bordi e piu' leggero in mezzo: cosi' la sezione non
+   comincia e non finisce con una linea netta di foto, e le due sezioni
+   confinanti — entrambe sul fondo pieno — ci si saldano senza giunture.
+   Al centro resta il 16% di foto visibile, che si vede dietro le schede e
+   basta a far capire dove siamo. */
+.howto::after {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    radial-gradient(100% 70% at 50% 34%, rgba(46, 232, 138, 0.05), transparent 64%),
+    linear-gradient(
+      180deg,
+      var(--bg) 0%,
+      rgba(4, 16, 15, 0.9) 12%,
+      rgba(4, 16, 15, 0.7) 44%,
+      rgba(4, 16, 15, 0.86) 78%,
+      var(--bg) 100%
+    );
+}
+
+.howto__head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s5) var(--s7); align-items: start; margin-bottom: var(--s7);
+}
+
+.howto__title { margin: var(--s3) 0 var(--s4); font-size: clamp(2rem, 3.6vw, 3rem); letter-spacing: -0.03em; }
+.howto__title em { font-style: normal; color: var(--mint); }
+
+/* La postilla sta accanto al titolo e non in fondo: e' il limite dichiarato del
+   prodotto, e sepolta a fine sezione non la leggerebbe nessuno. */
+.howto__note {
+  display: flex; gap: var(--s3); align-items: flex-start; margin: 0; max-width: 24rem;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-size: 0.75rem; color: var(--muted); line-height: 1.5;
+}
+
+.howto__note strong { color: var(--fg); font-weight: 600; }
+.howto__note-glyph { color: var(--mint); flex: none; margin-top: 1px; }
+
+.howto__steps {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s6); list-style: none; margin: 0; padding: 0;
+}
+
+/* Quattro righe: numero, titolo, testo, riquadro. L'ultima si prende lo spazio
+   che avanza, cosi' il riquadro resta attaccato al testo e il vuoto finisce in
+   fondo alla scheda invece che in mezzo. */
+/* LA SCHEDA E' ILLUMINATA DA UN PUNTO, NON UNIFORME. La sfumatura non e' piu'
+   verticale: la luce entra dall'angolo in alto a sinistra e il fondo sprofonda
+   verso il basso a destra, quindi le quattro schede non sono quattro rettangoli
+   identici e piatti. La stessa direzione la seguono il filo di luce sul bordo e
+   le ombre, altrimenti l'illuminazione si contraddice e l'occhio se ne accorge
+   senza saper dire perche'. */
+.step {
+  position: relative; isolation: isolate;
+  display: grid; gap: var(--s3); grid-template-rows: auto auto auto 1fr;
+  padding: var(--s5);
+  border: 1px solid rgba(255, 255, 255, 0.04); border-radius: var(--radius);
+  /* L'ESCURSIONE E' STRETTA DI PROPOSITO. La scheda va da #0c2b27 a #051715
+     attorno al fondo della sezione (#061a18): due passi sopra e uno sotto,
+     non una lastra chiara su un fondo scuro. La profondita' la fanno le ombre,
+     non il salto di tono — con un salto forte le quattro schede diventano
+     quattro cartelli appiccicati sulla pagina. */
+  /* Traslucide, ora che dietro c'e' lo stadio: un po' di foto passa attraverso
+     e la scheda appartiene alla scena invece di essere incollata sopra. La
+     sfocatura tiene leggibile il testo sopra le luci dei riflettori, che sono
+     la zona piu' chiara e mossa della foto. */
+  background:
+    radial-gradient(130% 90% at 0% 0%, rgba(46, 232, 138, 0.07), transparent 58%),
+    linear-gradient(152deg, rgba(12, 43, 39, 0.86) 0%, rgba(9, 36, 34, 0.88) 40%, rgba(6, 27, 25, 0.9) 76%, rgba(5, 23, 21, 0.92) 100%);
+  backdrop-filter: blur(10px) saturate(115%);
+  -webkit-backdrop-filter: blur(10px) saturate(115%);
+  /* Quattro livelli: contatto stretto, distacco medio, caduta lunga, e un filo
+     di luce interno sul bordo alto. Una sola ombra morbida non stacca la scheda
+     dal fondo, ne fa una macchia sfocata. */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 14px -8px rgba(0, 0, 0, 0.5),
+    0 22px 36px -28px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+/* Il bordo acceso solo dove batte la luce: un anello di 1px disegnato con una
+   maschera, cosi' sfuma sul lato in ombra invece di contornare tutto uguale. */
+.step::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit; padding: 1px;
+  background: linear-gradient(152deg, rgba(46, 232, 138, 0.3), rgba(255, 255, 255, 0.06) 34%, transparent 62%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.step:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 22px -10px rgba(0, 0, 0, 0.55),
+    0 34px 52px -30px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+/* La freccia vive nel vuoto fra due schede, non dentro una: sta nel gap, cosi'
+   resta a meta' strada qualunque sia l'altezza delle due colonne. */
+.step:not(:last-child)::after {
+  content: "\2192";
+  position: absolute; top: 50%; right: calc(var(--s6) * -1);
+  width: var(--s6); transform: translateY(-50%);
+  text-align: center; color: var(--mint); opacity: 0.75; font-size: 0.95rem;
+}
+
+.step__head { display: flex; align-items: center; justify-content: space-between; }
+
+/* Il numero e' inciso, non scritto: sfuma verso il basso come se prendesse luce
+   dall'alto, come la scheda. Pieno e bianco sarebbe l'elemento piu' forte della
+   scheda, e a contare sono i titoli. */
+.step__n {
+  font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.03em;
+  line-height: 1;
+  background: linear-gradient(170deg, #ffffff 10%, rgba(255, 255, 255, 0.32) 90%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.step__glyph { color: var(--mint); display: inline-flex; filter: drop-shadow(0 0 10px rgba(46, 232, 138, 0.45)); }
+.step h3 { margin: 0; font-size: 1.0625rem; letter-spacing: -0.01em; }
+.step p { margin: 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.55; max-width: none; }
+.step__demo { display: grid; gap: var(--s2); margin-top: var(--s2); align-self: start; align-content: start; }
+
+/* Voce a sinistra, valore a destra, una riga per passaggio. E' la forma di una
+   tabella di lettura, non di una nuvola di pastiglie: le righe si incolonnano,
+   riempiono la scheda e si leggono dall'alto in basso come il passaggio che
+   descrivono. */
+.pipe {
+  display: grid; align-content: start;
+  border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(3, 13, 12, 0.5), rgba(4, 17, 16, 0.35));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.pipe__row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  padding: 9px var(--s3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pipe__row:last-child { border-bottom: 0; }
+.pipe__row--out { background: rgba(46, 232, 138, 0.07); }
+.pipe__key { font-size: 0.6875rem; color: var(--muted); }
+.pipe__val { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pipe__val--quieta { font-weight: 500; color: var(--faint); }
+.pipe__val--warn { color: var(--warn); }
+.pipe__val--mint { color: var(--mint); }
+
+/* Il passaggio fra prima e dopo: due filetti e il nome del metodo in mezzo. */
+.pipe__step {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 7px var(--s3);
+  font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
+  background: rgba(46, 232, 138, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pipe__line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(46, 232, 138, 0.45), transparent); }
+
+/* I riquadri dei dati sono INCASSATI nella scheda: fondo piu' scuro di quello
+   su cui stanno e ombra interna in alto. Cosi' si leggono come una finestra
+   dentro la scheda, mentre la scheda si legge come un oggetto sopra la pagina —
+   due profondita' diverse invece di tre rettangoli sullo stesso piano. */
+.mini {
+  display: grid; gap: 6px; padding: var(--s3);
+  border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(3, 13, 12, 0.5), rgba(4, 17, 16, 0.35));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mini-coppia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.mini__head { font-size: 0.625rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.mini__cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.mini__cols--due { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mini__col { display: grid; gap: 3px; justify-items: center; }
+.mini__key { font-size: 0.625rem; color: var(--faint); }
+.mini__val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini__bar { width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.mini__bar i { display: block; height: 100%; border-radius: 2px; }
+
+.scene {
+  display: grid; gap: var(--s3); padding: var(--s3);
+  border: 1px solid rgba(46, 232, 138, 0.28); border-radius: var(--radius-sm);
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(46, 232, 138, 0.14), transparent 62%),
+    linear-gradient(180deg, rgba(8, 32, 29, 0.9), rgba(3, 14, 13, 0.75));
+  box-shadow: inset 0 1px 0 rgba(46, 232, 138, 0.18), 0 10px 20px -14px rgba(0, 0, 0, 0.9);
+}
+
+.scene__teams { font-size: 0.8125rem; font-weight: 600; }
+.scene__teams em { font-style: normal; color: var(--mint); font-weight: 500; }
+.scene__boxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+
+.scene__box {
+  display: grid; gap: 2px; padding: 6px 8px;
+  border: 1px solid var(--line-strong); border-radius: 6px;
+  background: rgba(4, 16, 15, 0.55);
+}
+
+.scene__box--mint { border-color: rgba(46, 232, 138, 0.45); background: rgba(46, 232, 138, 0.1); }
+
+.scene__esito {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding-top: var(--s2); border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.scene__box-key { font-size: 0.5625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.scene__box-val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.howto__facts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s5) var(--s6); list-style: none; margin: var(--s7) 0 0; padding: var(--s6) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.howto__facts li { display: flex; gap: var(--s3); align-items: flex-start; }
+.howto__facts strong { display: block; font-size: 0.875rem; font-weight: 600; }
+.howto__fact-body { display: block; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+
+.howto__fact-glyph {
+  display: grid; place-items: center; flex: none; width: 28px; height: 28px;
+  border-radius: 50%; border: 1px solid rgba(46, 232, 138, 0.3);
+  background: rgba(46, 232, 138, 0.08); color: var(--mint);
+}
 
 /* --- sezioni -------------------------------------------------------------- */
 
@@ -1173,13 +1433,63 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 /* --- piede ---------------------------------------------------------------- */
 
-.colophon { border-top: 1px solid var(--line); background: var(--bg-2); }
-
-.colophon__inner {
-  display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6);
-  padding-block: var(--s5) var(--s7);
-  font-size: 0.6875rem; letter-spacing: 0.08em; color: var(--faint);
+/* Nessun filetto in cima nemmeno qui: il piede si stacca perche' il fondo
+   cambia, non perche' c'e' una riga. */
+.colophon {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 22%);
+  padding-top: var(--s8);
 }
+
+.colophon__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: var(--s6) var(--s5);
+  padding-bottom: var(--s7);
+}
+
+.colophon__brand .brand { align-items: flex-start; }
+.colophon__brand .brand__logo { height: 40px; }
+
+.colophon__pitch {
+  margin: var(--s4) 0 0; max-width: 34ch;
+  font-size: 0.8125rem; color: var(--muted); line-height: 1.6;
+}
+
+.colophon__col { display: grid; gap: var(--s2); align-content: start; }
+
+.colophon__col h3 {
+  margin: 0 0 var(--s1);
+  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--faint);
+}
+
+.colophon__col a, .colophon__col span { font-size: 0.8125rem; color: var(--muted); }
+.colophon__col a { width: fit-content; border-bottom: 1px solid transparent; }
+.colophon__col a:hover { color: var(--mint); border-bottom-color: rgba(46, 232, 138, 0.5); }
+
+/* Il nome del modello in chiaro, e sotto in piccolo la versione che l'API
+   dichiara davvero: se un giorno la produzione cambiasse, la riga piccola lo
+   direbbe da sola invece di lasciare in pagina un nome scritto a mano. */
+.colophon__modello { display: grid; gap: 2px; }
+.colophon__modello em {
+  font-style: normal; font-size: 0.6875rem; color: var(--faint); line-height: 1.45;
+}
+
+/* L'indirizzo dell'API e' l'unica voce che puo' essere lunghissima (un tunnel
+   ngrok arriva a sessanta caratteri): va a capo invece di allargare la colonna. */
+.colophon__api { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+.colophon__rule { height: 1px; background: linear-gradient(90deg, transparent, var(--line), transparent); }
+
+.colophon__bottom {
+  display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); align-items: baseline;
+  justify-content: space-between;
+  padding-block: var(--s5) var(--s7);
+}
+
+.colophon__bottom p { margin: 0; font-size: 0.75rem; color: var(--faint); max-width: 62ch; line-height: 1.6; }
+.colophon__bottom strong { color: var(--muted); font-weight: 600; }
+.colophon__meta { letter-spacing: 0.04em; }
 
 /* --- adattamenti ---------------------------------------------------------- */
 
@@ -1191,7 +1501,17 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .showcase { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+@media (max-width: 1100px) {
+  .howto__head { grid-template-columns: 1fr; }
+  .howto__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .howto__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Su due colonne la freccia della seconda scheda punterebbe fuori pagina. */
+  .step:nth-child(2n)::after { display: none; }
+}
+
 @media (max-width: 900px) {
+  .colophon__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .colophon__brand { grid-column: 1 / -1; }
   .masthead__inner { grid-template-columns: auto auto; }
   .nav { display: none; }
   .hero__grid { grid-template-columns: 1fr; padding-block: var(--s6); }
@@ -1202,6 +1522,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 @media (max-width: 720px) {
   :root { --s8: 3rem; }
+  .howto__steps, .howto__facts { grid-template-columns: 1fr; }
+  .step::after { display: none; }
   .wrap { padding-inline: var(--s4); }
   .hide-narrow { display: none; }
   table.fixtures tbody td { padding: var(--s3); }

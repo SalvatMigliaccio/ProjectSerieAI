@@ -38,12 +38,20 @@ echo ======================================================================== >>
 echo [%STARTED%] START %TASK% %1 %2 %3 >> "%LOG%"
 echo ======================================================================== >> "%LOG%"
 
+REM  BOTH python calls must run from the repo, and the second one is the reason
+REM  this is worth a comment. `python -m backend.api.last_run` resolves the
+REM  package from the CURRENT directory: with the popd before it, the task ran
+REM  from wherever Task Scheduler starts (C:\Windows\system32) and died with
+REM  "No module named 'backend'". The prediction itself had already succeeded,
+REM  so the only visible symptom was /api/status insisting the scheduler had
+REM  never run — a silent failure of exactly the component whose job is to say
+REM  whether something failed.
 pushd "%REPO%"
 "%PY%" -m src.%TASK% %1 %2 %3 >> "%LOG%" 2>&1
 set "CODE=%ERRORLEVEL%"
-popd
 
 echo [END] %TASK% exit=%CODE% >> "%LOG%"
 "%PY%" -m backend.api.last_run --command %TASK% --exit-code %CODE% --log "scheduler_%DAY%.log" --started-at "%STARTED%" >> "%LOG%" 2>&1
+popd
 
 exit /b %CODE%

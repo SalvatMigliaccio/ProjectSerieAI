@@ -57,7 +57,6 @@ export function Dashboard() {
 
   const status = useApi(() => api.status(), []);
   const rounds = useApi(() => api.rounds(), []);
-  const health = useApi(() => api.health(), []);
   const record = useApi<{ record: TrackRecord; summary: SeasonSummary }>(
     () =>
       Promise.all([api.trackRecord(), api.season()]).then(([r, s]) => ({
@@ -308,7 +307,6 @@ export function Dashboard() {
 
       <Colophon
         modelVersion={record.data?.summary.model_version ?? null}
-        updatedAt={health.data?.updated_at ?? null}
         showApi
       />
     </div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Match, MatchPoint, Round, StandingRow } from "../api/types";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { HowItWorks } from "../components/HowItWorks";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { ErrorState, Skeleton } from "../components/States";
@@ -148,7 +149,6 @@ function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[
 
 export function Hero() {
   const season = useApi(() => api.season(), []);
-  const health = useApi(() => api.health(), []);
   const rounds = useApi(() => api.rounds(), []);
   const standings = useApi(() => api.standings(), []);
   const track = useApi(() => api.trackRecord(), []);
@@ -313,39 +313,7 @@ export function Hero() {
         </div>
       </div>
 
-      <div className="strip" id="come-funziona">
-        <div className="wrap strip__grid">
-          {(
-            [
-              [
-                "registro",
-                "Scritte prima del fischio",
-                "Un assert blocca la registrazione a partita iniziata, e un secondo controllo esclude dalle medie le righe scritte tardi.",
-              ],
-              [
-                "mercato",
-                "Mercato de-viggato",
-                "Il modello parte dalle quote di apertura di B365 e ne toglie il margine con il metodo di Shin.",
-              ],
-              [
-                "mercati",
-                "Tutti i mercati, coerenti",
-                "1X2, doppia chance, over/under, gol-gol: somme diverse sulla stessa matrice, quindi non possono contraddirsi.",
-              ],
-              [
-                "errore",
-                "Errore pubblicato",
-                "Ogni giornata chiusa entra nel track record con il suo RPS, anche quando è andata male.",
-              ],
-            ] as Array<[string, string, string]>
-          ).map(([, title, body]) => (
-            <div className="strip__item" key={title}>
-              <h3>{title}</h3>
-              <p>{body}</p>
-            </div>
-          ))}
-        </div>
-      </div>
+      <HowItWorks match={head} />
 
       <main className="wrap">
         <section className="section" id="statistiche">
@@ -476,7 +444,6 @@ export function Hero() {
 
       <Colophon
         modelVersion={season.data?.model_version ?? null}
-        updatedAt={health.data?.updated_at ?? null}
       />
     </>
   );

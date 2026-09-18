@@ -564,48 +564,72 @@ Registrano tutto in `logs\scheduler_YYYYMMDD.log` e scrivono `logs\last_run.json
 che e' quello che legge `GET /api/status` — il log resta per gli umani, l'API
 non ne parsa la prosa.
 
-Creazione dei task (PowerShell come amministratore):
+**I task sono registrati su questa macchina dal 18 settembre 2026.** Questi sono
+i comandi con cui ricrearli altrove, o qui dopo una reinstallazione:
 
 ```powershell
 $repo = "D:\Progetti\AI_Naples"
-schtasks /create /tn "AI_Naples predict_round" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 12:00 /f
-schtasks /create /tn "AI_Naples predict_round 16" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 16:00 /f
-schtasks /create /tn "AI_Naples predict_round 19" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 19:00 /f
-schtasks /create /tn "AI_Naples close_round"  /tr "$repo\scripts\close_round.cmd"  /sc weekly /d TUE /st 09:00 /f
+schtasks /create /tn "AI_Naples predict_round 1815"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 18:15 /f
+schtasks /create /tn "AI_Naples predict_round 1915"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 19:15 /f
+schtasks /create /tn "AI_Naples predict_round 2000"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 20:00 /f
+schtasks /create /tn "AI_Naples predict_round sabato" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d SAT /st 09:00 /f
+schtasks /create /tn "AI_Naples close_round"          /tr "$repo\scripts\close_round.cmd"   /sc weekly /d TUE /st 09:00 /f
 ```
+
+**Le impostazioni predefinite di `schtasks` fanno fallire i task in silenzio, e
+vanno cambiate subito dopo averli creati.** Di default Windows non avvia un task
+se il portatile e' a batteria, e lo ferma se ci passa mentre gira: su un
+portatile staccato dalla presa non parte niente e non resta traccia.
+
+```powershell
+foreach ($n in (Get-ScheduledTask -TaskName "AI_Naples*").TaskName) {
+  Set-ScheduledTask -TaskName $n -Settings (New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+    -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew)
+}
+```
+
+- `-StartWhenAvailable` recupera un orario mancato (PC spento alle 18:15, acceso
+  alle 21): il run parte appena puo'. Le partite gia' cominciate restano fuori
+  da sole, se ne occupa l'assert sul calcio d'inizio.
+- `-WakeToRun` sveglia il PC sospeso. Funziona solo se i timer di riattivazione
+  non sono disabilitati nelle opzioni di risparmio energia.
+- `-MultipleInstances IgnoreNew`: se il run delle 18:15 sta ancora girando alle
+  19:15, il secondo non parte invece di sovrapporsi.
+- Serve comunque che il PC sia **acceso**: un task che non parte non lascia log,
+  e te ne accorgi solo dal buco nel track record.
 
 I rilanci sono ridondanti di proposito: i comandi sono idempotenti, una partita
 gia' in registro viene saltata.
 
-**Gli orari del venerdi' vanno però guardati in faccia.** football-data
-pubblica le quote **entro le 17:00 UK, cioe' le 18:00 italiane**:
+**Perche' quegli orari.** football-data pubblica le quote **entro le 17:00 UK,
+cioe' le 18:00 italiane**, e il margine fino al primo fischio e' stretto: la
+giornata 5 ha Monza-Sassuolo alle **20:45**.
 
-| orario | cosa trovera' |
+| orario | cosa trova |
 |---|---|
-| 12:00 | giornata ancora `futura`, zero quote |
-| 16:00 | quasi certamente ancora `futura` |
-| 19:00 | **l'unico che lavora davvero** |
+| ven 18:15 | le quote appena pubblicate, nel caso normale |
+| ven 19:15 | rete di sicurezza se alle 18 non erano ancora uscite |
+| ven 20:00 | ultima occasione prima del fischio delle 20:45 |
+| sab 09:00 | le partite che lo snapshot del venerdi' non copriva |
 
-E il margine e' stretto: la giornata 5 ha Monza-Sassuolo alle **20:45**. Se il
-run delle 19:00 fallisce, quella partita e' persa per sempre dal track record —
-una previsione scritta dopo il fischio non e' una previsione. La disposizione
-piu' sicura, se vuoi cambiarla, e' **18:15 / 19:15 / 20:00 piu' un run sabato
-alle 9:00** per le partite che lo snapshot del venerdi' non copriva.
-
-Due impostazioni che fanno fallire i task in silenzio:
-
-- in Utilita' di pianificazione, proprieta' del task, **"Esegui indipendentemente
-  dalla connessione dell'utente"**;
-- il PC non deve essere sospeso all'orario del task. Un task che non parte non
-  lascia log, e te ne accorgi solo dal buco nel track record.
+Una previsione scritta dopo il fischio non e' una previsione: se tutti i run del
+venerdi' saltano, la partita del venerdi' sera e' persa per sempre dal track
+record, mentre le altre nove restano recuperabili il sabato.
 
 Verifica manuale, senza aspettare venerdi':
 
 ```powershell
-schtasks /run /tn "AI_Naples predict_round"
+schtasks /run /tn "AI_Naples predict_round 1815"
+Get-ScheduledTask -TaskName "AI_Naples*" | Get-ScheduledTaskInfo |
+  Select-Object TaskName, NextRunTime, LastRunTime, LastTaskResult
 Get-Content logs\scheduler_*.log -Tail 30
 Get-Content logs\last_run.json
 ```
+
+`LastTaskResult` e' un codice Windows, non l'uscita del comando: `267011`
+(0x41303) vuol dire "mai eseguito", `267009` (0x41301) "in esecuzione adesso",
+`0` finito bene. L'esito vero del comando sta in `last_run.json`.
 
 ---
 
