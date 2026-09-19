@@ -34,7 +34,7 @@ function Glifo({ nome }: { nome: "dati" | "analisi" | "probabilita" | "scenari" 
   };
   if (nome === "dati") {
     return (
-      <svg {...comune}>
+      <svg aria-hidden="true" {...comune}>
         <ellipse cx="12" cy="6" rx="8" ry="3" />
         <path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6" />
         <path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
@@ -43,7 +43,7 @@ function Glifo({ nome }: { nome: "dati" | "analisi" | "probabilita" | "scenari" 
   }
   if (nome === "analisi") {
     return (
-      <svg {...comune}>
+      <svg aria-hidden="true" {...comune}>
         <rect x="7" y="7" width="10" height="10" rx="2" />
         <path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4" />
       </svg>
@@ -51,7 +51,7 @@ function Glifo({ nome }: { nome: "dati" | "analisi" | "probabilita" | "scenari" 
   }
   if (nome === "probabilita") {
     return (
-      <svg {...comune}>
+      <svg aria-hidden="true" {...comune}>
         <circle cx="12" cy="12" r="9" />
         <circle cx="12" cy="12" r="4.5" />
         <circle cx="12" cy="12" r="1" fill="currentColor" />
@@ -59,7 +59,7 @@ function Glifo({ nome }: { nome: "dati" | "analisi" | "probabilita" | "scenari" 
     );
   }
   return (
-    <svg {...comune}>
+    <svg aria-hidden="true" {...comune}>
       <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -141,7 +141,7 @@ export function HowItWorks({ match }: { match: Match | null }) {
 
           <p className="howto__note">
             <span className="howto__note-glyph" aria-hidden="true">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+              <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
                 <path d="M12 3l7 3v6c0 4.4-3 7.7-7 9-4-1.3-7-4.6-7-9V6l7-3z" />
                 <path d="M9.5 12.2l1.8 1.8 3.3-3.6" strokeLinecap="round" />
               </svg>
@@ -330,7 +330,7 @@ export function HowItWorks({ match }: { match: Match | null }) {
           {FATTI.map(([titolo, corpo]) => (
             <li key={titolo}>
               <span className="howto__fact-glyph" aria-hidden="true">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
               </span>

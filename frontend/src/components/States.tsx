@@ -28,6 +28,12 @@ export function ErrorState({ error, what }: { error: Error; what: string }) {
           {hint}
         </>
       )}
+      {/* error-recovery: un errore senza una via d'uscita lascia solo il tasto
+          indietro. Il caso tipico e' il server riavviato o il tunnel che
+          torna su: ricaricare e' esattamente la cosa giusta da fare. */}
+      <button type="button" className="state__retry" onClick={() => window.location.reload()}>
+        Riprova
+      </button>
     </div>
   );
 }

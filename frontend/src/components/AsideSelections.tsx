@@ -68,9 +68,9 @@ export function AsideSelections({
   const esplorate = perGiornata(banda.data?.best_per_match);
 
   return (
-      <div className="aside-card">
+      <div className="aside-card" aria-busy={banda.loading}>
         <div className="aside-card__head">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M4 19V5M4 19h16" strokeLinecap="round" />
             <path d="M8 15l3.5-4 3 2.5L20 7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -112,7 +112,7 @@ export function AsideSelections({
         ))}
 
         {esplorate.length > 0 && (
-          <p className="small faint" style={{ marginTop: "var(--s3)" }}>
+          <p className="small faint" style={{ marginTop: "var(--s3)" }} aria-live="polite">
             {esplorate.length} partite di questa giornata hanno una selezione
             sopra {soglia.toFixed(2)}, e sono accese nella griglia. In stagione:{" "}
             {ratio(banda.data?.best_won ?? 0, banda.data?.best_resolved ?? 0)} a

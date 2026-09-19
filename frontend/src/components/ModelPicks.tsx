@@ -29,7 +29,7 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
     <section className="picks">
       <div className="picks__head">
         <h3>
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M12 3l2.6 5.6 6.4.8-4.7 4.3 1.2 6.3L12 17l-5.5 3 1.2-6.3L3 9.4l6.4-.8L12 3z" strokeLinejoin="round" />
           </svg>
           Selezioni del modello
@@ -79,7 +79,7 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
           <tbody>
             {righe.map((r) => (
               <tr key={`${r.matchday}-${r.home_team}-${r.market}`}>
-                <td className="picks__match">
+                <td className="picks__match" title={`${r.home_team} – ${r.away_team}`}>
                   {r.home_team} <span className="faint">–</span> {r.away_team}
                 </td>
                 <td className="picks__market">{r.market_label}</td>

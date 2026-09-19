@@ -268,7 +268,7 @@ export function MatchesGrid({
         <div key={titolo || "tutte"}>
           {titolo && (
             <h2 className="day-head">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <rect x="3" y="5" width="18" height="16" rx="2" />
                 <path d="M8 3v4M16 3v4M3 11h18" strokeLinecap="round" />
               </svg>

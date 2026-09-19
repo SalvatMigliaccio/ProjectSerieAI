@@ -86,6 +86,13 @@ async function get<T>(path: string): Promise<T> {
   const url = `${baseUrl()}${path}`;
   let response: Response;
 
+  // timeout-feedback: una fetch senza tetto puo' restare appesa per minuti
+  // se il tunnel e' caduto a meta' — e la pagina mostra "carico…" per sempre,
+  // che e' la cosa meno informativa possibile. Dopo 15 secondi si arrende e
+  // dice perche'.
+  const controllo = new AbortController();
+  const timer = window.setTimeout(() => controllo.abort(), 15000);
+
   try {
     // `ngrok-skip-browser-warning` non serve a noi e non disturba nessuno: con
     // un account ngrok gratuito, senza, la prima risposta a una `fetch` puo'
@@ -93,8 +100,16 @@ async function get<T>(path: string): Promise<T> {
     // JSON, e l'errore parla di sintassi invece che di tunnel.
     response = await fetch(url, {
       headers: { Accept: "application/json", "ngrok-skip-browser-warning": "1" },
+      signal: controllo.signal,
     });
   } catch {
+    window.clearTimeout(timer);
+    if (controllo.signal.aborted) {
+      throw new ApiError("l'API non risponde da 15 secondi", {
+        url,
+        hint: "Il server e' acceso ma bloccato, oppure il tunnel e' caduto. Riavvialo e riprova.",
+      });
+    }
     throw new ApiError("non riesco a contattare l'API", {
       url,
       hint:
@@ -102,6 +117,8 @@ async function get<T>(path: string): Promise<T> {
         "Se usi un tunnel, l'URL di ngrok cambia a ogni riavvio.",
     });
   }
+
+  window.clearTimeout(timer);
 
   if (!response.ok) {
     let detail = "";

@@ -25,6 +25,7 @@ import { ErrorState, Loading } from "./States";
  */
 
 const ESITO: Record<string, string> = { W: "vittoria", D: "pareggio", L: "sconfitta" };
+const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
 
 export function StandingsPanel({ limit }: { limit?: number }) {
   const state = useApi(() => api.standings(), []);
@@ -78,7 +79,7 @@ export function StandingsPanel({ limit }: { limit?: number }) {
                 </td>
 
                 <td className="std__team">
-                  <span className="std__name">{row.team}</span>
+                  <span className="std__name" title={row.team}>{row.team}</span>
                   {!stretta && (
                     <span className="std__track" aria-hidden="true">
                       <i style={{ width: `${(row.points / massimo) * 100}%` }} />
@@ -103,7 +104,9 @@ export function StandingsPanel({ limit }: { limit?: number }) {
                         key={`${row.team}-${indice}`}
                         className={`std__pip std__pip--${esito.toLowerCase()}`}
                         title={`${row.team}: ${ESITO[esito] ?? esito}`}
-                      />
+                      >
+                        {LETTERA[esito] ?? esito}
+                      </span>
                     ))}
                   </td>
                 )}

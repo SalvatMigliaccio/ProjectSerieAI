@@ -80,6 +80,27 @@ body {
 :focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 4px; }
 a { color: inherit; text-decoration: none; }
 
+/* --- interazione: regole comuni a tutto cio' che si clicca ----------------- */
+
+/* `touch-action: manipulation` toglie l'attesa del doppio tocco: senza, sui
+   telefoni ogni pulsante risponde con 300ms di ritardo. */
+a, button, select, [role="button"] { touch-action: manipulation; }
+
+button, select { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.45; }
+
+/* Una risposta al tocco per ogni controllo: un leggero rimpicciolimento finche'
+   e' premuto. Solo `transform`, quindi niente ricalcolo del layout attorno. */
+.cta, .matchcard__cta, .device__cta, .nav-cta, .filter, .threshold,
+.round-chip, .round-strip__arrow, .device__status {
+  transition: transform 120ms ease, background-color 160ms ease,
+              border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.cta:active, .matchcard__cta:active, .device__cta:active, .nav-cta:active,
+.filter:active, .threshold:active, .round-chip:active,
+.round-strip__arrow:active, .device__status:active { transform: scale(0.97); }
+
 /* Invisibile finche' non arriva il fuoco da tastiera, poi in alto a sinistra
    sopra a tutto. */
 .skip-link {
@@ -202,7 +223,10 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   background-image:
     radial-gradient(70% 60% at 72% 8%, rgba(46, 232, 138, 0.16), transparent 62%),
     radial-gradient(60% 55% at 18% 92%, rgba(46, 232, 138, 0.08), transparent 70%),
-    url("/hero-bg.jpg");
+    /* WebP da 79 kB invece del JPG da 1.7 MB: la foto sta sotto due veli
+       scuri e la differenza non si vede. `image-set` prende il primo formato
+       che il browser sa leggere; il JPG resta come ripiego. */
+    image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
   /* `auto 132%` invece di `cover`: su una hero molto larga `cover` scala la
      foto sulla LARGHEZZA e non lascia margine orizzontale, quindi
      `background-position-x` non ha alcun effetto e il soggetto resta
@@ -596,7 +620,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .howto::before {
   content: "";
   position: absolute; inset: 0; z-index: -2;
-  background-image: url("/work-bg.png");
+  background-image: image-set(url("/work-bg.webp") type("image/webp"), url("/work-bg.png") type("image/png"));
   background-size: cover;
   background-position: center 38%;
   background-repeat: no-repeat;
@@ -1219,8 +1243,10 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .std__form { white-space: nowrap; }
 
 .std__pip {
-  display: inline-block; width: 9px; height: 9px; margin-right: 4px;
-  border-radius: 3px; background: var(--idle);
+  display: inline-grid; place-items: center; vertical-align: middle;
+  width: 16px; height: 16px; margin-right: 3px;
+  border-radius: 4px; background: var(--idle);
+  font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
 }
 
 .std__pip--w { background: var(--mint); }
@@ -1318,7 +1344,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   position: absolute; inset: 0; z-index: -1;
   background-image:
     linear-gradient(90deg, rgba(10, 34, 32, 0.98) 34%, rgba(10, 34, 32, 0.55) 70%, rgba(10, 34, 32, 0.9)),
-    url("/hero-bg.jpg");
+    image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
   background-size: cover;
   background-position: center 28%;
 }
@@ -1536,7 +1562,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .pick__bar { width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .pick__bar i { display: block; height: 100%; border-radius: 2px; }
 .pick__odds { font-size: 0.6875rem; color: var(--faint); font-variant-numeric: tabular-nums; }
-.pick--best .pick__pct { color: var(--mint); }
+.pick--best .pick__pct { color: var(--mint); font-weight: 700; }
 
 /* La cella scelta dalla soglia di quota: si accende quando cambi la soglia
    nella colonna a fianco, cosi' il filtro si vede sulla giornata e non solo
@@ -1570,7 +1596,11 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 }
 
 .score-chip--ok { background: var(--ok-wash); color: var(--ok); }
+/* Il segno accanto al colore: verde e corallo da soli, per chi non distingue
+   il rosso dal verde, sono la stessa pastiglia. */
+.score-chip--ok::before { content: "\2713\00a0"; font-weight: 700; }
 .score-chip--ko { background: var(--ko-wash); color: var(--ko); }
+.score-chip--ko::before { content: "\2717\00a0"; font-weight: 700; }
 
 /* --- dashboard: colonna laterale ------------------------------------------- */
 
@@ -1726,6 +1756,17 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 .state--error { border-style: solid; border-color: rgba(255, 123, 123, 0.4); background: var(--ko-wash); color: var(--ko); text-align: left; }
 .state--error strong { display: block; margin-bottom: var(--s1); color: var(--fg); }
+.state__retry {
+  display: inline-flex; align-items: center; min-height: 36px;
+  margin-top: var(--s3); padding: 0 var(--s4);
+  border: 1px solid currentColor; border-radius: 999px;
+  background: transparent; color: inherit; font: inherit; font-weight: 600;
+}
+
+.state__retry:hover { background: rgba(255, 123, 123, 0.12); }
+
+.state--error .state__retry { display: flex; width: fit-content; }
+
 .state code { background: var(--bg-2); border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 4px; font-size: 0.95em; }
 
 .skeleton {
@@ -1798,6 +1839,47 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .colophon__bottom strong { color: var(--muted); font-weight: 600; }
 .colophon__meta { letter-spacing: 0.04em; }
 
+/* --- elevazione: tre gradini, non un'ombra per componente ------------------ */
+
+/* Prima ogni scheda aveva la sua ombra scritta a mano — undici valori
+   diversi — e la profondita' non diceva niente: una tabella poteva sembrare
+   piu' in rilievo del tablet. Tre gradini con un significato:
+     1  superfici nel flusso della pagina (tabelle, pannelli)
+     2  schede staccate dal fondo (partite, passi, classifica in vetrina)
+     3  oggetti sospesi sopra la scena (il tablet e le schede fluttuanti)
+   La luce viene sempre dall'alto: filo chiaro sopra, ombra sotto. */
+:root {
+  --shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 14px -8px rgba(0, 0, 0, 0.5),
+              0 22px 36px -28px rgba(0, 0, 0, 0.75);
+  --shadow-3: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -18px rgba(0, 0, 0, 0.8),
+              0 40px 80px -40px rgba(0, 0, 0, 0.9);
+}
+
+.std, .tr, .grid-wrap, .aside-card, .faq__item, .dash-banner { box-shadow: var(--shadow-1); }
+.matchcard, .side-card, .step, .howto__note { box-shadow: var(--shadow-2); }
+.device, .floater { box-shadow: var(--shadow-3); }
+
+/* --- un solo pulsante primario per schermata ------------------------------ */
+
+/* Nella hero c'erano cinque pulsanti menta pieno — "Esplora le partite",
+   "Vedi analisi completa" e tre "Vedi analisi" — e cinque azioni primarie
+   sono nessuna: l'occhio non sa dove andare. Resta pieno solo quello della
+   hero; gli altri portano nello stesso posto e lo dicono piu' piano, con il
+   contorno. */
+.device__cta, .matchcard__cta {
+  background: rgba(46, 232, 138, 0.08);
+  color: var(--mint);
+  border: 1px solid rgba(46, 232, 138, 0.5);
+  box-shadow: none;
+}
+
+.device__cta:hover, .matchcard__cta:hover {
+  background: rgba(46, 232, 138, 0.16);
+  border-color: var(--mint);
+  box-shadow: none;
+}
+
 /* --- adattamenti ---------------------------------------------------------- */
 
 @media (max-width: 1340px) {
@@ -1845,6 +1927,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 @media (max-width: 720px) {
   :root { --s8: 3rem; }
+  body { font-size: 1rem; }
   .howto__steps, .howto__facts { grid-template-columns: 1fr; }
   .step::after { display: none; }
   .wrap { padding-inline: var(--s4); }

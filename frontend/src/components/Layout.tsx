@@ -108,7 +108,7 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
               `/Logo_NoName.png`, non `public/...`. Con il prefisso si
               risolverebbe relativo all'URL corrente e si romperebbe appena
               cambia rotta o in build. */}
-          <img className="brand__logo" src="/Logo_NoName.png" alt="" />
+          <img className="brand__logo" src="/Logo_NoName.png" alt="" width={331} height={333} />
           <span>
             <span className="brand__name">
               Match<em>Point</em>
@@ -118,12 +118,14 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
         </Link>
 
         <nav className="nav">
-          <Link to="/" className={current === "hero" ? "on" : undefined}>
+          <Link to="/" className={current === "hero" ? "on" : undefined}
+            aria-current={current === "hero" ? "page" : undefined}>
             Home
           </Link>
           <SectionLink id="come-funziona">Come funziona</SectionLink>
           <SectionLink id="statistiche">Statistiche</SectionLink>
-          <Link to="/dashboard" className={current === "dashboard" ? "on" : undefined}>
+          <Link to="/dashboard" className={current === "dashboard" ? "on" : undefined}
+            aria-current={current === "dashboard" ? "page" : undefined}>
             Partite
           </Link>
           <SectionLink id="faq">FAQ</SectionLink>
@@ -133,7 +135,7 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
             una data li' e' informazione che nessuno cerca in quel punto, e la
             stessa informazione e' gia' nel piede della pagina. */}
         <Link className="nav-cta" to="/dashboard">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
             <rect x="3" y="3" width="7" height="9" rx="1.5" />
             <rect x="14" y="3" width="7" height="5" rx="1.5" />
             <rect x="14" y="12" width="7" height="9" rx="1.5" />
@@ -180,7 +182,7 @@ export function Colophon({
       <div className="wrap colophon__grid">
         <div className="colophon__brand">
           <span className="brand">
-            <img className="brand__logo" src="/Logo_NoName.png" alt="" />
+            <img className="brand__logo" src="/Logo_NoName.png" alt="" width={331} height={333} />
             <span>
               <span className="brand__name">
                 Match<em>Point</em>

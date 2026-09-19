@@ -133,7 +133,7 @@ function Floaters({
         <span className="floater__sub">prime tre in classifica</span>
         <div className="floater__row">
           <span className="floater__glyph" aria-hidden="true">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M6 20V10M12 20V4M18 20v-7" strokeLinecap="round" />
             </svg>
           </span>
@@ -289,7 +289,7 @@ export function Hero() {
           <div className="stage">
             <div className="device">
               <div className="device__brand">
-                <img className="device__logo" src="/Logo_NoName.png" alt="" />
+                <img className="device__logo" src="/Logo_NoName.png" alt="" width={331} height={333} />
                 <span>
                   Match<em>Point</em>
                 </span>

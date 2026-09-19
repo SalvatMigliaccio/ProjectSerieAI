@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Match, Round, SeasonSummary, Selection, TrackRecord } from "../api/types";
@@ -41,7 +42,19 @@ function giorno(iso: string | null): string {
 }
 
 export function Dashboard() {
-  const [selected, setSelected] = useState<number | null>(null);
+  // deep-linking: la giornata scelta sta nell'URL (`#/dashboard?g=5`). Prima
+  // viveva solo nello stato del componente: un link mandato a qualcuno apriva
+  // sempre la giornata corrente, e tornando indietro dal browser si perdeva.
+  // `replace` e non `push`: cambiare giornata non e' una pagina nuova, e
+  // riempire la cronologia di dieci passi per tornare alla landing sarebbe
+  // peggio del problema.
+  const [params, setParams] = useSearchParams();
+  const dallUrl = Number(params.get("g")) || null;
+  const [selected, setSelectedState] = useState<number | null>(dallUrl);
+  const setSelected = (giornata: number) => {
+    setSelectedState(giornata);
+    setParams({ g: String(giornata) }, { replace: true });
+  };
   const [market, setMarket] = useState<Market>("all");
   const [sort, setSort] = useState<SortBy>("time");
   // La soglia di quota sta QUI e non nella scheda laterale: sceglierla accende
@@ -143,7 +156,7 @@ export function Dashboard() {
           <div className="dash-chips">
             <div className="dash-chip">
               <span className="dash-chip__glyph">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <rect x="3" y="5" width="18" height="16" rx="2" />
                   <path d="M8 3v4M16 3v4M3 11h18" strokeLinecap="round" />
                 </svg>
@@ -158,7 +171,7 @@ export function Dashboard() {
 
             <div className="dash-chip">
               <span className="dash-chip__glyph">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                   <circle cx="12" cy="12" r="9" />
                   <path d="M12 7v5l3 2" strokeLinecap="round" />
                 </svg>
