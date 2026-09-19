@@ -2,6 +2,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
+import { scorrimento } from "../lib/motion";
 
 /**
  * Un collegamento a una sezione della landing, che funziona anche dalla
@@ -21,7 +22,7 @@ function SectionLink({ id, children }: { id: string; children: ReactNode }) {
   const vai = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     const scorri = () =>
-      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById(id)?.scrollIntoView({ behavior: scorrimento(), block: "start" });
 
     if (pathname === "/") {
       scorri();
@@ -59,6 +60,32 @@ function SectionLink({ id, children }: { id: string; children: ReactNode }) {
 }
 
 /**
+ * "Salta al contenuto": il primo elemento raggiungibile da tastiera.
+ *
+ * Invisibile finche' non riceve il fuoco, poi compare in alto a sinistra. Chi
+ * naviga con la tastiera altrimenti attraversa marchio e menu a ogni pagina
+ * prima di arrivare a qualcosa da leggere. Non e' un'ancora semplice per lo
+ * stesso motivo di `SectionLink`: il router usa l'hash per le rotte, e
+ * `href="#contenuto"` porterebbe alla landing invece che al contenuto.
+ */
+function SkipLink() {
+  return (
+    <a
+      className="skip-link"
+      href="#contenuto"
+      onClick={(event) => {
+        event.preventDefault();
+        const nodo = document.getElementById("contenuto");
+        nodo?.focus();
+        nodo?.scrollIntoView({ behavior: scorrimento(), block: "start" });
+      }}
+    >
+      Salta al contenuto
+    </a>
+  );
+}
+
+/**
  * Testata: marchio a sinistra, menu al centro, stato a destra.
  *
  * NIENTE "ACCEDI". Non esiste autenticazione e non deve esistere: l'API e' in
@@ -74,6 +101,7 @@ function SectionLink({ id, children }: { id: string; children: ReactNode }) {
 export function Masthead({ current }: { current: "hero" | "dashboard" }) {
   return (
     <header className="masthead">
+      <SkipLink />
       <div className="wrap masthead__inner">
         <Link className="brand" to="/">
           {/* I file di `public/` sono serviti ALLA RADICE: il percorso e'

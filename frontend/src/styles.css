@@ -80,6 +80,35 @@ body {
 :focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 4px; }
 a { color: inherit; text-decoration: none; }
 
+/* Invisibile finche' non arriva il fuoco da tastiera, poi in alto a sinistra
+   sopra a tutto. */
+.skip-link {
+  position: absolute; left: var(--s4); top: -60px; z-index: 100;
+  padding: var(--s2) var(--s4); border-radius: var(--radius-sm);
+  background: var(--mint); color: var(--mint-ink); font-weight: 600; font-size: 0.875rem;
+  transition: top 120ms ease;
+}
+
+.skip-link:focus { top: var(--s3); }
+
+/* Il contenitore che riceve il fuoco dal link qui sopra non si contorna:
+   `tabindex="-1"` serve a poterci portare il fuoco, non a farne un controllo. */
+[tabindex="-1"]:focus { outline: none; }
+
+/* MENO MOVIMENTO, SE IL SISTEMA LO CHIEDE. Una regola sola per tutte le
+   transizioni e le animazioni del foglio, invece di ricordarsene caso per
+   caso: il pallino che pulsa, le schede che si sollevano, il tablet inclinato.
+   Gli scorrimenti avviati dal codice passano da `lib/motion.ts`. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .step:hover { transform: none; }
+}
+
 .wrap { max-width: var(--max); margin-inline: auto; padding-inline: var(--s5); }
 
 /* La dashboard e' piu' larga della landing, e non e' un vezzo: la griglia ha
@@ -124,7 +153,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 .brand__tag {
   display: block;
-  font-size: 0.5625rem;
+  font-size: 0.6875rem;
   font-weight: 500;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -138,7 +167,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--muted);
-  padding-bottom: var(--s1);
+  padding-block: 4px var(--s1);
   border-bottom: 2px solid transparent;
 }
 
@@ -331,15 +360,43 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 .device__brand em { font-style: normal; color: var(--mint); }
 
-.device__search {
+/* La riga di stato al posto del finto campo di ricerca: stesso ingombro e
+   stessa forma a pillola, ma dice una cosa vera e porta dove promette. */
+.device__status {
   display: flex; align-items: center; gap: var(--s3);
   padding: var(--s3) var(--s4);
   border: 1px solid var(--line);
   border-radius: 999px;
-  color: var(--faint);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
   font-size: 0.8125rem;
   margin-bottom: var(--s5);
+  transition: border-color 160ms ease, background 160ms ease;
 }
+
+.device__status:hover { border-color: rgba(46, 232, 138, 0.45); background: rgba(46, 232, 138, 0.06); }
+.device__status-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device__status-go { color: var(--mint); font-weight: 600; font-size: 0.75rem; }
+
+/* Il pallino "vivo": un anello che si espande piano. Dice che il dato viene
+   dall'API adesso, non da un'immagine; con movimento ridotto resta fermo. */
+.device__dot {
+  position: relative; flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--mint);
+}
+
+.device__dot::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid var(--mint); opacity: 0;
+  animation: impulso 2.4s ease-out infinite;
+}
+
+@keyframes impulso {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) { .device__dot::after { animation: none; } }
 
 /* La card della partita in evidenza: un riquadro dentro il riquadro, come nel
    mockup — il tablet mostra un'interfaccia, non una lista piatta. */
@@ -416,9 +473,12 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .device__probs { display: flex; gap: var(--s4); }
 
 .device__prob { display: grid; justify-items: center; gap: 1px; min-width: 34px; }
-.device__prob i { font-style: normal; font-size: 0.625rem; color: var(--faint); }
+.device__prob i { font-style: normal; font-size: 0.6875rem; color: var(--faint); }
 .device__prob b { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
 .device__prob--on b { color: var(--mint); }
+
+.device__row--head { padding: 0 0 var(--s2); border-bottom: 1px solid var(--line-strong); }
+.device__row--head .device__prob i { font-size: 0.6875rem; letter-spacing: 0.08em; }
 
 /* --- schede flottanti a lato ---------------------------------------------- */
 
@@ -443,12 +503,12 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.floater h4 { margin: 0 0 var(--s3); font-family: var(--display); font-size: 0.8125rem; font-weight: 600; }
+.floater__title { margin: 0 0 var(--s3); font-family: var(--display); font-size: 0.8125rem; font-weight: 600; }
 
 /* La riga che dice di che numero si tratta: sta sotto il titolo e sopra le
    barre, perche' e' li' che l'occhio la cerca quando il numero non torna. */
-.floater h4 + .floater__sub { margin-top: calc(var(--s3) * -1); }
-.floater__sub { display: block; margin-bottom: var(--s3); font-size: 0.625rem; color: var(--faint); }
+.floater__title + .floater__sub { margin-top: calc(var(--s3) * -1); }
+.floater__sub { display: block; margin-bottom: var(--s3); font-size: 0.6875rem; color: var(--faint); }
 
 /* Riga con l'icona a sinistra e le barre a destra, come nel riferimento. */
 .floater__row { display: flex; align-items: center; gap: var(--s3); }
@@ -493,12 +553,22 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
    ambra pareggio, corallo sconfitta. Pallini pieni come nel riferimento; il
    risultato per esteso resta nel `title`, perche' colore da solo non e' un
    testo. */
-.floater__form { display: flex; align-items: center; gap: var(--s2); }
-.floater__team { font-size: 0.6875rem; color: var(--faint); min-width: 34px; }
+.floater__form { display: flex; align-items: center; gap: 5px; margin-top: var(--s2); }
+.floater__team { font-size: 0.6875rem; color: var(--muted); min-width: 44px; margin-right: 3px; }
 
+/* La lettera dentro il pallino (V, N, P): il colore resta, ma non e' piu'
+   l'unica cosa che distingue una vittoria da una sconfitta. */
 .floater__result {
-  width: 14px; height: 14px; border-radius: 50%;
-  flex: none;
+  display: grid; place-items: center; flex: none;
+  width: 17px; height: 17px; border-radius: 50%;
+  font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
+}
+
+.floater__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.floater__head .floater__title { margin-bottom: var(--s3); }
+.floater__value {
+  font-family: var(--display); font-weight: 700; font-size: 1rem;
+  font-variant-numeric: tabular-nums; color: var(--fg);
 }
 
 .floater__result--w { background: var(--mint); }
@@ -658,7 +728,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .step__n {
   font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.03em;
   line-height: 1;
-  background: linear-gradient(170deg, #ffffff 10%, rgba(255, 255, 255, 0.32) 90%);
+  background: linear-gradient(170deg, #ffffff 10%, rgba(255, 255, 255, 0.55) 90%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
@@ -697,7 +767,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .pipe__step {
   display: flex; align-items: center; gap: var(--s2);
   padding: 7px var(--s3);
-  font-size: 0.625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
+  font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
   background: rgba(46, 232, 138, 0.04);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
@@ -716,11 +786,11 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 }
 
 .mini-coppia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
-.mini__head { font-size: 0.625rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.mini__head { font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
 .mini__cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
 .mini__cols--due { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mini__col { display: grid; gap: 3px; justify-items: center; }
-.mini__key { font-size: 0.625rem; color: var(--faint); }
+.mini__key { font-size: 0.6875rem; color: var(--faint); }
 .mini__val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .mini__bar { width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .mini__bar i { display: block; height: 100%; border-radius: 2px; }
@@ -750,7 +820,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
   padding-top: var(--s2); border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
-.scene__box-key { font-size: 0.5625rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.scene__box-key { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .scene__box-val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .howto__facts {
@@ -791,7 +861,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 var(--s2); }
 .lead { font-size: 1rem; color: var(--muted); }
 
-.link-mint { color: var(--mint); font-weight: 600; font-size: 0.875rem; }
+.link-mint { display: inline-block; padding-block: 3px; color: var(--mint); font-weight: 600; font-size: 0.875rem; }
 .link-mint:hover { text-decoration: underline; }
 
 /* La griglia di fondo: testo, tre schede partita, classifica. */
@@ -809,7 +879,10 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
    correzione — senza, un figlio flex non scende mai sotto il proprio
    contenuto, qualunque base gli si dia. */
 .showcase > .matchcard { flex: 1 1 0; min-width: 0; }
-.showcase > .side-card { flex: 1.35 1 0; min-width: 0; }
+/* 1.8 e non 1.35: la classifica ha dieci colonne di numeri e le schede ne
+   hanno tre. Con le proporzioni di prima, nella colonna da 390px "+11" e "12"
+   si toccavano; cosi' le schede perdono una ventina di pixel che non usavano. */
+.showcase > .side-card { flex: 1.8 1 0; min-width: 0; }
 
 .matchcard {
   background: rgba(12, 38, 35, 0.72);
@@ -848,6 +921,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
    dice di piu' e si legge da lontano. */
 .matchcard__name { font-size: 0.9375rem; font-weight: 600; line-height: 1.3; }
 .matchcard__vs { font-size: 0.75rem; color: var(--faint); }
+.matchcard__ok { color: var(--mint); font-weight: 700; }
 
 /* La selezione del modello sulla scheda. Incassata come i riquadri dei dati
    altrove, cosi' si legge come un dato e non come un bottone: qui non c'e'
@@ -860,7 +934,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 }
 
 .matchcard__pick-key {
-  font-size: 0.5625rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+  font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
 }
 
 .matchcard__pick-val { font-size: 0.8125rem; font-weight: 600; }
@@ -1081,10 +1155,10 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
    Proporzioni diverse e meno respiro ai lati, non una tabella diversa. */
 .std--stretta .std__table { font-size: 0.8125rem; }
 .std--stretta .std__c-pos { width: 9%; }
-.std--stretta .std__c-team { width: 26%; }
+.std--stretta .std__c-team { width: 24%; }
 .std--stretta .std__c-num { width: 6.4%; }
-.std--stretta .std__c-gol { width: 7%; }
-.std--stretta .std__c-pts { width: 8%; }
+.std--stretta .std__c-gol { width: 7.6%; }
+.std--stretta .std__c-pts { width: 9.5%; }
 .std--stretta .std__table th, .std--stretta .std__table td { padding-left: 3px; padding-right: 3px; }
 .std--stretta .std__table th:first-child, .std--stretta .std__table td:first-child { padding-left: var(--s2); }
 .std--stretta .std__table th:last-child, .std--stretta .std__table td:last-child { padding-right: var(--s2); }
@@ -1092,7 +1166,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 
 .std__table thead th {
   text-align: left; white-space: nowrap;
-  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
   color: var(--faint);
   padding: var(--s3) var(--s2);
   border-bottom: 1px solid var(--line-strong);
@@ -1185,7 +1259,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .tr__stat:last-child { padding-bottom: 0; border-bottom: 0; }
 
 .tr__label {
-  grid-column: 1; font-size: 0.625rem; font-weight: 600;
+  grid-column: 1; font-size: 0.6875rem; font-weight: 600;
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
 }
 
@@ -1206,7 +1280,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 
 .tr__table thead th {
   text-align: left; white-space: nowrap;
-  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--faint);
   padding-bottom: var(--s2); border-bottom: 1px solid var(--line-strong);
 }
@@ -1333,7 +1407,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 }
 
 .round-chip strong { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.round-chip span { font-size: 0.625rem; letter-spacing: 0.04em; }
+.round-chip span { font-size: 0.6875rem; letter-spacing: 0.04em; }
 .round-chip:hover { color: var(--fg); border-color: rgba(46, 232, 138, 0.4); }
 
 .round-chip[aria-pressed="true"] {
@@ -1396,7 +1470,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .day-head {
   display: flex; align-items: center; gap: var(--s3);
   margin: var(--s6) 0 var(--s3);
-  font-size: 0.9375rem; font-weight: 600;
+  font-size: 0.9375rem; font-weight: 600; letter-spacing: normal;
 }
 
 .day-head svg { color: var(--mint); }
@@ -1432,7 +1506,7 @@ table.grid thead th {
 
 table.grid thead th.left { text-align: left; padding-left: var(--s4); }
 table.grid thead tr.groups th { padding-bottom: var(--s1); }
-table.grid thead tr.keys th { font-size: 0.625rem; padding-top: 0; color: var(--faint); }
+table.grid thead tr.keys th { font-size: 0.6875rem; padding-top: 0; color: var(--faint); }
 
 table.grid td { padding: var(--s3) var(--s2); border-bottom: 1px solid var(--line); vertical-align: middle; }
 table.grid tbody tr:last-child td { border-bottom: 0; }
@@ -1450,7 +1524,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   grid-column: 1 / -1;
   justify-self: center;
   margin-top: 2px;
-  font-size: 0.625rem;
+  font-size: 0.6875rem;
   color: var(--mint);
   white-space: nowrap;
 }
@@ -1639,8 +1713,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .chart__area { fill: var(--mint); opacity: 0.12; stroke: none; }
 .chart__line { fill: none; stroke: var(--mint); stroke-width: 2; stroke-linejoin: round; }
 .chart__last { fill: var(--mint); stroke: var(--surface); stroke-width: 2; }
-.chart__tick { fill: var(--faint); font-size: 9px; font-family: var(--text); }
-.chart__caption { fill: var(--muted); font-size: 9px; font-family: var(--text); }
+.chart__tick { fill: var(--muted); font-size: 13px; font-family: var(--text); }
+.chart__caption { fill: var(--muted); font-size: 13px; font-family: var(--text); }
 
 /* --- stati ---------------------------------------------------------------- */
 
@@ -1692,12 +1766,12 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 .colophon__col h3 {
   margin: 0 0 var(--s1);
-  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
   color: var(--faint);
 }
 
 .colophon__col a, .colophon__col span { font-size: 0.8125rem; color: var(--muted); }
-.colophon__col a { width: fit-content; border-bottom: 1px solid transparent; }
+.colophon__col a { width: fit-content; padding-block: 3px; border-bottom: 1px solid transparent; }
 .colophon__col a:hover { color: var(--mint); border-bottom-color: rgba(46, 232, 138, 0.5); }
 
 /* Il nome del modello in chiaro, e sotto in piccolo la versione che l'API
@@ -1751,8 +1825,18 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 @media (max-width: 900px) {
   .colophon__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .colophon__brand { grid-column: 1 / -1; }
-  .masthead__inner { grid-template-columns: auto auto; }
-  .nav { display: none; }
+  .masthead__inner { grid-template-columns: auto auto; row-gap: var(--s3); }
+  /* IL MENU NON SPARISCE. Prima `display: none`: su telefono restava solo il
+     bottone della dashboard, e "Come funziona" o le FAQ si raggiungevano solo
+     scorrendo alla cieca. Ora sta su una riga sua sotto il marchio, e scorre
+     di lato se non ci sta tutto. */
+  .nav {
+    order: 3; grid-column: 1 / -1; justify-content: flex-start;
+    gap: var(--s5); overflow-x: auto; scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; }
   .hero__grid { grid-template-columns: 1fr; padding-block: var(--s6); }
   .device { transform: none; }
   .split { grid-template-columns: 1fr; }
@@ -1805,7 +1889,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   table.grid tbody td[data-k]::before {
     content: attr(data-k);
     display: block; margin-bottom: 2px;
-    font-size: 0.5625rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
     color: var(--faint); text-align: center;
   }
 
@@ -1840,6 +1924,12 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .colophon__grid { grid-template-columns: 1fr; }
   .colophon__col a { overflow-wrap: anywhere; }
   .colophon__bottom { display: grid; gap: var(--s3); }
+
+  /* Bersagli da dito: 44px di altezza per tutto cio' che si tocca. Col mouse
+     32px bastano, col pollice no — e i filtri erano proprio i piu' piccoli. */
+  .filter, .threshold, .filters__sort select, .nav-cta { min-height: 44px; }
+  .round-chip { min-height: 48px; }
+  .nav a { padding-block: var(--s3); }
 
   /* Su telefono la vetrina e' una colonna: schede a tutta larghezza, una
      sotto l'altra. */

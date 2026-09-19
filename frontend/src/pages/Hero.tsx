@@ -52,39 +52,75 @@ function OddsRow({ match, compact = false }: { match: Match; compact?: boolean }
   );
 }
 
-/** Spark dell'RPS cumulativo: la stessa serie del track record, in piccolo. */
-function Spark({ points }: { points: MatchPoint[] }) {
+/**
+ * RPS cumulativo in piccolo, con la tratteggiata del backtest.
+ *
+ * LA TRATTEGGIATA E' IL MOTIVO PER CUI IL GRAFICO SERVE. Una curva dell'errore
+ * senza riferimento non dice niente: sale, scende, ma rispetto a cosa? Con la
+ * linea del mercato sul test set (0.1881) si vede subito se il track record ci
+ * sta sopra o sotto. La scala include il riferimento, altrimenti a volte
+ * finirebbe fuori dal riquadro proprio quando e' piu' utile.
+ */
+function Spark({ points, reference }: { points: MatchPoint[]; reference: number }) {
   const values = points
     .map((point) => point.cumulative_rps)
     .filter((value): value is number => value !== null);
   if (values.length < 2) return null;
 
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
+  const lo = Math.min(...values, reference);
+  const hi = Math.max(...values, reference);
   const span = hi - lo || 1;
   const x = (i: number) => (i * 170) / (values.length - 1);
   const y = (v: number) => 44 - ((v - lo) / span) * 36 - 4;
 
   const line = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const area = `0,44 ${line} 170,44`;
+  const ultimo = values[values.length - 1] ?? 0;
 
   return (
-    <svg className="floater__spark" viewBox="0 0 170 48" role="img" aria-label="RPS cumulativo">
+    <svg
+      className="floater__spark"
+      viewBox="0 0 170 48"
+      role="img"
+      aria-label={`RPS cumulativo ${ultimo.toFixed(4)} contro il riferimento del backtest ${reference.toFixed(4)}`}
+    >
       <polygon className="chart__area" points={area} />
+      <line className="chart__ref" x1={0} x2={170} y1={y(reference)} y2={y(reference)} />
       <polyline className="chart__line" points={line} />
+      <circle className="chart__last" cx={x(values.length - 1)} cy={y(ultimo)} r={2.6} />
     </svg>
   );
 }
 
-function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[] }) {
+const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
+const PAROLA: Record<string, string> = { W: "vittoria", D: "pareggio", L: "sconfitta" };
+
+function Floaters({
+  points,
+  table,
+  reference,
+}: {
+  points: MatchPoint[];
+  table: StandingRow[];
+  reference: number;
+}) {
   const top = table.slice(0, 3);
   const most = Math.max(1, ...top.map((row) => row.goals_for));
+  const ultimo = [...points].reverse().find((p) => p.cumulative_rps !== null)?.cumulative_rps ?? null;
 
   return (
     <div className="floaters">
+      {/* Si chiamava "Analisi avanzata": un titolo che non diceva di che
+          grafico si trattasse, su una curva senza numero e senza
+          riferimento. Ora ha il nome della metrica, il valore attuale, il
+          verso di lettura e la linea contro cui leggerla. */}
       <div className="floater">
-        <h4>Analisi avanzata</h4>
-        <Spark points={points} />
+        <div className="floater__head">
+          <p className="floater__title">RPS cumulativo</p>
+          {ultimo !== null && <span className="floater__value">{ultimo.toFixed(4)}</span>}
+        </div>
+        <span className="floater__sub">più basso è meglio · tratteggio: backtest {reference.toFixed(4)}</span>
+        <Spark points={points} reference={reference} />
       </div>
 
       {/* IL NUMERO ACCANTO ALLA BARRA E' GOL FATTI, E ORA LO DICE. Con il
@@ -93,7 +129,7 @@ function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[
           schermate piu' giu'. Una barra senza unita' di misura non e' un
           grafico, e' un indovinello. */}
       <div className="floater">
-        <h4>Gol fatti</h4>
+        <p className="floater__title">Gol fatti</p>
         <span className="floater__sub">prime tre in classifica</span>
         <div className="floater__row">
           <span className="floater__glyph" aria-hidden="true">
@@ -126,18 +162,22 @@ function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[
           processo piu' vecchio del frontend. Senza la guardia, un campo assente
           fa esplodere il componente e con lui tutta la pagina. */}
       <div className="floater">
-        <h4>Trend e forma</h4>
+        <p className="floater__title">Forma recente</p>
+        <span className="floater__sub">ultime partite, dalla più vecchia</span>
         {top.slice(0, 2).map((row) => (
-          <div className="floater__form" key={row.team} style={{ marginTop: "var(--s2)" }}>
-            <span className="floater__team">{row.team.slice(0, 6)}</span>
+          <div className="floater__form" key={row.team}>
+            <span className="floater__team">{row.team}</span>
+            {/* La lettera dentro il pallino: con il solo colore, verde e
+                corallo sono la stessa cosa per chi non distingue il rosso dal
+                verde — circa un uomo su dodici. */}
             {(row.form ?? []).map((result, index) => (
               <span
                 key={`${row.team}-${index}`}
                 className={`floater__result floater__result--${result.toLowerCase()}`}
-                title={`${row.team}: ${
-                  result === "W" ? "vittoria" : result === "D" ? "pareggio" : "sconfitta"
-                }`}
-              />
+                title={`${row.team}: ${PAROLA[result] ?? result}`}
+              >
+                {LETTERA[result] ?? result}
+              </span>
             ))}
           </div>
         ))}
@@ -181,8 +221,8 @@ export function Hero() {
   );
 
   // Il titolo segue lo stato della giornata mostrata: finche' non e' chiusa,
-  // "la scorsa giornata" e' semplicemente falso — le schede dicono "da giocare"
-  // due righe sotto.
+  // "la scorsa giornata" e' semplicemente falso — le schede dicono "risultato
+  // in attesa" due righe sotto.
   const titolo = round?.closed ? "La scorsa giornata" : "La prossima giornata";
 
   return (
@@ -190,7 +230,7 @@ export function Hero() {
       <div className="hero">
         <Masthead current="hero" />
 
-        <div className="wrap hero__grid">
+        <div className="wrap hero__grid" id="contenuto" tabIndex={-1}>
           <div>
             <span className="pill-label">analisi e previsioni · serie a</span>
 
@@ -250,15 +290,34 @@ export function Hero() {
             <div className="device">
               <div className="device__brand">
                 <img className="device__logo" src="/Logo_NoName.png" alt="" />
-                Match<em>Point</em>
+                <span>
+                  Match<em>Point</em>
+                </span>
               </div>
 
-              <Link className="device__search" to="/dashboard">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="7" />
-                  <path d="M20 20l-3.5-3.5" strokeLinecap="round" />
-                </svg>
-                Cerca una squadra o una partita…
+              {/* NIENTE FINTO CAMPO DI RICERCA. Prima qui c'era "Cerca una
+                  squadra o una partita…" con la lente: aveva l'aspetto di un
+                  input ed era un link, quindi prometteva una ricerca che non
+                  esiste. Al suo posto lo stato vero della giornata, che e'
+                  quello che chi arriva vuole sapere per primo. */}
+              <Link className="device__status" to="/dashboard">
+                <span className="device__dot" aria-hidden="true" />
+                <span className="device__status-text">
+                  {round ? (
+                    <>
+                      {/* Corta di proposito: con anche lo stato ("predetta in
+                          parte") la riga finiva troncata a "9 in re…", e un
+                          dato mozzato e' peggio di un dato in meno. Lo stato
+                          e' nel titolo della dashboard, un clic piu' in la'. */}
+                      Giornata {round.matchday} · {list.length} previsioni
+                    </>
+                  ) : (
+                    "Serie A"
+                  )}
+                </span>
+                <span className="device__status-go" aria-hidden="true">
+                  Apri →
+                </span>
               </Link>
 
               {head ? (
@@ -285,6 +344,17 @@ export function Hero() {
                       Le partite della giornata {round?.matchday ?? ""}
                     </span>
                     <div className="device__list">
+                      {/* Le etichette 1 X 2 una volta sola, in testa: ripetute
+                          su ogni riga raddoppiavano le righe di testo senza
+                          dire niente di nuovo. */}
+                      <div className="device__row device__row--head" aria-hidden="true">
+                        <span />
+                        <span className="device__probs">
+                          <span className="device__prob"><i>1</i></span>
+                          <span className="device__prob"><i>X</i></span>
+                          <span className="device__prob"><i>2</i></span>
+                        </span>
+                      </div>
                       {list.slice(1, 5).map((match) => (
                         <div className="device__row" key={`${match.home_team}-${match.away_team}`}>
                           {/* Niente stemmi: sono marchi registrati, e i nomi
@@ -306,8 +376,7 @@ export function Hero() {
                                   code === match.predicted_outcome ? " device__prob--on" : ""
                                 }`}
                               >
-                                <i>{label}</i>
-                                <b>{prob(value)}</b>
+                                <b aria-label={`${label}: ${prob(value)}`}>{prob(value)}</b>
                               </span>
                             ))}
                           </span>
@@ -328,7 +397,11 @@ export function Hero() {
                 il titolo e la chiamata all'azione. */}
             <ErrorBoundary label="schede laterali">
               {track.data && standings.data && (
-                <Floaters points={track.data.by_match} table={standings.data.table} />
+                <Floaters
+                  points={track.data.by_match}
+                  table={standings.data.table}
+                  reference={track.data.rps_backtest_reference}
+                />
               )}
             </ErrorBoundary>
           </div>
@@ -399,10 +472,19 @@ export function Hero() {
                     Vedi analisi →
                   </Link>
 
+                  {/* "Da giocare" si leggeva come "da fare": sembrava che
+                      mancasse la previsione, proprio sotto la previsione. La
+                      riga dice quando e' stata scritta — l'unica cosa che la
+                      rende verificabile — e che si aspetta il risultato. */}
                   <span className="matchcard__note">
-                    {match.goals_home !== null && match.goals_away !== null
-                      ? `finita ${match.goals_home}–${match.goals_away}`
-                      : "da giocare"}
+                    {match.goals_home !== null && match.goals_away !== null ? (
+                      `finita ${match.goals_home}–${match.goals_away}`
+                    ) : (
+                      <>
+                        <span className="matchcard__ok" aria-hidden="true">✓</span> previsione
+                        del {localTime(match.timestamp_prediction)} · risultato in attesa
+                      </>
+                    )}
                   </span>
                 </div>
               </article>

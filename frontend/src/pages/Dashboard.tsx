@@ -12,6 +12,7 @@ import { EmptyState, ErrorState, Loading } from "../components/States";
 import { TrackRecordPanel } from "../components/TrackRecordPanel";
 import { useApi } from "../hooks/useApi";
 import { ROUND_LABELS, localDateTime } from "../lib/format";
+import { scorrimento } from "../lib/motion";
 
 const MERCATI: Array<[Market, string]> = [
   ["all", "Tutte le partite"],
@@ -113,14 +114,14 @@ export function Dashboard() {
     null;
 
   const scorri = (verso: number) => {
-    track.current?.scrollBy({ left: verso * 320, behavior: "smooth" });
+    track.current?.scrollBy({ left: verso * 320, behavior: scorrimento() });
   };
 
   return (
     <div className="page--wide">
       <Masthead current="dashboard" />
 
-      <main className="wrap">
+      <main className="wrap" id="contenuto" tabIndex={-1}>
         <section className="dash-banner">
           <div className="dash-banner__title">
             <div className="dash-banner__row">
