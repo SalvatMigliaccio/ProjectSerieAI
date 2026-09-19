@@ -445,6 +445,11 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 .floater h4 { margin: 0 0 var(--s3); font-family: var(--display); font-size: 0.8125rem; font-weight: 600; }
 
+/* La riga che dice di che numero si tratta: sta sotto il titolo e sopra le
+   barre, perche' e' li' che l'occhio la cerca quando il numero non torna. */
+.floater h4 + .floater__sub { margin-top: calc(var(--s3) * -1); }
+.floater__sub { display: block; margin-bottom: var(--s3); font-size: 0.625rem; color: var(--faint); }
+
 /* Riga con l'icona a sinistra e le barre a destra, come nel riferimento. */
 .floater__row { display: flex; align-items: center; gap: var(--s3); }
 
@@ -1018,6 +1023,33 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .detail-grid { display: grid; gap: var(--s4) var(--s6); grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .detail-grid dt { font-size: 0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
 .detail-grid dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+
+/* --- selezioni del modello, in riga sotto la giornata ---------------------- */
+
+.picks { margin-top: var(--s6); }
+
+.picks__head { display: grid; gap: var(--s1); margin-bottom: var(--s4); }
+
+.picks__head h3 {
+  display: flex; align-items: center; gap: var(--s2);
+  margin: 0; font-size: 1rem;
+}
+
+.picks__head h3 svg { color: var(--mint); }
+.picks__head p { margin: 0; max-width: none; }
+
+/* La tabella delle selezioni riusa il guscio e la tipografia della
+   classifica (`.std`): sono due elenchi della stessa pagina, e due stili
+   diversi per la stessa cosa fanno sembrare che dicano cose diverse. Qui
+   cambiano solo le larghezze, perche' le colonne sono altre. */
+.picks__c-match { width: 26%; }
+.picks__c-market { width: 30%; }
+.picks__c-num { width: 14%; }
+.picks__c-esito { width: 16%; }
+
+.picks__match { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picks__market { color: var(--mint); font-weight: 600; }
+.picks__odds { font-weight: 700; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
 
 /* --- classifica ------------------------------------------------------------ */
 
@@ -1796,6 +1828,15 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   /* Il piede su una colonna sola: in due, la cella da 200px non conteneva
      l'indirizzo di posta e sbordava dallo schermo — erano quei 19px che
      facevano scorrere in orizzontale tutta la pagina. */
+  /* Quattro colonne visibili invece di cinque (la probabilita' sparisce con
+     `hide-narrow`), e quindi proporzioni diverse: con quelle da schermo
+     largo, "QUOTA EQUA" finiva sopra "ESITO". */
+  .picks__c-match { width: 34%; }
+  .picks__c-market { width: 30%; }
+  .picks__c-num { width: 18%; }
+  .picks__c-esito { width: 18%; }
+  .picks__match { font-size: 0.75rem; }
+
   .colophon__grid { grid-template-columns: 1fr; }
   .colophon__col a { overflow-wrap: anywhere; }
   .colophon__bottom { display: grid; gap: var(--s3); }

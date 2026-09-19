@@ -87,8 +87,14 @@ function Floaters({ points, table }: { points: MatchPoint[]; table: StandingRow[
         <Spark points={points} />
       </div>
 
+      {/* IL NUMERO ACCANTO ALLA BARRA E' GOL FATTI, E ORA LO DICE. Con il
+          titolo generico "Statistiche squadre" sembrava la classifica, e
+          l'Inter con 13 accanto contraddiceva i 12 punti che si leggono due
+          schermate piu' giu'. Una barra senza unita' di misura non e' un
+          grafico, e' un indovinello. */}
       <div className="floater">
-        <h4>Statistiche squadre</h4>
+        <h4>Gol fatti</h4>
+        <span className="floater__sub">prime tre in classifica</span>
         <div className="floater__row">
           <span className="floater__glyph" aria-hidden="true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

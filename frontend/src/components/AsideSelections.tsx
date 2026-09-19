@@ -1,18 +1,16 @@
-import { api } from "../api/client";
 import type { Selection, Selections } from "../api/types";
-import { useApi, type AsyncState } from "../hooks/useApi";
-import { num, odds as fmtOdds, prob, ratio } from "../lib/format";
+import type { AsyncState } from "../hooks/useApi";
+import { odds as fmtOdds, prob, ratio } from "../lib/format";
 import { ErrorState, Loading } from "./States";
 
 /**
- * La colonna laterale: le selezioni del modello e l'esploratore per soglia.
+ * La colonna laterale: l'esploratore per soglia di quota, e nient'altro.
  *
- * PERCHE' DUE SCHEDE E NON UNA CON UN CURSORE. La prima e' la linea dichiarata
- * dal progetto — una per partita, soglia `config.QUOTA_MINIMA_SELEZIONE`, la
- * stessa che `predict_round` stampa il venerdi' — e **non e' regolabile**: se
- * una soglia scelta in pagina potesse ridefinirla, il track record misurerebbe
- * una cosa e la dashboard ne mostrerebbe un'altra. La seconda e' esplorazione,
- * ed e' dichiarata tale.
+ * LE DUE LETTURE NON STANNO PIU' UNA SOPRA L'ALTRA. La linea dichiarata dal
+ * progetto — `ModelPicks`, sotto la griglia — e questa banda regolabile
+ * dicevano cose diverse con lo stesso aspetto, incolonnate nella stessa
+ * striscia: la principale sembrava la meno importante delle due. Qui resta
+ * l'esplorazione, che e' dichiarata tale in pagina.
  *
  * LA SOGLIA NON E' STATO DI QUESTO COMPONENTE, ED E' IL PUNTO. Sceglierla
  * cambia anche le celle accese nella griglia della giornata, quindi vive nella
@@ -64,45 +62,12 @@ export function AsideSelections({
    *  griglia, quindi si chiede una volta sola. */
   banda: AsyncState<Selections>;
 }) {
-  const picks = useApi(() => api.picks(), []);
-
   const perGiornata = (righe: Selection[] | undefined) =>
     (righe ?? []).filter((r) => matchday === null || r.matchday === matchday);
 
-  const principali = perGiornata(picks.data?.with_min_odds);
   const esplorate = perGiornata(banda.data?.best_per_match);
 
   return (
-    <>
-      <div className="aside-card">
-        <div className="aside-card__head">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-            <path d="M12 3l2.6 5.6 6.4.8-4.7 4.3 1.2 6.3L12 17l-5.5 3 1.2-6.3L3 9.4l6.4-.8L12 3z" strokeLinejoin="round" />
-          </svg>
-          <h3>Selezioni del modello</h3>
-        </div>
-        <p className="aside-card__note">
-          Una per partita, la più probabile fra quelle che pagano almeno{" "}
-          {num(picks.data?.min_odds ?? 1.5, 2)}. Soglia dichiarata dal progetto,
-          non modificabile da qui.
-        </p>
-
-        {picks.loading && <Loading what="carico…" />}
-        {picks.error && <ErrorState error={picks.error} what="Selezioni non disponibili." />}
-        {picks.data && principali.length === 0 && (
-          <p className="small faint">Nessuna selezione per questa giornata.</p>
-        )}
-        {principali.map((selection) => (
-          <Riga key={`${selection.matchday}-${selection.home_team}-${selection.market}`} selection={selection} />
-        ))}
-
-        {picks.data && picks.data.with_min_odds_resolved > 0 && (
-          <p className="small faint" style={{ marginTop: "var(--s3)" }}>
-            In stagione: {ratio(picks.data.with_min_odds_won, picks.data.with_min_odds_resolved)}.
-          </p>
-        )}
-      </div>
-
       <div className="aside-card">
         <div className="aside-card__head">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -154,7 +119,6 @@ export function AsideSelections({
             questa soglia.
           </p>
         )}
-      </div>
-    </>
+    </div>
   );
 }

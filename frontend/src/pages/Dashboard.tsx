@@ -6,6 +6,7 @@ import { AsideSelections } from "../components/AsideSelections";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
+import { ModelPicks } from "../components/ModelPicks";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { EmptyState, ErrorState, Loading } from "../components/States";
 import { TrackRecordPanel } from "../components/TrackRecordPanel";
@@ -265,6 +266,16 @@ export function Dashboard() {
                 />
               </ErrorBoundary>
             )}
+
+            {/* La linea dichiarata del modello, in riga sotto la giornata: e'
+                la principale, e nella colonna stretta accanto a una lettura
+                regolabile sembrava la secondaria delle due. */}
+            <ErrorBoundary
+              label="selezioni del modello"
+              fallback={<p className="state">Selezioni non disponibili.</p>}
+            >
+              <ModelPicks matchday={selected} />
+            </ErrorBoundary>
           </div>
 
           <aside>

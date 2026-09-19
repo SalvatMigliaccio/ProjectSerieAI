@@ -1,7 +1,7 @@
 import { api } from "../api/client";
 import type { Selection } from "../api/types";
 import { useApi } from "../hooks/useApi";
-import { num, odds as fmtOdds, prob, ratio } from "../lib/format";
+import { num, odds as fmtOdds, prob, ratio, score } from "../lib/format";
 import { ErrorState, Loading } from "./States";
 
 /**
@@ -56,23 +56,50 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
         <p className="small faint">Nessuna selezione per questa giornata.</p>
       )}
 
-      <div className="picks__row">
-        {righe.map((r) => {
-          const esito = r.won === null ? "" : r.won ? " pick-card--ok" : " pick-card--ko";
-          return (
-            <article className={`pick-card${esito}`} key={`${r.matchday}-${r.home_team}-${r.market}`}>
-              <span className="pick-card__match">
-                {r.home_team} – {r.away_team}
-              </span>
-              <span className="pick-card__market">{r.market_label}</span>
-              <span className="pick-card__foot">
-                <span className="pick-card__odds">{fmtOdds(r.fair_odds)}</span>
-                <span className="pick-card__pct">{prob(r.probability)}</span>
-              </span>
-            </article>
-          );
-        })}
+      <div className="std">
+        <table className="std__table picks__table">
+          <colgroup>
+            <col className="picks__c-match" />
+            <col className="picks__c-market" />
+            <col className="picks__c-num" />
+            <col className="picks__c-num" />
+            <col className="picks__c-esito" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Partita</th>
+              <th>Selezione</th>
+              <th className="right hide-narrow" title="probabilita' secondo il modello">Prob.</th>
+              <th className="right" title="1/p, il prezzo a valore atteso zero">
+                Quota<span className="hide-narrow"> equa</span>
+              </th>
+              <th className="right">Esito</th>
+            </tr>
+          </thead>
+          <tbody>
+            {righe.map((r) => (
+              <tr key={`${r.matchday}-${r.home_team}-${r.market}`}>
+                <td className="picks__match">
+                  {r.home_team} <span className="faint">–</span> {r.away_team}
+                </td>
+                <td className="picks__market">{r.market_label}</td>
+                <td className="right num muted hide-narrow">{prob(r.probability)}</td>
+                <td className="right picks__odds">{fmtOdds(r.fair_odds)}</td>
+                <td className="right">
+                  {r.won === null ? (
+                    <span className="faint">–</span>
+                  ) : (
+                    <span className={`score-chip score-chip--${r.won ? "ok" : "ko"}`}>
+                      {score(r.goals_home, r.goals_away)}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
+
     </section>
   );
 }
