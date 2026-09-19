@@ -400,6 +400,8 @@ python -m src.experiments.predici_gbm --matchday 5
 python -m src.experiments.predici_gbm --semi 0             # un seme solo, piu' veloce
 python -m src.experiments.predici_gbm --team Napoli
 python -m src.experiments.predici_gbm --as-of 2026-09-11 --matchday 4
+python -m src.experiments.predici_gbm --verifica            # a risultati usciti
+python -m src.experiments.predici_gbm --verifica --matchday 4
 ```
 
 Addestra M5 (GBM Poisson ancorato al mercato, media di 5 semi, le 52 colonne di
@@ -411,6 +413,21 @@ registro**: il track record resta di M1, che e' il modello di produzione.
 `--as-of` rifa' una giornata gia' giocata con le quote di allora **e taglia il
 training a quella data**, altrimenti il modello si addestrerebbe anche sulla
 giornata che dice di prevedere.
+
+**`--verifica` e' il lunedi'.** Rilegge i file salvati, li aggancia ai risultati
+sulla quadrupla e stampa, sulle STESSE partite, RPS ed esiti dei due modelli con
+la differenza appaiata. Per questo il file salvato porta `season`, `matchday`,
+le due squadre, il calcio d'inizio e `timestamp_prediction`: senza la chiave non
+si aggancia, e senza l'istante una previsione a risultati usciti non si
+distingue da un commento.
+
+I file scritti prima che il formato avesse la chiave vengono **saltati con un
+avviso**, non fusi: fonderli darebbe righe che il merge non aggancia e che
+resterebbero per sempre "non ancora giocate". Si riscrivono con `--as-of`.
+
+Niente intervalli di confidenza su dieci partite: sul test set la differenza fra
+i due e' +0.00011 con IC [-0.00056, +0.00077], e un bootstrap su una giornata
+sarebbe un ornamento. Questo conto dice cosa e' successo, non promuove niente.
 
 Serve che le quote del turno ci siano: `python ingest.py --stage fixtures`.
 Se football-data non ha ancora pubblicato la Serie A, il file ha zero righe, il
@@ -530,19 +547,46 @@ Le risposte portano `Cache-Control: public, max-age=300` e un ETag derivato
 dagli mtime dei file: fra un venerdi' e il martedi' successivo il frontend
 riceve 304 e il server non lavora.
 
-### Esporre l'API al frontend
-
-Sviluppo, con il progetto che gira in locale su Windows:
+### Far vedere il sito a qualcuno — UN SOLO TUNNEL, sulla 5173
 
 ```bash
-python -m backend.api --port 8000      # in un terminale
-ngrok http 8000                        # in un altro
+python -m backend.api --port 8000      # terminale 1, resta su 127.0.0.1
+cd frontend && npm run dev             # terminale 2
+ngrok http 5173                        # terminale 3 — e' questo l'URL da dare
 ```
 
-L'URL pubblico di ngrok cambia a ogni riavvio nel piano gratuito: il frontend
-deve leggerlo da una variabile d'ambiente, non averlo scritto nel codice.
-Tieni `--host 127.0.0.1` (il default) e lascia che il tunnel sia l'unica via
-d'ingresso.
+Il tunnel va sul **frontend**, non sull'API. Chi apre il link chiede
+`/api/...` alla stessa origine della pagina, il server di sviluppo gira quelle
+richieste all'API locale (`server.proxy` in `vite.config.ts`), e l'API resta
+raggiungibile solo da questo computer.
+
+**Perche' non due tunnel.** Sarebbe la strada ovvia — uno sulla 5173 e uno
+sulla 8000, con `?api=` a dire al frontend dove chiamare — e costa due URL da
+tenere allineati a ogni riavvio, il dominio del frontend da aggiungere in
+`AI_NAPLES_CORS_ORIGINS`, e nel piano gratuito di ngrok un secondo agente che
+non c'e'. Con il proxy non esiste una seconda origine, quindi il CORS non entra
+nemmeno in gioco.
+
+Tre cose che facevano fallire questo giro, tutte verificate:
+
+- **Vite ascoltava solo su `[::1]`.** `netstat` mostrava `[::1]:5173` in
+  ascolto e niente su `127.0.0.1:5173`: dal browser di casa il sito si apriva,
+  ma un tunnel che si collega all'IPv4 di loopback prendeva "connection
+  refused". Ora `server.host: true`, quindi il server di sviluppo e'
+  raggiungibile anche dalla rete locale finche' resta acceso.
+- **Vite rifiuta gli Host che non conosce** ("Blocked request. This host is not
+  allowed"), e un tunnel ne porta sempre uno nuovo: in `allowedHosts` ci sono i
+  domini dei servizi di tunneling, non `true` — che accetterebbe qualunque
+  Host, DNS rebinding compreso.
+- **`127.0.0.1:8000` fuori da localhost e' il computer di chi guarda.** Se la
+  pagina non arriva da localhost, `client.ts` chiama la propria origine invece
+  dell'indirizzo locale: li' quell'indirizzo non e' "quasi giusto", e' l'API di
+  qualcun altro.
+
+Per esporre invece la sola API (un altro frontend, una prova con `curl`):
+`ngrok http 8000`, e il dominio del frontend va in `AI_NAPLES_CORS_ORIGINS`.
+L'URL pubblico cambia a ogni riavvio nel piano gratuito, quindi il frontend lo
+legge da `?api=` o da una variabile d'ambiente, mai dal codice.
 
 Per un deploy stabile, in ordine di parti mobili:
 
@@ -556,9 +600,24 @@ Per un deploy stabile, in ordine di parti mobili:
 ## 7quater. Scheduler di Windows
 
 ```bash
-scripts\predict_round.cmd     # venerdi'
+scripts\predict_round.cmd     # venerdi' — M1 nel registro, poi M5 in coda
 scripts\close_round.cmd       # martedi'
+scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
 ```
+
+**`predict_round.cmd` fa due cose, in quest'ordine**: scrive le previsioni di
+M1 nel registro, poi lancia M5 che salva la sua opinione sulla stessa giornata
+in `experiments/output/`. Concatenati e non due task separati per due motivi:
+M5 non fa ingestion propria e deve leggere il dataset che `predict_round` ha
+appena ricostruito; e ogni trigger che fa partire l'uno — compresi i recuperi
+che Windows esegue in ritardo al risveglio — copre anche l'altro, senza una
+seconda serie di orari da tenere allineata.
+
+**L'uscita di M5 viene scartata di proposito.** E' diagnostica: se il GBM non
+si addestra, il registro e' stato scritto lo stesso, e il task non deve
+riportare una giornata fallita per qualcosa che il registro non lo tocca
+nemmeno. Per lo stesso motivo M5 non compare in `last_run.json`: `/api/status`
+parla del track record, e un'entrata li' farebbe pensare che sia stato toccato.
 
 Registrano tutto in `logs\scheduler_YYYYMMDD.log` e scrivono `logs\last_run.json`,
 che e' quello che legge `GET /api/status` — il log resta per gli umani, l'API

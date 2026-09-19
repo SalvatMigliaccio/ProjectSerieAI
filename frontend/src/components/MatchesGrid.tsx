@@ -169,15 +169,15 @@ function Row({
 
       {show1x2 && (
         <>
-          <td>
+          <td data-k="1">
             <Pick value={match.p_home} odd={match.odds_home} tone="var(--cat-1)"
                   best={match.predicted_outcome === "H"} picked={scelta("1")} persa={persa} />
           </td>
-          <td>
+          <td data-k="X">
             <Pick value={match.p_draw} odd={match.odds_draw} tone="var(--cat-x)"
                   best={match.predicted_outcome === "D"} picked={scelta("X")} persa={persa} />
           </td>
-          <td>
+          <td data-k="2">
             <Pick value={match.p_away} odd={match.odds_away} tone="var(--cat-2)"
                   best={match.predicted_outcome === "A"} picked={scelta("2")} persa={persa} />
           </td>
@@ -186,11 +186,11 @@ function Row({
 
       {showOu && (
         <>
-          <td>
+          <td data-k="O">
             <Pick value={over} odd={equa(over)} tone="var(--mint)"
                   best={(over ?? 0) > 0.5} picked={scelta("O")} persa={persa} />
           </td>
-          <td>
+          <td data-k="U">
             <Pick value={under} odd={equa(under)} tone="var(--cat-1)"
                   best={(under ?? 0) > 0.5} picked={scelta("U")} persa={persa} />
           </td>
@@ -199,11 +199,11 @@ function Row({
 
       {showGg && (
         <>
-          <td>
+          <td data-k="GG">
             <Pick value={gg} odd={equa(gg)} tone="var(--mint)"
                   best={(gg ?? 0) > 0.5} picked={scelta("GG")} persa={persa} />
           </td>
-          <td>
+          <td data-k="NG">
             <Pick value={ng} odd={equa(ng)} tone="var(--cat-2)"
                   best={(ng ?? 0) > 0.5} picked={scelta("NG")} persa={persa} />
           </td>

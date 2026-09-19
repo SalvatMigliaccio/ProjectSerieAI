@@ -790,12 +790,21 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .link-mint:hover { text-decoration: underline; }
 
 /* La griglia di fondo: testo, tre schede partita, classifica. */
-.showcase {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) repeat(3, minmax(0, 1fr)) minmax(0, 1.05fr);
-  gap: var(--s4);
-  align-items: start;
-}
+/* LO STILE STA QUI E NON NELL'ATTRIBUTO `style`, ed e' il motivo per cui
+   adesso funziona su telefono: uno stile inline batte qualunque regola del
+   foglio, comprese le media query, quindi la vetrina restava una riga di
+   quattro elementi anche a 430px e le schede si schiacciavano. */
+.showcase { display: flex; gap: var(--s4); align-items: stretch; }
+
+/* IN PAGINA QUESTO CONTENITORE E' UN FLEX (stile inline sul componente), e i
+   figli di un flex si dimensionano sul contenuto. La classifica ha le
+   intestazioni su una riga sola, quindi un contenuto minimo largo: senza una
+   base esplicita si prendeva quasi tutta la riga e le tre schede partita si
+   riducevano a tre schegge verticali. `min-width: 0` e' la seconda meta' della
+   correzione — senza, un figlio flex non scende mai sotto il proprio
+   contenuto, qualunque base gli si dia. */
+.showcase > .matchcard { flex: 1 1 0; min-width: 0; }
+.showcase > .side-card { flex: 1.35 1 0; min-width: 0; }
 
 .matchcard {
   background: rgba(12, 38, 35, 0.72);
@@ -829,16 +838,35 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 
 .matchcard__team { display: grid; gap: var(--s2); justify-items: center; }
 
-.matchcard__crest {
-  width: 38px; height: 38px; border-radius: 50%;
-  background: var(--surface-2); border: 1px solid var(--line-strong);
-  display: grid; place-items: center;
-  font-family: var(--display); font-weight: 600; font-size: 0.8125rem;
-  color: var(--muted);
+/* Niente dischetto con la sigla: non possiamo mettere gli stemmi, e tre
+   lettere dentro un cerchio sono uno stemma finto — il nome della squadra
+   dice di piu' e si legge da lontano. */
+.matchcard__name { font-size: 0.9375rem; font-weight: 600; line-height: 1.3; }
+.matchcard__vs { font-size: 0.75rem; color: var(--faint); }
+
+/* La selezione del modello sulla scheda. Incassata come i riquadri dei dati
+   altrove, cosi' si legge come un dato e non come un bottone: qui non c'e'
+   niente da cliccare e niente da giocare. */
+.matchcard__pick {
+  display: grid; gap: 2px; padding: var(--s2) var(--s3);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius-sm);
+  background: rgba(2, 12, 11, 0.5);
+  text-align: center;
 }
 
-.matchcard__name { font-size: 0.8125rem; font-weight: 600; }
-.matchcard__vs { font-size: 0.75rem; color: var(--faint); }
+.matchcard__pick-key {
+  font-size: 0.5625rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+}
+
+.matchcard__pick-val { font-size: 0.8125rem; font-weight: 600; }
+.matchcard__pick-odds { font-size: 0.6875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* A partita giocata la selezione dice anche com'e' finita: stessa convenzione
+   della griglia in dashboard, verde se e' uscita, corallo se no. */
+.matchcard__pick--ok { border-color: rgba(46, 232, 138, 0.35); background: var(--ok-wash); }
+.matchcard__pick--ok .matchcard__pick-val { color: var(--ok); }
+.matchcard__pick--ko { border-color: rgba(255, 123, 123, 0.35); background: var(--ko-wash); }
+.matchcard__pick--ko .matchcard__pick-val { color: var(--ko); }
 
 .matchcard__cta {
   display: block; text-align: center;
@@ -991,7 +1019,174 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .detail-grid dt { font-size: 0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
 .detail-grid dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
 
-table.standings tbody td { padding-block: var(--s3); }
+/* --- classifica ------------------------------------------------------------ */
+
+/* Larghezze fisse e nessuna barra di scorrimento: dieci colonne di numeri
+   lasciate libere si spalmano sull'intera riga e fra la squadra e i suoi punti
+   finiscono ottocento pixel di vuoto, che e' come non incolonnarli affatto. */
+.std {
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(12, 38, 35, 0.5), rgba(6, 26, 24, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.std__table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.875rem; }
+
+/* In percentuale e non in pixel: con `table-layout: fixed` una colonna `auto`
+   si prende TUTTO lo spazio che avanza, e a 1100px la colonna della squadra
+   diventava larga il doppio di tutte le altre messe insieme. In percentuale
+   l'avanzo si distribuisce su tutte, e la riga resta incolonnata. */
+.std__c-pos { width: 5%; }
+.std__c-team { width: 20%; }
+.std__c-num { width: 6.5%; }
+.std__c-gol { width: 7%; }
+.std__c-form { width: 11%; }
+.std__c-pts { width: 6%; }
+
+/* Nella colonna della landing ci sono 390px per dieci colonne: la posizione
+   con due cifre non ci sta nel 5% e finisce sotto il nome della squadra.
+   Proporzioni diverse e meno respiro ai lati, non una tabella diversa. */
+.std--stretta .std__table { font-size: 0.8125rem; }
+.std--stretta .std__c-pos { width: 9%; }
+.std--stretta .std__c-team { width: 26%; }
+.std--stretta .std__c-num { width: 6.4%; }
+.std--stretta .std__c-gol { width: 7%; }
+.std--stretta .std__c-pts { width: 8%; }
+.std--stretta .std__table th, .std--stretta .std__table td { padding-left: 3px; padding-right: 3px; }
+.std--stretta .std__table th:first-child, .std--stretta .std__table td:first-child { padding-left: var(--s2); }
+.std--stretta .std__table th:last-child, .std--stretta .std__table td:last-child { padding-right: var(--s2); }
+.std--stretta .std__rank { min-width: 0; }
+
+.std__table thead th {
+  text-align: left; white-space: nowrap;
+  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint);
+  padding: var(--s3) var(--s2);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.std__table th:first-child, .std__table td:first-child { padding-left: var(--s4); }
+.std__table th:last-child, .std__table td:last-child { padding-right: var(--s4); }
+.std__table th.right, .std__table td.right { text-align: right; }
+
+.std__table tbody td {
+  padding: 9px var(--s2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  vertical-align: middle;
+}
+
+.std__table tbody tr:last-child td { border-bottom: 0; }
+.std__table tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+/* Il numero di posizione e' un'etichetta, non una quantita': tabellare e in
+   tono minore, cosi' non compete con i punti a fine riga. */
+.std__rank {
+  display: inline-block; min-width: 1.6em;
+  font-variant-numeric: tabular-nums; font-size: 0.8125rem; color: var(--faint);
+}
+
+.std__team { min-width: 0; }
+
+.std__name {
+  display: block; font-weight: 600; font-size: 0.875rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Quota di punti della capolista. L'unico accento della tabella, ed e' una
+   proporzione: non dice se la squadra sta andando bene, dice quanto le manca.
+   Binario pieno piu' riempimento, non una barra sola: da sola, sotto il nome,
+   sembrava la sottolineatura del testo invece di un valore. */
+.std__track {
+  display: block; height: 3px; margin-top: 6px; max-width: 170px;
+  border-radius: 2px; background: rgba(255, 255, 255, 0.07); overflow: hidden;
+}
+
+.std__track i {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--mint-2), var(--mint));
+  opacity: 0.85;
+}
+
+.std__pts { font-weight: 700; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+
+.std__form { white-space: nowrap; }
+
+.std__pip {
+  display: inline-block; width: 9px; height: 9px; margin-right: 4px;
+  border-radius: 3px; background: var(--idle);
+}
+
+.std__pip--w { background: var(--mint); }
+.std__pip--d { background: var(--warn); }
+.std__pip--l { background: var(--ko); }
+
+/* --- track record, accanto alla classifica --------------------------------- */
+
+/* Classifica e track record sulla stessa riga: sono le due letture del
+   passato — cosa e' successo in campo e quanto il modello ci aveva preso — e
+   una sotto l'altra facevano scorrere due schermate per confrontarle. */
+.dash-bottom {
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--s6); align-items: start;
+}
+
+.tr {
+  display: grid; gap: var(--s5);
+  padding: var(--s5);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(12, 38, 35, 0.5), rgba(6, 26, 24, 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+}
+
+.tr__stats { display: grid; }
+
+/* Etichetta e postilla a sinistra, cifra a destra: in colonna stretta i tre
+   numeri affiancati mandavano le postille a capo tre volte ciascuna. */
+.tr__stat {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--s4); align-items: baseline;
+  padding: var(--s3) 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tr__stat:first-child { padding-top: 0; }
+.tr__stat:last-child { padding-bottom: 0; border-bottom: 0; }
+
+.tr__label {
+  grid-column: 1; font-size: 0.625rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+}
+
+.tr__value {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  font-family: var(--display); font-weight: 700; font-size: 1.6rem;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.tr__note { grid-column: 1; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+
+.tr__chart h3, .tr__rounds h3 { margin: 0 0 var(--s2); font-size: 1rem; }
+.tr__chart p, .tr__rounds p { max-width: none; }
+
+.tr__rounds { border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: var(--s5); }
+
+.tr__table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; margin-top: var(--s3); }
+
+.tr__table thead th {
+  text-align: left; white-space: nowrap;
+  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--faint);
+  padding-bottom: var(--s2); border-bottom: 1px solid var(--line-strong);
+}
+
+.tr__table th.right, .tr__table td.right { text-align: right; }
+.tr__table tbody td { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.045); }
+.tr__table tbody tr:last-child td { border-bottom: 0; }
+
+/* Menta solo quando il modello ha fatto meglio delle quote su quelle partite:
+   e' un confronto fra due numeri della stessa riga, non un giudizio sul
+   risultato in se'. */
+.tr__meglio { color: var(--mint); font-weight: 600; }
 
 /* --- dashboard: intestazione della giornata -------------------------------- */
 
@@ -1077,8 +1272,13 @@ table.standings tbody td { padding-block: var(--s3); }
 .round-strip__arrow:hover:not(:disabled) { color: var(--fg); border-color: var(--mint); }
 .round-strip__arrow:disabled { opacity: 0.35; cursor: default; }
 
+/* `min-width: 0` e non e' pignoleria: dentro un flex, un figlio non scende
+   sotto il proprio contenuto nemmeno se e' scorrevole. Senza, le trentotto
+   pastiglie allargavano la striscia oltre lo schermo e su telefono la pagina
+   intera scorreva in orizzontale di 19px — abbastanza per far ballare tutto. */
 .round-strip__track {
   display: flex; gap: var(--s2);
+  min-width: 0;
   overflow-x: auto;
   scroll-behavior: smooth;
   scrollbar-width: none;
@@ -1321,6 +1521,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 @media (max-width: 1100px) {
   .dash-layout { grid-template-columns: 1fr; }
+  .dash-bottom { grid-template-columns: 1fr; }
 }
 
 /* --- barra di stato ------------------------------------------------------- */
@@ -1502,6 +1703,12 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 }
 
 @media (max-width: 1100px) {
+  /* Le tre schede vanno a capo e la classifica si prende tutta la riga: a
+     meno di 1100px cinque colonne non stanno, e schiacciarle le rende
+     illeggibili tutte insieme. */
+  .showcase { flex-wrap: wrap; }
+  .showcase > .matchcard { flex: 1 1 240px; }
+  .showcase > .side-card { flex: 1 1 100%; }
   .howto__head { grid-template-columns: 1fr; }
   .howto__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .howto__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1529,4 +1736,72 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   table.fixtures tbody td { padding: var(--s3); }
   .figure__value { font-size: 1.7rem; }
   .device { padding: var(--s4); }
+}
+
+/* --- telefono: la griglia smette di essere una tabella -------------------- */
+
+/* OTTO COLONNE DI NUMERI NON CI STANNO IN 430 PIXEL, e stringerle non e' una
+   soluzione: a quella larghezza il nome della squadra finiva sopra le
+   percentuali. Sotto i 760px ogni partita diventa una scheda e i mercati si
+   dispongono su quattro colonne, con l'etichetta accanto al numero — perche'
+   l'intestazione della tabella, qui, non c'e' piu'. */
+@media (max-width: 760px) {
+  .grid-wrap { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+  table.grid { display: block; }
+  table.grid colgroup, table.grid thead { display: none; }
+  table.grid tbody { display: grid; gap: var(--s3); }
+
+  table.grid tbody tr {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s3) var(--s2);
+    padding: var(--s4) var(--s3);
+    border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius);
+    background: rgba(12, 38, 35, 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  table.grid tbody td { display: block; padding: 0; border: 0; }
+  table.grid tbody td:first-child { grid-column: 1 / -1; }
+
+  /* Il risultato torna in fondo, su tutta la riga: e' l'esito, non un mercato. */
+  table.grid tbody td:last-child {
+    grid-column: 1 / -1; text-align: center;
+    padding-top: var(--s2); border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  table.grid tbody td[data-k] .pick { padding: var(--s1) 0; }
+  table.grid tbody td[data-k]::before {
+    content: attr(data-k);
+    display: block; margin-bottom: 2px;
+    font-size: 0.5625rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); text-align: center;
+  }
+
+  .match-cell { grid-template-columns: 1fr auto 1fr; gap: var(--s2); }
+  .match-cell__home, .match-cell__away { font-size: 0.9375rem; }
+
+  /* La classifica: a 430px restano le colonne che si leggono davvero. Forma,
+     gol fatti e subiti spariscono; la differenza reti resta perche' e' quella
+     che separa due squadre a pari punti. */
+  .std__c-form, .std__form { display: none; }
+  .std__c-team { width: 34%; }
+  .std__c-num { width: 8%; }
+  .std__c-pos { width: 9%; }
+  .std__c-pts { width: 10%; }
+  .std__table { font-size: 0.8125rem; }
+  .std__table th, .std__table td { padding-left: 2px; padding-right: 2px; }
+  .std__name { font-size: 0.8125rem; }
+  .std__track { max-width: 90px; }
+
+  /* Il piede su una colonna sola: in due, la cella da 200px non conteneva
+     l'indirizzo di posta e sbordava dallo schermo — erano quei 19px che
+     facevano scorrere in orizzontale tutta la pagina. */
+  .colophon__grid { grid-template-columns: 1fr; }
+  .colophon__col a { overflow-wrap: anywhere; }
+  .colophon__bottom { display: grid; gap: var(--s3); }
+
+  /* Su telefono la vetrina e' una colonna: schede a tutta larghezza, una
+     sotto l'altra. */
+  .showcase { flex-direction: column; }
+  .showcase > .matchcard, .showcase > .side-card { flex: 1 1 auto; }
 }

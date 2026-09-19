@@ -741,8 +741,11 @@ def track_record(season: str, src: Sources | None = None) -> dict | None:
             "ci_high": _opt_float(row.get("ic_alto")),
         } for row in table.to_dict("records")]
     else:
-        reason = (f"{len(resolved)} resolved predictions: a calibration curve "
-                  f"needs at least {CALIBRATION_MIN_MATCHES} to mean anything")
+        # Italian: this string is shown to the reader, and the product speaks
+        # Italian. Identifiers and code stay English; sentences follow the UI.
+        reason = (f"servono almeno {CALIBRATION_MIN_MATCHES} previsioni risolte "
+                  f"perché una curva di calibrazione dica qualcosa, e finora "
+                  f"ne sono {len(resolved)}")
 
     return {
         "season": season_out(code),

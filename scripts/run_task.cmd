@@ -22,10 +22,22 @@ set "REPO=%~dp0.."
 set "PY=%REPO%\.venv\Scripts\python.exe"
 set "TASK=%~1"
 if "%TASK%"=="" (
-    echo usage: run_task.cmd ^<predict_round^|close_round^> [args]
+    echo usage: run_task.cmd ^<predict_round^|close_round^|predict_m5^> [args]
     exit /b 2
 )
 shift
+
+REM  Which module the task name maps to, and whether the run is worth recording
+REM  in last_run.json. Only the two PRODUCTION commands are: /api/status speaks
+REM  about the track record, and M5 does not write to it — an entry there would
+REM  suggest the registry had been touched. `last_run.py` would refuse it
+REM  anyway, its --command has a fixed list of choices.
+set "MODULE=src.%TASK%"
+set "RECORD=1"
+if /i "%TASK%"=="predict_m5" (
+    set "MODULE=src.experiments.predici_gbm"
+    set "RECORD="
+)
 
 if not exist "%REPO%\logs" mkdir "%REPO%\logs"
 
@@ -47,11 +59,11 @@ REM  so the only visible symptom was /api/status insisting the scheduler had
 REM  never run — a silent failure of exactly the component whose job is to say
 REM  whether something failed.
 pushd "%REPO%"
-"%PY%" -m src.%TASK% %1 %2 %3 >> "%LOG%" 2>&1
+"%PY%" -m %MODULE% %1 %2 %3 >> "%LOG%" 2>&1
 set "CODE=%ERRORLEVEL%"
 
 echo [END] %TASK% exit=%CODE% >> "%LOG%"
-"%PY%" -m backend.api.last_run --command %TASK% --exit-code %CODE% --log "scheduler_%DAY%.log" --started-at "%STARTED%" >> "%LOG%" 2>&1
+if defined RECORD "%PY%" -m backend.api.last_run --command %TASK% --exit-code %CODE% --log "scheduler_%DAY%.log" --started-at "%STARTED%" >> "%LOG%" 2>&1
 popd
 
 exit /b %CODE%

@@ -69,7 +69,7 @@ def _current_round(season: str, src: store.Sources | None) -> tuple[dict | None,
         action = {
             "command": "close_round",
             "matchday": int(row["matchday"]),
-            "reason": "tutte le partite hanno un risultato e la giornata non e' archiviata",
+            "reason": "tutte le partite hanno un risultato e la giornata non è archiviata",
         }
     else:
         # Nothing to do is a normal state. Name the round anyway, or the
@@ -83,7 +83,7 @@ def _current_round(season: str, src: store.Sources | None) -> tuple[dict | None,
         row = upcoming.iloc[0] if not upcoming.empty else states.iloc[-1]
         reason = ("in attesa delle quote della prossima giornata"
                   if str(row["stato"]) == "futura"
-                  else "niente da fare: nessuna partita e' predicibile o chiudibile adesso")
+                  else "niente da fare: nessuna partita è predicibile o chiudibile adesso")
         action = {
             "command": None,
             "matchday": int(row["matchday"]),
@@ -114,8 +114,8 @@ def status(src: store.Sources | None = None) -> dict:
     snapshot = store.odds_snapshot(src)
     if snapshot["exists"] and snapshot.get("empty"):
         warnings.append(
-            "Snapshot delle quote vuoto: il turno non e' ancora stato pubblicato. "
-            "football-data pubblica il venerdi' entro le 17:00 UK e il martedi' "
+            "Snapshot delle quote vuoto: il turno non è ancora stato pubblicato. "
+            "football-data pubblica il venerdì entro le 17:00 UK e il martedì "
             "entro le 13:00.")
     elif snapshot.get("age_hours") is not None and snapshot["age_hours"] > SNAPSHOT_STALE_HOURS:
         warnings.append(
@@ -129,7 +129,7 @@ def status(src: store.Sources | None = None) -> dict:
             warnings.append(f"Nessuna esecuzione registrata di {command}")
         elif entry.get("ok") is False:
             warnings.append(
-                f"L'ultima esecuzione di {command} e' fallita con codice "
+                f"L'ultima esecuzione di {command} è fallita con codice "
                 f"{entry.get('exit_code')}: vedi logs/{entry.get('log')}")
 
     return {

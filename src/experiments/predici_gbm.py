@@ -98,6 +98,15 @@ def confronta(preds: pd.DataFrame) -> pd.DataFrame:
         index=preds.index, rho=config.DC_RHO,
     )
     out = pd.DataFrame({
+        # Chiave, orario e (piu' sotto) istante della previsione. Senza, il file
+        # salvato si legge ma non si aggancia ai risultati, e "abbiamo
+        # indovinato?" resta un lavoro a mano. La quadrupla e' la stessa del
+        # resto del progetto; la data resta un controllo, non la chiave.
+        "season": preds["season"].astype(str),
+        "matchday": preds["matchday"].astype(int),
+        "home_team": preds["home_team"],
+        "away_team": preds["away_team"],
+        "kickoff_utc": preds["kickoff"] if "kickoff" in preds else pd.NaT,
         "data": pd.to_datetime(preds["date"]).dt.strftime("%a %d/%m"),
         "partita": preds["home_team"] + " - " + preds["away_team"],
         "1 mkt": m1["p_home"], "1 M5": preds["p_home"],
@@ -119,6 +128,101 @@ def confronta(preds: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values("scarto max 1X2", ascending=False)
 
 
+def verifica(season: str | None = None, matchday: int | None = None) -> None:
+    """
+    A risultati usciti: le previsioni salvate contro quello che e' successo.
+
+    PERCHE' NON NEL REGISTRO. Il track record e' di M1 ed e' l'unico dato che
+    non si rigenera: mettere una seconda riga per partita significherebbe che
+    `close_round` archivia due previsioni per ogni partita e che la giornata
+    chiusa non e' piu' una sola cosa. Qui le previsioni di M5 stanno nei propri
+    file, con dentro l'istante in cui sono state scritte — la sola cosa che a
+    risultati usciti distingue una stima da un commento.
+
+    IL CONFRONTO E' APPAIATO, sempre sulle STESSE partite: M5 e M1 valutati su
+    righe diverse non si possono confrontare, e la differenza riga per riga
+    toglie di mezzo la difficolta' della giornata. E' lo stesso metro di
+    `evaluate.paired_comparison`, senza il bootstrap: con dieci partite un
+    intervallo di confidenza sarebbe un ornamento.
+    """
+    from ..evaluate import load_dataset, outcome_index, rps
+
+    files = sorted(config.ROOT.glob("experiments/output/previsioni_m5_*.csv"))
+    if not files:
+        print("nessuna previsione salvata: lancia prima "
+              "'python -m src.experiments.predici_gbm'")
+        return
+
+    richieste = {"season", "matchday", "home_team", "away_team"}
+    pezzi, saltati = [], []
+    for f in files:
+        d = pd.read_csv(f)
+        (pezzi if richieste <= set(d.columns) else saltati).append(
+            d if richieste <= set(d.columns) else f.name)
+    if saltati:
+        # Fonderli lo stesso darebbe righe con la chiave a NaN, che il merge
+        # non aggancia: comparirebbero per sempre come "non ancora giocate".
+        print(f"saltati {len(saltati)} file salvati prima che il formato avesse "
+              f"la chiave: {', '.join(saltati)}")
+        print("rilancia quella giornata con --as-of per riscriverli nel formato nuovo.\n")
+    if not pezzi:
+        print("nessuna previsione salvata nel formato con la chiave.")
+        return
+
+    salvate = pd.concat(pezzi, ignore_index=True)
+    salvate["season"] = salvate["season"].astype(str)
+    if season:
+        salvate = salvate[salvate["season"] == str(season)]
+    if matchday:
+        salvate = salvate[salvate["matchday"] == int(matchday)]
+    if salvate.empty:
+        print("nessuna previsione salvata per il perimetro richiesto")
+        return
+
+    veri = load_dataset()[["season", "home_team", "away_team", "FTR", "FTHG", "FTAG"]]
+    veri["season"] = veri["season"].astype(str)
+    d = salvate.merge(veri, on=["season", "home_team", "away_team"], how="left")
+
+    giocate = d[d["FTR"].notna()].copy()
+    if giocate.empty:
+        print(f"{len(d)} previsioni salvate, nessuna ancora giocata.")
+        return
+
+    y = outcome_index(giocate["FTR"])
+    for nome, colonne in (("M1", ["1 mkt", "X mkt", "2 mkt"]),
+                          ("M5", ["1 M5", "X M5", "2 M5"])):
+        p = giocate[colonne].to_numpy(float)
+        giocate[f"rps {nome}"] = rps(p, y)
+        # L'esito previsto e' il piu' probabile dei tre, nell'ordine H, D, A.
+        giocate[f"scelta {nome}"] = [["H", "D", "A"][i] for i in p.argmax(axis=1)]
+        giocate[f"ok {nome}"] = giocate[f"scelta {nome}"] == giocate["FTR"]
+
+    print(f"\n=== M5 contro M1 su {len(giocate)} partite gia' giocate ===\n")
+    vista = giocate.assign(
+        risultato=giocate["FTHG"].astype(int).astype(str) + "-"
+                  + giocate["FTAG"].astype(int).astype(str),
+        esito=giocate["FTR"],
+    )[["matchday", "partita", "risultato", "esito",
+       "scelta M1", "ok M1", "rps M1", "scelta M5", "ok M5", "rps M5"]]
+    print(vista.round(4).to_string(index=False))
+
+    diff = giocate["rps M5"] - giocate["rps M1"]
+    print(f"\nRPS medio     M1 {giocate['rps M1'].mean():.4f}   "
+          f"M5 {giocate['rps M5'].mean():.4f}")
+    print(f"esiti 1X2     M1 {int(giocate['ok M1'].sum())} su {len(giocate)}   "
+          f"M5 {int(giocate['ok M5'].sum())} su {len(giocate)}")
+    print(f"differenza appaiata M5 - M1: {diff.mean():+.5f} "
+          f"({int((diff < 0).sum())} partite su {len(diff)} a favore di M5)")
+
+    ancora = int(d["FTR"].isna().sum())
+    if ancora:
+        print(f"\n{ancora} previsioni salvate non sono ancora giocate.")
+    print("\nDIECI PARTITE NON DECIDONO NIENTE. Sul test set (1140 partite) la "
+          "differenza\nfra i due e' +0.00011 con IC [-0.00056, +0.00077]: "
+          "indistinguibili. Questo conto\nserve a vedere cosa e' successo, non "
+          "a promuovere un modello.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="La giornata in arrivo secondo M5 (GBM ancorato). Non scrive nel registro.")
@@ -132,9 +236,17 @@ def main() -> None:
                                     "per rifare una giornata gia' giocata con le quote di "
                                     "allora. Resta un dry-run: non scrive nemmeno nel "
                                     "file di backfill")
+    ap.add_argument("--verifica", action="store_true",
+                    help="non predice: confronta le previsioni gia' salvate con i "
+                         "risultati usciti")
     args = ap.parse_args()
 
     experiments.proteggi_produzione()
+
+    if args.verifica:
+        verifica(matchday=args.matchday)
+        return
+
     pd.set_option("display.width", 240)
     pd.set_option("display.max_columns", 40)
 
@@ -161,7 +273,8 @@ def main() -> None:
     tab = confronta(esito.preds)
     print(f"\n=== GIORNATA {esito.matchday} — M5 GBM ancorato contro il mercato (M1) ===")
     print(f"    {esito.model_version}\n")
-    print(tab.round(3).to_string(index=False))
+    print(tab.drop(columns=["season", "matchday", "home_team", "away_team",
+                            "kickoff_utc"]).round(3).to_string(index=False))
     print(f"\nscarto massimo sull'1X2: {tab['scarto max 1X2'].max():.4f} "
           f"(mediano {tab['scarto max 1X2'].median():.4f})")
     print("\nDIAGNOSTICA, NON UN SEGNALE DI SCOMMESSA. Sul test set M5 e'"
@@ -171,8 +284,34 @@ def main() -> None:
 
     dst = experiments.percorso(
         f"previsioni_m5_{esito.preds['season'].iloc[0]}_{esito.matchday:02d}.csv")
+    # L'istante della previsione vale quanto la previsione: a risultati usciti
+    # e' l'unica cosa che distingue una stima da un commento.
+    tab.insert(0, "timestamp_prediction",
+               (esito.now or pd.Timestamp.now(tz="UTC")).isoformat())
+
+    # IL FILE SI UNISCE, NON SI SOVRASCRIVE, e non e' un dettaglio. Questo
+    # comando gira piu' volte nel fine settimana e `predict.run` prevede solo
+    # le partite ANCORA DA GIOCARE: la passata del sabato mattina, riscrivendo,
+    # cancellerebbe la partita del venerdi' sera che aveva gia' previsto.
+    # Stessa regola del registro: a parita' di partita vince la riga piu'
+    # VECCHIA, perche' e' quella scritta con meno informazione.
+    chiave = ["season", "matchday", "home_team", "away_team"]
+    if dst.exists():
+        prima = pd.read_csv(dst)
+        prima["season"] = prima["season"].astype(str)
+        if set(chiave) <= set(prima.columns):
+            unione = pd.concat([prima, tab], ignore_index=True)
+            unione = unione.sort_values("timestamp_prediction")
+            tab = unione.drop_duplicates(subset=chiave, keep="first")
+            nuove = len(tab) - len(prima)
+            if nuove > 0:
+                print(f"\n{nuove} partite aggiunte a quelle gia' salvate")
+            elif len(tab) == len(prima):
+                print("\nnessuna partita nuova: il file resta com'era")
+
     tab.to_csv(dst, index=False)
     print(f"\nscritto {dst}")
+    print("a risultati usciti:  python -m src.experiments.predici_gbm --verifica")
 
 
 if __name__ == "__main__":

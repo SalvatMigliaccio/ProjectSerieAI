@@ -159,9 +159,25 @@ export function Hero() {
     [round?.matchday],
   );
 
+  const picks = useApi(() => api.picks(), []);
+
   const list = matches.data ?? [];
   const head = list[0] ?? null;
   const cards = list.slice(0, 3);
+
+  // La selezione del modello per ogni partita in vetrina. E' `picks`, non la
+  // banda regolabile della dashboard: qui non c'e' nessuna soglia da scegliere,
+  // e mostrare una lettura secondaria come se fosse la linea del progetto
+  // sarebbe il modo piu' rapido di far misurare al track record una cosa e
+  // raccontarne un'altra.
+  const selezioni = new Map(
+    (picks.data?.with_min_odds ?? []).map((s) => [`${s.home_team}-${s.away_team}`, s]),
+  );
+
+  // Il titolo segue lo stato della giornata mostrata: finche' non e' chiusa,
+  // "la scorsa giornata" e' semplicemente falso — le schede dicono "da giocare"
+  // due righe sotto.
+  const titolo = round?.closed ? "La scorsa giornata" : "La prossima giornata";
 
   return (
     <>
@@ -323,10 +339,10 @@ export function Hero() {
 
            <div className="showcase__label" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <Eyebrow>partite in evidenza</Eyebrow>
-              <h2>La scorsa giornata</h2>
+              <h2>{titolo}</h2>
               <p className="lead" style={{ maxWidth: "600px" }}>
-                Le partite con le previsioni registrate, con le probabilità che il
-                modello ha scritto prima del calcio d'inizio.
+                Le partite con le previsioni registrate, con le probabilità e la
+                selezione che il modello ha scritto prima del calcio d'inizio.
               </p>
               <Link className="link-mint" to="/dashboard"  style={{ alignSelf: "flex-start", gap: "1rem" }}>
                 Vedi tutte le partite →
@@ -334,7 +350,7 @@ export function Hero() {
             </div>
 
 
-          <div className="showcase" style={{ display: "flex", flexDirection: "row", gap: "1rem" }}>
+          <div className="showcase">
             {cards.map((match) => (
               <article className="matchcard" key={`${match.home_team}-${match.away_team}`}>
                 <div className="matchcard__head">
@@ -343,17 +359,35 @@ export function Hero() {
                 <div className="matchcard__body">
                   <div className="matchcard__teams">
                     <span className="matchcard__team">
-                      <span className="matchcard__crest">{match.home_team.slice(0, 3)}</span>
                       <span className="matchcard__name">{match.home_team}</span>
                     </span>
                     <span className="matchcard__vs">vs</span>
                     <span className="matchcard__team">
-                      <span className="matchcard__crest">{match.away_team.slice(0, 3)}</span>
                       <span className="matchcard__name">{match.away_team}</span>
                     </span>
                   </div>
 
                   <OddsRow match={match} compact />
+
+                  {/* La selezione del modello su questa partita. Probabilita' e
+                      QUOTA EQUA, cioe' il prezzo a valore atteso zero: serve a
+                      confrontarla con quella del tuo book, non a promettere un
+                      vantaggio che su 1140 partite fuori campione non esiste. */}
+                  {(() => {
+                    const s = selezioni.get(`${match.home_team}-${match.away_team}`);
+                    if (!s) return null;
+                    const esito =
+                      s.won === null ? "" : s.won ? " matchcard__pick--ok" : " matchcard__pick--ko";
+                    return (
+                      <span className={`matchcard__pick${esito}`}>
+                        <span className="matchcard__pick-key">Selezione</span>
+                        <span className="matchcard__pick-val">{s.market_label}</span>
+                        <span className="matchcard__pick-odds">
+                          {prob(s.probability)} · quota equa {s.fair_odds.toFixed(2)}
+                        </span>
+                      </span>
+                    );
+                  })()}
 
                   <Link className="matchcard__cta" to="/dashboard">
                     Vedi analisi →

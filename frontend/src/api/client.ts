@@ -66,7 +66,16 @@ export function baseUrl(): string {
   }
 
   const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
-  return (stored ?? configured ?? FALLBACK_BASE).replace(/\/$/, "");
+  if (stored || configured) return (stored ?? configured ?? "").replace(/\/$/, "");
+
+  // FUORI DA LOCALHOST, `127.0.0.1:8000` E' IL COMPUTER DI CHI GUARDA.
+  // Quando la pagina arriva da un tunnel o da un altro host, quell'indirizzo
+  // non e' "quasi giusto": e' certamente sbagliato, e l'unico errore possibile
+  // sarebbe interrogare l'API di qualcun altro. Si chiede alla stessa origine
+  // della pagina, che il proxy di Vite (vedi vite.config.ts) gira all'API
+  // locale — un solo tunnel, e nessun problema di CORS.
+  const locale = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+  return locale ? FALLBACK_BASE : window.location.origin;
 }
 
 export function season(): string {
@@ -78,7 +87,13 @@ async function get<T>(path: string): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(url, { headers: { Accept: "application/json" } });
+    // `ngrok-skip-browser-warning` non serve a noi e non disturba nessuno: con
+    // un account ngrok gratuito, senza, la prima risposta a una `fetch` puo'
+    // essere la pagina di avviso del tunnel — HTML dove il codice aspetta
+    // JSON, e l'errore parla di sintassi invece che di tunnel.
+    response = await fetch(url, {
+      headers: { Accept: "application/json", "ngrok-skip-browser-warning": "1" },
+    });
   } catch {
     throw new ApiError("non riesco a contattare l'API", {
       url,

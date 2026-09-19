@@ -282,27 +282,33 @@ export function Dashboard() {
           </aside>
         </div>
 
-        <Eyebrow>classifica</Eyebrow>
-        <ErrorBoundary
-          label="classifica"
-          fallback={<p className="state">Classifica non disponibile.</p>}
-        >
-          <StandingsPanel />
-        </ErrorBoundary>
+        <div className="dash-bottom">
+          <div>
+            <Eyebrow>classifica</Eyebrow>
+            <ErrorBoundary
+              label="classifica"
+              fallback={<p className="state">Classifica non disponibile.</p>}
+            >
+              <StandingsPanel />
+            </ErrorBoundary>
+          </div>
 
-        <Eyebrow>track record</Eyebrow>
-        {record.loading && <Loading what="carico il track record…" />}
-        {record.error && (
-          <ErrorState error={record.error} what="Non riesco a caricare il track record." />
-        )}
-        {record.data && (
-          <ErrorBoundary
-            label="track record"
-            fallback={<p className="state">Track record non disponibile.</p>}
-          >
-            <TrackRecordPanel record={record.data.record} summary={record.data.summary} />
-          </ErrorBoundary>
-        )}
+          <div>
+            <Eyebrow>track record</Eyebrow>
+            {record.loading && <Loading what="carico il track record…" />}
+            {record.error && (
+              <ErrorState error={record.error} what="Non riesco a caricare il track record." />
+            )}
+            {record.data && (
+              <ErrorBoundary
+                label="track record"
+                fallback={<p className="state">Track record non disponibile.</p>}
+              >
+                <TrackRecordPanel record={record.data.record} summary={record.data.summary} />
+              </ErrorBoundary>
+            )}
+          </div>
+        </div>
       </main>
 
       <Colophon
