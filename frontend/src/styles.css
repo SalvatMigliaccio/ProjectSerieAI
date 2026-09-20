@@ -18,34 +18,42 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #04100f;
-  --bg-2: #061a18;
-  --surface: #0a2220;
-  --surface-2: #0e2b28;
-  --line: #143a35;
-  --line-strong: #1d4f47;
+  /* MENTA SOBRIA. Il verde resta il colore del marchio, ma non e' piu' un
+     neon su nero-verde: l'accento e' desaturato (#45c08a al posto di
+     #2ee88a) e i fondi sono grafite neutra — il nero tinto di verde era meta'
+     dell'effetto "AI". Contrasti verificati: testo 15.6:1, secondario 8.7:1,
+     terziario 5.9:1, testo sul pulsante 8.1:1. */
+  --bg: #0c1111;
+  --bg-2: #101615;
+  --surface: #151c1b;
+  --surface-2: #1b2321;
+  --line: #222b29;
+  --line-strong: #2e3936;
 
-  --fg: #ffffff;
-  --muted: #a7bfbb;
-  --faint: #6d8b86;
+  --fg: #f1f4f2;
+  --muted: #b0bab6;
+  --faint: #8d9a95;
 
-  --mint: #2ee88a;
-  --mint-2: #19c874;
-  --mint-ink: #04261a;
-  --mint-wash: rgba(46, 232, 138, 0.12);
+  --mint: #45c08a;
+  --mint-2: #36a877;
+  --mint-ink: #06170f;
+  --mint-wash: rgba(var(--accent-rgb), 0.12);
 
-  --ok: #2ee88a;
-  --ok-wash: rgba(46, 232, 138, 0.14);
-  --ko: #ff7b7b;
-  --ko-wash: rgba(255, 123, 123, 0.14);
-  --idle: #7d9a95;
-  --idle-wash: rgba(125, 154, 149, 0.14);
-  --warn: #f3c969;
-  --warn-wash: rgba(243, 201, 105, 0.12);
+  /* L'esito e' un colore suo, anche se oggi coincide con l'accento: i
+     segnali di vittoria passano da --ok e non da --mint, cosi' cambiare
+     marchio non trasforma una vittoria in un pareggio. */
+  --ok: #45c08a;
+  --ok-wash: rgba(69, 192, 138, 0.14);
+  --ko: #e6776f;
+  --ko-wash: rgba(230, 119, 111, 0.14);
+  --idle: #8a9591;
+  --idle-wash: rgba(138, 149, 145, 0.14);
+  --warn: #e3bd62;
+  --warn-wash: rgba(227, 189, 98, 0.12);
 
-  --cat-1: #5fb0ef;
-  --cat-x: #8ba3a0;
-  --cat-2: #efad68;
+  --cat-1: #6aa9dd;
+  --cat-x: #97a19d;
+  --cat-2: #dfa56b;
 
   --display: "Poppins", "Segoe UI", system-ui, sans-serif;
   --text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -62,6 +70,16 @@
   --max: 1280px;
   --radius: 14px;
   --radius-sm: 8px;
+
+  /* LA PALETTE IN CANALI. Ogni colore del tema usato con trasparenza passa da
+     qui, cosi' cambiare palette e' cambiare queste righe e non cercare
+     cinquanta rgba() sparsi nel foglio. `--mint` e compagni restano coi nomi
+     storici, ma sono l'ACCENTO del tema, qualunque colore sia. */
+  --accent-rgb: 69, 192, 138;
+  --accent-hi: #5fcf9d;
+  --bg-rgb: 12, 17, 17;
+  --bg2-rgb: 16, 22, 21;
+  --surface-rgb: 21, 28, 27;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -210,7 +228,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-.nav-cta:hover { border-color: var(--mint); background: rgba(46, 232, 138, 0.12); color: var(--mint); }
+.nav-cta:hover { border-color: var(--mint); background: rgba(var(--accent-rgb), 0.12); color: var(--mint); }
 
 /* --- hero ----------------------------------------------------------------- */
 
@@ -221,34 +239,35 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   position: absolute; inset: 0; z-index: -2;
   background-color: var(--bg);
   background-image:
-    radial-gradient(70% 60% at 72% 8%, rgba(46, 232, 138, 0.16), transparent 62%),
-    radial-gradient(60% 55% at 18% 92%, rgba(46, 232, 138, 0.08), transparent 70%),
+    radial-gradient(70% 60% at 72% 8%, rgba(var(--accent-rgb), 0.07), transparent 62%),
+    radial-gradient(60% 55% at 18% 92%, rgba(var(--accent-rgb), 0.03), transparent 70%),
     /* WebP da 79 kB invece del JPG da 1.7 MB: la foto sta sotto due veli
        scuri e la differenza non si vede. `image-set` prende il primo formato
        che il browser sa leggere; il JPG resta come ripiego. */
     image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
-  /* `auto 132%` invece di `cover`: su una hero molto larga `cover` scala la
-     foto sulla LARGHEZZA e non lascia margine orizzontale, quindi
-     `background-position-x` non ha alcun effetto e il soggetto resta
-     inchiodato dov'e'. Ingrandendo sull'altezza si crea il margine da cui
-     traslare, e il giocatore si porta al centro. */
-  /* `cover` garantisce che l'immagine riempia SEMPRE il riquadro, a qualunque
-     rapporto: scalarla sull'altezza (`auto 120%`) su una hero molto larga la
-     lascia piu' stretta del contenitore e apre bande vuote ai lati.
-     La traslazione del soggetto si fa quindi con una trasformazione: il
-     livello viene ingrandito del 18% — cioe' 9% di margine per lato — e
-     spostato del 6%, che resta dentro quel margine. */
-  background-size: cover;
-  background-position: center 10%;
+  /* NIENTE INGRANDIMENTO, ed era la causa della sfocatura. La foto e' alta
+     725 pixel e la hero circa 960: `cover` la stira gia' di 1.32 volte, e lo
+     `scale(1.26)` di prima portava lo stiramento a 1.67 — ogni pixel della
+     foto diventava quasi due pixel dello schermo.
+     Lo zoom era li' per poterla spostare, sulla convinzione che con `cover`
+     non restasse margine orizzontale. E' vero solo per riquadri larghi quasi
+     tre volte quanto sono alti (il rapporto della foto, 2170:725): a un
+     normale 1440x960 `cover` scala sull'altezza, la foto risulta larga ~2870
+     pixel, e `background-position` la sposta senza bisogno di altro.
+     ALTA IL 78% DELLA HERO E NON DI PIU'. A 930 pixel di hero sono circa 725:
+     la risoluzione nativa della foto, stiramento 1.0 — il massimo di
+     nitidezza possibile con questo file. Per averla nitida a tutta altezza
+     serve una foto alta almeno 1000 pixel.
+     IL BORDO BASSO SFUMA NEL FONDO (la maschera qui sotto), altrimenti al 78%
+     si vedrebbe la riga dove la foto finisce.
+     A DESTRA DEL TUTTO (100%): e' la posizione che porta il giocatore piu' a
+     sinistra senza aprire bande vuote sul lato destro. La foto e' larga
+     ~2100 pixel su 1440: oltre non c'e' margine. */
+  background-size: auto 78%;
+  background-position: 100% 0%;
   background-repeat: no-repeat;
-  /* INQUADRATURA — i due numeri da toccare sono qui:
-       scale()      quanto si ingrandisce. Piu' alto = soggetto piu' grande e
-                    piu' margine per traslare, ma taglia sopra e sotto.
-       translateX() dove si sposta. Negativo = il soggetto va verso sinistra.
-     Vincolo: |translateX| deve restare sotto (scale - 1) / 2, altrimenti
-     rientrano le bande vuote ai lati. Con scale 1.26 il limite e' 13%. */
-  transform: scale(1.26) translateX(-10%);
-  transform-origin: center center;
+  -webkit-mask-image: linear-gradient(180deg, #000 56%, transparent 78%);
+  mask-image: linear-gradient(180deg, #000 56%, transparent 78%);
 }
 
 /* Due veli, non uno. Quello obliquo scurisce il lato del testo ed e' quello di
@@ -263,16 +282,16 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
     linear-gradient(
       180deg,
       transparent 52%,
-      rgba(4, 16, 15, 0.35) 74%,
-      rgba(4, 16, 15, 0.74) 89%,
-      rgba(4, 16, 15, 0.93) 100%
+      rgba(var(--bg-rgb), 0.35) 74%,
+      rgba(var(--bg-rgb), 0.74) 89%,
+      rgba(var(--bg-rgb), 0.93) 100%
     ),
     linear-gradient(
       98deg,
-      rgba(4, 16, 15, 0.97) 0%,
-      rgba(4, 16, 15, 0.9) 34%,
-      rgba(4, 16, 15, 0.45) 62%,
-      rgba(4, 16, 15, 0.82) 100%
+      rgba(var(--bg-rgb), 0.97) 0%,
+      rgba(var(--bg-rgb), 0.9) 34%,
+      rgba(var(--bg-rgb), 0.45) 62%,
+      rgba(var(--bg-rgb), 0.82) 100%
     );
 }
 
@@ -324,23 +343,25 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .cta {
   display: inline-flex; align-items: center; gap: var(--s3);
   padding: var(--s4) var(--s6);
-  background: linear-gradient(180deg, #4af49f, var(--mint) 55%, var(--mint-2));
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
   color: var(--mint-ink);
   border-radius: 999px;
   font-family: var(--display);
   font-weight: 600;
   font-size: 1rem;
   border: 0; cursor: pointer;
+  /* Un'ombra scura sotto, non un alone colorato attorno: un oggetto vero
+     proietta ombra, non luce, e l'alone menta era meta' dell'effetto neon. */
   box-shadow:
-    0 14px 34px -10px rgba(46, 232, 138, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 10px 22px -12px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   transition: box-shadow 160ms ease, transform 160ms ease;
 }
 
 .cta:hover {
   box-shadow:
-    0 18px 42px -10px rgba(46, 232, 138, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    0 14px 28px -12px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   transform: translateY(-1px);
 }
 .cta__arrow {
@@ -367,12 +388,12 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   border-radius: 22px;
   /* Semi-trasparente: sopra la fotografia il pannello deve lasciar vedere la
      scena, come nel riferimento. Su fondo nero resta comunque leggibile. */
-  background: linear-gradient(165deg, rgba(20, 56, 52, 0.94), rgba(7, 29, 27, 0.96));
+  background: linear-gradient(165deg, rgba(var(--surface-rgb), 0.94), rgba(var(--bg2-rgb), 0.96));
   backdrop-filter: blur(10px);
   padding: var(--s5);
   box-shadow:
     -30px 50px 90px -40px rgba(0, 0, 0, 0.95),
-    0 0 0 1px rgba(46, 232, 138, 0.06),
+    0 0 0 1px rgba(var(--accent-rgb), 0.06),
     inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
@@ -398,7 +419,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-.device__status:hover { border-color: rgba(46, 232, 138, 0.45); background: rgba(46, 232, 138, 0.06); }
+.device__status:hover { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.06); }
 .device__status-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .device__status-go { color: var(--mint); font-weight: 600; font-size: 0.75rem; }
 
@@ -469,14 +490,14 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   display: block; width: 100%;
   margin-top: var(--s4);
   padding: var(--s3);
-  background: linear-gradient(180deg, #4af49f, var(--mint) 55%, var(--mint-2));
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
   color: var(--mint-ink);
   border-radius: 999px;
   text-align: center; font-weight: 600; font-size: 0.875rem;
   font-family: var(--display);
   box-shadow:
-    0 10px 26px -10px rgba(46, 232, 138, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 8px 18px -10px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .device__section { margin-top: var(--s5); }
@@ -517,7 +538,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 /* Vetro sopra la fotografia: nel riferimento le schede lasciano intravedere la
    scena, ed e' quello che le fa galleggiare invece di stare appiccicate. */
 .floater {
-  background: rgba(13, 41, 38, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius);
@@ -541,7 +562,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   width: 30px; height: 30px; flex: none;
   border-radius: var(--radius-sm);
   background: var(--mint-wash);
-  border: 1px solid rgba(46, 232, 138, 0.35);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
   color: var(--mint);
   display: grid; place-items: center;
 }
@@ -595,7 +616,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   font-variant-numeric: tabular-nums; color: var(--fg);
 }
 
-.floater__result--w { background: var(--mint); }
+.floater__result--w { background: var(--ok); }
 .floater__result--d { background: var(--warn); }
 .floater__result--l { background: var(--ko); }
 
@@ -635,13 +656,13 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   content: "";
   position: absolute; inset: 0; z-index: -1;
   background:
-    radial-gradient(100% 70% at 50% 34%, rgba(46, 232, 138, 0.05), transparent 64%),
+    radial-gradient(100% 70% at 50% 34%, rgba(var(--accent-rgb), 0.05), transparent 64%),
     linear-gradient(
       180deg,
       var(--bg) 0%,
-      rgba(4, 16, 15, 0.9) 12%,
-      rgba(4, 16, 15, 0.7) 44%,
-      rgba(4, 16, 15, 0.86) 78%,
+      rgba(var(--bg-rgb), 0.9) 12%,
+      rgba(var(--bg-rgb), 0.7) 44%,
+      rgba(var(--bg-rgb), 0.86) 78%,
       var(--bg) 100%
     );
 }
@@ -687,8 +708,8 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   display: grid; gap: var(--s3); grid-template-rows: auto auto auto 1fr;
   padding: var(--s5);
   border: 1px solid rgba(255, 255, 255, 0.04); border-radius: var(--radius);
-  /* L'ESCURSIONE E' STRETTA DI PROPOSITO. La scheda va da #0c2b27 a #051715
-     attorno al fondo della sezione (#061a18): due passi sopra e uno sotto,
+  /* L'ESCURSIONE E' STRETTA DI PROPOSITO. La scheda va da rgb(var(--surface-rgb)) a rgb(var(--bg-rgb))
+     attorno al fondo della sezione (var(--bg-2)): due passi sopra e uno sotto,
      non una lastra chiara su un fondo scuro. La profondita' la fanno le ombre,
      non il salto di tono — con un salto forte le quattro schede diventano
      quattro cartelli appiccicati sulla pagina. */
@@ -697,8 +718,8 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
      sfocatura tiene leggibile il testo sopra le luci dei riflettori, che sono
      la zona piu' chiara e mossa della foto. */
   background:
-    radial-gradient(130% 90% at 0% 0%, rgba(46, 232, 138, 0.07), transparent 58%),
-    linear-gradient(152deg, rgba(12, 43, 39, 0.86) 0%, rgba(9, 36, 34, 0.88) 40%, rgba(6, 27, 25, 0.9) 76%, rgba(5, 23, 21, 0.92) 100%);
+    radial-gradient(130% 90% at 0% 0%, rgba(var(--accent-rgb), 0.04), transparent 58%),
+    linear-gradient(152deg, rgba(var(--surface-rgb), 0.86) 0%, rgba(var(--surface-rgb), 0.88) 40%, rgba(var(--bg2-rgb), 0.9) 76%, rgba(var(--bg2-rgb), 0.92) 100%);
   backdrop-filter: blur(10px) saturate(115%);
   -webkit-backdrop-filter: blur(10px) saturate(115%);
   /* Quattro livelli: contatto stretto, distacco medio, caduta lunga, e un filo
@@ -718,7 +739,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   content: "";
   position: absolute; inset: 0; z-index: -1;
   border-radius: inherit; padding: 1px;
-  background: linear-gradient(152deg, rgba(46, 232, 138, 0.3), rgba(255, 255, 255, 0.06) 34%, transparent 62%);
+  background: linear-gradient(152deg, rgba(var(--accent-rgb), 0.3), rgba(255, 255, 255, 0.06) 34%, transparent 62%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -756,7 +777,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
 
-.step__glyph { color: var(--mint); display: inline-flex; filter: drop-shadow(0 0 10px rgba(46, 232, 138, 0.45)); }
+.step__glyph { color: var(--mint); display: inline-flex; }
 .step h3 { margin: 0; font-size: 1.0625rem; letter-spacing: -0.01em; }
 .step p { margin: 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.55; max-width: none; }
 .step__demo { display: grid; gap: var(--s2); margin-top: var(--s2); align-self: start; align-content: start; }
@@ -768,7 +789,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .pipe {
   display: grid; align-content: start;
   border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, rgba(3, 13, 12, 0.5), rgba(4, 17, 16, 0.35));
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
   overflow: hidden;
 }
@@ -780,7 +801,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 }
 
 .pipe__row:last-child { border-bottom: 0; }
-.pipe__row--out { background: rgba(46, 232, 138, 0.07); }
+.pipe__row--out { background: rgba(var(--accent-rgb), 0.07); }
 .pipe__key { font-size: 0.6875rem; color: var(--muted); }
 .pipe__val { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pipe__val--quieta { font-weight: 500; color: var(--faint); }
@@ -792,11 +813,11 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
   display: flex; align-items: center; gap: var(--s2);
   padding: 7px var(--s3);
   font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
-  background: rgba(46, 232, 138, 0.04);
+  background: rgba(var(--accent-rgb), 0.04);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.pipe__line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(46, 232, 138, 0.45), transparent); }
+.pipe__line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.45), transparent); }
 
 /* I riquadri dei dati sono INCASSATI nella scheda: fondo piu' scuro di quello
    su cui stanno e ombra interna in alto. Cosi' si leggono come una finestra
@@ -805,7 +826,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .mini {
   display: grid; gap: 6px; padding: var(--s3);
   border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, rgba(3, 13, 12, 0.5), rgba(4, 17, 16, 0.35));
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
 }
 
@@ -821,11 +842,11 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 .scene {
   display: grid; gap: var(--s3); padding: var(--s3);
-  border: 1px solid rgba(46, 232, 138, 0.28); border-radius: var(--radius-sm);
+  border: 1px solid rgba(var(--accent-rgb), 0.28); border-radius: var(--radius-sm);
   background:
-    radial-gradient(120% 90% at 0% 0%, rgba(46, 232, 138, 0.14), transparent 62%),
-    linear-gradient(180deg, rgba(8, 32, 29, 0.9), rgba(3, 14, 13, 0.75));
-  box-shadow: inset 0 1px 0 rgba(46, 232, 138, 0.18), 0 10px 20px -14px rgba(0, 0, 0, 0.9);
+    radial-gradient(120% 90% at 0% 0%, rgba(var(--accent-rgb), 0.07), transparent 62%),
+    linear-gradient(180deg, rgba(var(--bg2-rgb), 0.9), rgba(var(--bg-rgb), 0.75));
+  box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.18), 0 10px 20px -14px rgba(0, 0, 0, 0.9);
 }
 
 .scene__teams { font-size: 0.8125rem; font-weight: 600; }
@@ -835,10 +856,10 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 .scene__box {
   display: grid; gap: 2px; padding: 6px 8px;
   border: 1px solid var(--line-strong); border-radius: 6px;
-  background: rgba(4, 16, 15, 0.55);
+  background: rgba(var(--bg-rgb), 0.55);
 }
 
-.scene__box--mint { border-color: rgba(46, 232, 138, 0.45); background: rgba(46, 232, 138, 0.1); }
+.scene__box--mint { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.1); }
 
 .scene__esito {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
@@ -859,8 +880,8 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 .howto__fact-glyph {
   display: grid; place-items: center; flex: none; width: 28px; height: 28px;
-  border-radius: 50%; border: 1px solid rgba(46, 232, 138, 0.3);
-  background: rgba(46, 232, 138, 0.08); color: var(--mint);
+  border-radius: 50%; border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.08); color: var(--mint);
 }
 
 /* --- sezioni -------------------------------------------------------------- */
@@ -909,7 +930,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .showcase > .side-card { flex: 1.8 1 0; min-width: 0; }
 
 .matchcard {
-  background: rgba(12, 38, 35, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
@@ -925,7 +946,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .matchcard__head {
   padding: var(--s3) var(--s4);
   background:
-    linear-gradient(180deg, rgba(4, 16, 15, 0.35), rgba(4, 16, 15, 0.75)),
+    linear-gradient(180deg, rgba(var(--bg-rgb), 0.35), rgba(var(--bg-rgb), 0.75)),
     var(--surface-2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 0.6875rem; color: var(--muted); text-align: center;
@@ -945,7 +966,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
    dice di piu' e si legge da lontano. */
 .matchcard__name { font-size: 0.9375rem; font-weight: 600; line-height: 1.3; }
 .matchcard__vs { font-size: 0.75rem; color: var(--faint); }
-.matchcard__ok { color: var(--mint); font-weight: 700; }
+.matchcard__ok { color: var(--ok); font-weight: 700; }
 
 /* La selezione del modello sulla scheda. Incassata come i riquadri dei dati
    altrove, cosi' si legge come un dato e non come un bottone: qui non c'e'
@@ -953,7 +974,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .matchcard__pick {
   display: grid; gap: 2px; padding: var(--s2) var(--s3);
   border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius-sm);
-  background: rgba(2, 12, 11, 0.5);
+  background: rgba(var(--bg-rgb), 0.5);
   text-align: center;
 }
 
@@ -966,7 +987,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 
 /* A partita giocata la selezione dice anche com'e' finita: stessa convenzione
    della griglia in dashboard, verde se e' uscita, corallo se no. */
-.matchcard__pick--ok { border-color: rgba(46, 232, 138, 0.35); background: var(--ok-wash); }
+.matchcard__pick--ok { border-color: rgba(var(--accent-rgb), 0.35); background: var(--ok-wash); }
 .matchcard__pick--ok .matchcard__pick-val { color: var(--ok); }
 .matchcard__pick--ko { border-color: rgba(255, 123, 123, 0.35); background: var(--ko-wash); }
 .matchcard__pick--ko .matchcard__pick-val { color: var(--ko); }
@@ -974,20 +995,20 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .matchcard__cta {
   display: block; text-align: center;
   padding: var(--s3);
-  background: linear-gradient(180deg, #4af49f, var(--mint) 55%, var(--mint-2));
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
   color: var(--mint-ink);
   border-radius: 999px;
   font-family: var(--display); font-weight: 600; font-size: 0.8125rem;
   box-shadow:
-    0 12px 26px -12px rgba(46, 232, 138, 0.55),
+    0 12px 26px -12px rgba(var(--accent-rgb), 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.matchcard__cta:hover { box-shadow: 0 16px 32px -12px rgba(46, 232, 138, 0.7); }
+.matchcard__cta:hover { box-shadow: none; }
 .matchcard__note { font-size: 0.75rem; color: var(--faint); text-align: center; }
 
 .side-card {
-  background: rgba(12, 38, 35, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
@@ -1156,7 +1177,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
    finiscono ottocento pixel di vuoto, che e' come non incolonnarli affatto. */
 .std {
   border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(12, 38, 35, 0.5), rgba(6, 26, 24, 0.5));
+  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
   overflow: hidden;
 }
@@ -1249,7 +1270,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
 }
 
-.std__pip--w { background: var(--mint); }
+.std__pip--w { background: var(--ok); }
 .std__pip--d { background: var(--warn); }
 .std__pip--l { background: var(--ko); }
 
@@ -1267,7 +1288,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   display: grid; gap: var(--s5);
   padding: var(--s5);
   border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(12, 38, 35, 0.5), rgba(6, 26, 24, 0.5));
+  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
 }
 
@@ -1318,7 +1339,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 /* Menta solo quando il modello ha fatto meglio delle quote su quelle partite:
    e' un confronto fra due numeri della stessa riga, non un giudizio sul
    risultato in se'. */
-.tr__meglio { color: var(--mint); font-weight: 600; }
+.tr__meglio { color: var(--ok); font-weight: 600; }
 
 /* --- dashboard: intestazione della giornata -------------------------------- */
 
@@ -1333,7 +1354,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   margin-top: var(--s5);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  background: rgba(12, 38, 35, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
@@ -1343,7 +1364,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   content: "";
   position: absolute; inset: 0; z-index: -1;
   background-image:
-    linear-gradient(90deg, rgba(10, 34, 32, 0.98) 34%, rgba(10, 34, 32, 0.55) 70%, rgba(10, 34, 32, 0.9)),
+    linear-gradient(90deg, rgba(var(--surface-rgb), 0.98) 34%, rgba(var(--surface-rgb), 0.55) 70%, rgba(var(--surface-rgb), 0.9)),
     image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
   background-size: cover;
   background-position: center 28%;
@@ -1379,7 +1400,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   padding: var(--s3) var(--s4);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-sm);
-  background: rgba(4, 16, 15, 0.55);
+  background: rgba(var(--bg-rgb), 0.55);
 }
 
 .dash-chip__glyph { color: var(--mint); display: grid; place-items: center; flex: none; }
@@ -1434,7 +1455,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 
 .round-chip strong { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .round-chip span { font-size: 0.6875rem; letter-spacing: 0.04em; }
-.round-chip:hover { color: var(--fg); border-color: rgba(46, 232, 138, 0.4); }
+.round-chip:hover { color: var(--fg); border-color: rgba(var(--accent-rgb), 0.4); }
 
 .round-chip[aria-pressed="true"] {
   background: var(--mint); border-color: var(--mint); color: var(--mint-ink);
@@ -1464,7 +1485,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .filter:hover { color: var(--fg); }
 
 .filter[aria-pressed="true"] {
-  border-color: rgba(46, 232, 138, 0.5);
+  border-color: rgba(var(--accent-rgb), 0.5);
   background: var(--mint-wash);
   color: var(--mint);
 }
@@ -1507,7 +1528,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .grid-wrap {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  background: rgba(12, 38, 35, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -1568,8 +1589,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    nella colonna a fianco, cosi' il filtro si vede sulla giornata e non solo
    nella scheda. */
 .pick--picked {
-  background: rgba(46, 232, 138, 0.1);
-  box-shadow: inset 0 0 0 1px rgba(46, 232, 138, 0.45);
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.45);
 }
 
 .pick--picked .pick__pct { color: var(--mint); }
@@ -1605,7 +1626,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* --- dashboard: colonna laterale ------------------------------------------- */
 
 .aside-card {
-  background: rgba(12, 38, 35, 0.72);
+  background: rgba(var(--surface-rgb), 0.72);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   padding: var(--s4);
@@ -1813,7 +1834,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 .colophon__col a, .colophon__col span { font-size: 0.8125rem; color: var(--muted); }
 .colophon__col a { width: fit-content; padding-block: 3px; border-bottom: 1px solid transparent; }
-.colophon__col a:hover { color: var(--mint); border-bottom-color: rgba(46, 232, 138, 0.5); }
+.colophon__col a:hover { color: var(--mint); border-bottom-color: rgba(var(--accent-rgb), 0.5); }
 
 /* Il nome del modello in chiaro, e sotto in piccolo la versione che l'API
    dichiara davvero: se un giorno la produzione cambiasse, la riga piccola lo
@@ -1868,14 +1889,14 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    hero; gli altri portano nello stesso posto e lo dicono piu' piano, con il
    contorno. */
 .device__cta, .matchcard__cta {
-  background: rgba(46, 232, 138, 0.08);
+  background: rgba(var(--accent-rgb), 0.08);
   color: var(--mint);
-  border: 1px solid rgba(46, 232, 138, 0.5);
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
   box-shadow: none;
 }
 
 .device__cta:hover, .matchcard__cta:hover {
-  background: rgba(46, 232, 138, 0.16);
+  background: rgba(var(--accent-rgb), 0.16);
   border-color: var(--mint);
   box-shadow: none;
 }
@@ -1955,7 +1976,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     gap: var(--s3) var(--s2);
     padding: var(--s4) var(--s3);
     border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius);
-    background: rgba(12, 38, 35, 0.55);
+    background: rgba(var(--surface-rgb), 0.55);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
