@@ -54,59 +54,76 @@ def _righe(path: Path) -> int:
     return 0 if not path.exists() else len(pd.read_csv(path))
 
 
-def main() -> None:
+def esegui(cartella: Path) -> None:
+    """
+    I sette controlli, in sequenza, sullo stesso file di registro.
+
+    Sono UNA prova sola e non sette: ogni passo parte dal registro lasciato
+    dal precedente, ed e' proprio la sequenza che verifica l'append-only.
+    Spezzarli in sette test indipendenti verificherebbe sette scritture su
+    sette file vuoti, cioe' un'altra cosa.
+    """
     ora = pd.Timestamp("2026-09-05T10:00:00Z")
-    with tempfile.TemporaryDirectory() as tmp:
-        log = Path(tmp) / "predictions_log.csv"
+    log = Path(cartella) / "predictions_log.csv"
 
-        # 1. prima scrittura
-        scritte, saltate = append_log(_finte(), MODELLO, ora, path=log)
-        assert (scritte, saltate) == (3, 0), (scritte, saltate)
-        assert _righe(log) == 3
-        assert list(pd.read_csv(log).columns) == LOG_COLUMNS, "schema del registro cambiato"
-        print("1. prima scrittura: 3 righe                          ok")
+    # 1. prima scrittura
+    scritte, saltate = append_log(_finte(), MODELLO, ora, path=log)
+    assert (scritte, saltate) == (3, 0), (scritte, saltate)
+    assert _righe(log) == 3
+    assert list(pd.read_csv(log).columns) == LOG_COLUMNS, "schema del registro cambiato"
+    print("1. prima scrittura: 3 righe                          ok")
 
-        # 2. IDEMPOTENZA: rilanciare non aggiunge niente
-        scritte, saltate = append_log(_finte(), MODELLO, ora, path=log)
-        assert (scritte, saltate) == (0, 3), (scritte, saltate)
-        assert _righe(log) == 3, "il rilancio ha duplicato le righe"
-        print("2. rilancio identico: 0 scritte, 3 saltate           ok")
+    # 2. IDEMPOTENZA: rilanciare non aggiunge niente
+    scritte, saltate = append_log(_finte(), MODELLO, ora, path=log)
+    assert (scritte, saltate) == (0, 3), (scritte, saltate)
+    assert _righe(log) == 3, "il rilancio ha duplicato le righe"
+    print("2. rilancio identico: 0 scritte, 3 saltate           ok")
 
-        # 3. quote cambiate: la riga vecchia NON si aggiorna
-        scritte, saltate = append_log(_finte(quote=1.5), MODELLO, ora, path=log)
-        assert (scritte, saltate) == (0, 3), (scritte, saltate)
-        letto = pd.read_csv(log)
-        assert (letto["odds_home"] == 2.0).all(), "una quota vecchia e' stata sovrascritta"
-        print("3. quote cambiate: registro intatto                  ok")
+    # 3. quote cambiate: la riga vecchia NON si aggiorna
+    scritte, saltate = append_log(_finte(quote=1.5), MODELLO, ora, path=log)
+    assert (scritte, saltate) == (0, 3), (scritte, saltate)
+    letto = pd.read_csv(log)
+    assert (letto["odds_home"] == 2.0).all(), "una quota vecchia e' stata sovrascritta"
+    print("3. quote cambiate: registro intatto                  ok")
 
-        # 4. stesso match, modello diverso: entra
-        scritte, saltate = append_log(_finte(quote=1.5), ALTRO, ora, path=log)
-        assert (scritte, saltate) == (3, 0), (scritte, saltate)
-        assert _righe(log) == 6
-        print("4. altro model_version: 3 righe nuove                ok")
+    # 4. stesso match, modello diverso: entra
+    scritte, saltate = append_log(_finte(quote=1.5), ALTRO, ora, path=log)
+    assert (scritte, saltate) == (3, 0), (scritte, saltate)
+    assert _righe(log) == 6
+    print("4. altro model_version: 3 righe nuove                ok")
 
-        # 5. misto: due gia' viste, una nuova
-        misto = _finte(4)
-        scritte, saltate = append_log(misto, MODELLO, ora, path=log)
-        assert (scritte, saltate) == (1, 3), (scritte, saltate)
-        assert _righe(log) == 7
-        print("5. tre viste + una nuova: 1 scritta, 3 saltate       ok")
+    # 5. misto: due gia' viste, una nuova
+    misto = _finte(4)
+    scritte, saltate = append_log(misto, MODELLO, ora, path=log)
+    assert (scritte, saltate) == (1, 3), (scritte, saltate)
+    assert _righe(log) == 7
+    print("5. tre viste + una nuova: 1 scritta, 3 saltate       ok")
 
-        # 6. append-only: nessuna riga precedente e' cambiata
-        finale = pd.read_csv(log)
-        primi = finale.head(3)
-        assert (primi["model_version"] == MODELLO).all()
-        assert (primi["odds_home"] == 2.0).all()
-        assert finale["timestamp_prediction"].nunique() == 1
-        print("6. le righe iniziali sono intatte                    ok")
+    # 6. append-only: nessuna riga precedente e' cambiata
+    finale = pd.read_csv(log)
+    primi = finale.head(3)
+    assert (primi["model_version"] == MODELLO).all()
+    assert (primi["odds_home"] == 2.0).all()
+    assert finale["timestamp_prediction"].nunique() == 1
+    print("6. le righe iniziali sono intatte                    ok")
 
-        # 7. already_logged distingue i modelli
-        assert len(already_logged(MODELLO, log)) == 4
-        assert len(already_logged(ALTRO, log)) == 3
-        assert already_logged("mai visto", log) == set()
-        print("7. already_logged separa i model_version             ok")
+    # 7. already_logged distingue i modelli
+    assert len(already_logged(MODELLO, log)) == 4
+    assert len(already_logged(ALTRO, log)) == 3
+    assert already_logged("mai visto", log) == set()
+    print("7. already_logged separa i model_version             ok")
 
     print("\ntutti i controlli sul registro superati")
+
+
+def test_registro_append_only(tmp_path: Path) -> None:
+    """Il punto d'ingresso per pytest. Non serve `data/`: scrive in tmp."""
+    esegui(tmp_path)
+
+
+def main() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        esegui(Path(tmp))
 
 
 if __name__ == "__main__":

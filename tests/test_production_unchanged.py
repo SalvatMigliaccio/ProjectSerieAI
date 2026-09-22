@@ -44,6 +44,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from goalmodel import config
 from goalmodel.features import market
@@ -267,6 +268,27 @@ def sensibilita(master: pd.DataFrame) -> int:
         return 0
     print("\nLA RETE NON SCATTA: il test di non regressione non protegge niente")
     return 1
+
+
+@pytest.mark.richiede_dati
+def test_produzione_invariata() -> None:
+    """
+    Il punto d'ingresso per pytest della rete di sicurezza della produzione.
+
+    ERA INVISIBILE AL RUNNER. Questo file non aveva nessuna funzione `test_`,
+    quindi `pytest` lo raccoglieva a zero e la suite risultava verde senza mai
+    confrontare M1 con il riferimento. E' lo stesso difetto che il file
+    esiste per impedire — qualcosa che sembra misurare e non misura — capitato
+    al misuratore.
+    """
+    import logging
+    logging.getLogger("market").setLevel(logging.WARNING)
+    master = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    assert verifica(master) == 0, (
+        "M1, le quote di ingresso o i lambda di mercato sono cambiati rispetto "
+        "al riferimento. Se il cambiamento e' voluto e dichiarato, rigenera con "
+        "`python -m tests.test_production_unchanged --rigenera`."
+    )
 
 
 def main() -> None:
