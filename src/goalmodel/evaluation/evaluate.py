@@ -122,12 +122,12 @@ def load_dataset(with_form: bool = True, with_context: bool = True) -> pd.DataFr
         df = df.merge(form, on=KEYS, how="left", validate="one_to_one")
 
     if with_context:
-        for nome, comando in (("features_context", "src.features.context"),
-                              ("features_players", "src.features.players")):
+        for nome, comando in (("features_context", "goalmodel features-context"),
+                              ("features_players", "goalmodel features-players")):
             path = config.PROCESSED / f"{nome}.parquet"
             if not path.exists():
                 log.warning("%s assente: quel blocco non e' disponibile. "
-                            "Lancia 'python -m %s'.", path.name, comando)
+                            "Lancia '%s'.", path.name, comando)
                 continue
             extra = pd.read_parquet(path)
             extra = extra.drop(columns=[c for c in extra.columns if c == "date"])
