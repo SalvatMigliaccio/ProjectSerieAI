@@ -155,12 +155,16 @@ def ricostruisci() -> None:
     gia' giocate.
     """
     from .. import normalize
-    from ..features import context, form, market
+    from ..features import registry
 
     passo("2", "matches_master", normalize.cmd_build, fatale=True)
-    passo("3a", "feature di forma", form.build, fatale=True)
-    passo("3b", "feature di mercato", market.build, fatale=True)
-    passo("3c", "feature di contesto", context.build, fatale=True)
+    # L'elenco arriva dal REGISTRO, lo stesso che `evaluate.load_dataset` usa
+    # per caricarli. Erano due elenchi scritti a mano e divergevano: `players`
+    # veniva caricato e mai ricostruito (audit B2). Aggiungere un blocco ora
+    # lo aggiunge a entrambi i lati, o a nessuno.
+    for i, blocco in enumerate(registry.BLOCCHI):
+        passo(f"3{chr(97 + i)}", f"feature: {blocco.descrizione}",
+              blocco.build, fatale=blocco.obbligatorio)
 
 
 # ---------------------------------------------------------------------------

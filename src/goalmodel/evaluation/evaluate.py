@@ -58,6 +58,7 @@ import numpy as np
 import pandas as pd
 
 from .. import config, data
+from ..features import registry
 from ..models.baseline import Model, default_models
 from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
@@ -100,38 +101,23 @@ def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def load_dataset(with_form: bool = True, with_context: bool = True) -> pd.DataFrame:
+def load_dataset() -> pd.DataFrame:
     """
-    Risultati, giornata e feature (mercato, forma, contesto) in un frame solo.
+    Risultati, giornata e TUTTI i blocchi di feature disponibili, in un frame.
 
-    `with_context` non serve a misurare il blocco A — quello si fa escludendo
-    le colonne dal modello, non dal dataset, cosi' i due modelli girano sulle
-    STESSE righe e il confronto resta appaiato. Serve solo se il parquet del
-    contesto non e' ancora stato costruito.
+    L'elenco dei blocchi non sta piu' qui: sta in `features/registry.py`, ed e'
+    lo STESSO che `rounds.ricostruisci` usa per ricostruirli. Erano due elenchi
+    diversi, e la differenza — `players` presente qui e assente di la' — faceva
+    invecchiare quel blocco a ogni giornata senza che niente lo segnalasse
+    (audit B2).
+
+    I parametri `with_form` e `with_context` sono spariti: nessuno li passava,
+    e il registro li rende inutili, perche' un blocco entra se e solo se il suo
+    parquet esiste — che e' esattamente cio' per cui `with_context` esisteva.
     """
     matches = data.load_master()
     base = matches[KEYS + ["date", "FTHG", "FTAG", "FTR"]].copy()
-
-    market = pd.read_parquet(config.PROCESSED / "features_market.parquet")
-    market = market.drop(columns=[c for c in market.columns if c == "date"])
-    df = base.merge(market, on=KEYS, how="left", validate="one_to_one")
-
-    if with_form:
-        form = pd.read_parquet(config.PROCESSED / "features_form.parquet")
-        form = form.drop(columns=[c for c in form.columns if c == "date"])
-        df = df.merge(form, on=KEYS, how="left", validate="one_to_one")
-
-    if with_context:
-        for nome, comando in (("features_context", "goalmodel features-context"),
-                              ("features_players", "goalmodel features-players")):
-            path = config.PROCESSED / f"{nome}.parquet"
-            if not path.exists():
-                log.warning("%s assente: quel blocco non e' disponibile. "
-                            "Lancia '%s'.", path.name, comando)
-                continue
-            extra = pd.read_parquet(path)
-            extra = extra.drop(columns=[c for c in extra.columns if c == "date"])
-            df = df.merge(extra, on=KEYS, how="left", validate="one_to_one")
+    df = registry.unisci(base, KEYS)
 
     df = add_matchday(df)
     df["date"] = pd.to_datetime(df["date"])
