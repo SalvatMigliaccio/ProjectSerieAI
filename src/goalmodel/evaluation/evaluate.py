@@ -57,7 +57,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from ..models.baseline import Model, default_models
 from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
@@ -109,7 +109,7 @@ def load_dataset(with_form: bool = True, with_context: bool = True) -> pd.DataFr
     STESSE righe e il confronto resta appaiato. Serve solo se il parquet del
     contesto non e' ancora stato costruito.
     """
-    matches = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    matches = data.load_master()
     base = matches[KEYS + ["date", "FTHG", "FTAG", "FTR"]].copy()
 
     market = pd.read_parquet(config.PROCESSED / "features_market.parquet")

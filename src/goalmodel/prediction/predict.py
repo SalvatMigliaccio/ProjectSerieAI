@@ -57,7 +57,7 @@ from datetime import UTC, datetime
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from ..features import context as context_mod
 from ..features import form as form_mod
 from ..features import market as market_mod
@@ -173,8 +173,7 @@ def load_fixtures(as_of: pd.Timestamp) -> pd.DataFrame:
 
 def load_played(as_of: pd.Timestamp) -> pd.DataFrame:
     """Storico giocato, tagliato alla data di previsione."""
-    df = pd.read_parquet(config.INTERIM / "matches_master.parquet")
-    df["date"] = pd.to_datetime(df["date"])
+    df = data.load_master()
     cutoff = as_of.tz_convert(None) if as_of.tz is not None else as_of
     played = df[(df["date"] < cutoff) & df["FTR"].notna()].copy()
     log.info("storico: %d partite giocate fino a %s", len(played), cutoff.date())
@@ -648,7 +647,7 @@ def run(
         return esito
 
     played = load_played(now)
-    played_all = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    played_all = data.load_master()
     fixtures = attach_odds(fixtures.reset_index(drop=True), played_all)
     _report_fixtures_coverage(fixtures, matchday)
 

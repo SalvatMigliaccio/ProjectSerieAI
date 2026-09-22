@@ -65,7 +65,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import poisson
 
-from .. import config
+from .. import config, data
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("market")
@@ -407,9 +407,8 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
     partite in arrivo e non deve sovrascrivere il parquet storico.
     """
     if df is None:
-        path = config.INTERIM / "matches_master.parquet"
-        df = pd.read_parquet(path)
-        log.info("caricato %s: %d righe", path.name, len(df))
+        df = data.load_master()
+        log.info("caricato %s: %d righe", data.MASTER.name, len(df))
 
     out = df[KEYS + ["date"]].copy()
 
@@ -459,7 +458,7 @@ def coverage_report(df: pd.DataFrame | None = None) -> pd.DataFrame:
     2025/26 senza preavviso).
     """
     if df is None:
-        df = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+        df = data.load_master()
 
     rows: dict[str, pd.Series] = {}
     for book in BOOKS_1X2 + BOOKS_1X2_CLOSING:

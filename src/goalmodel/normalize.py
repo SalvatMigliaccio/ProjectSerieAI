@@ -39,7 +39,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
 
-from . import config
+from . import config, data
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("normalize")
@@ -56,16 +56,10 @@ SECONDARY_SOURCES = ["understat_team_match"]
 # I/O
 # ---------------------------------------------------------------------------
 
-def load_raw(name: str) -> pd.DataFrame:
-    """Carica un parquet da data/raw, con messaggio chiaro se manca."""
-    path = config.RAW / f"{name}.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path} non trovato. Lancia prima: goalmodel ingest --stage <stage>"
-        )
-    df = pd.read_parquet(path)
-    log.info("caricato %-24s %6d righe, %3d colonne", name, len(df), df.shape[1])
-    return df
+# Rimando: la definizione sta in `data.py`, che e' il punto unico di accesso
+# ai file. Resta importabile da qui perche' meta' del progetto fa
+# `from ..normalize import load_raw` e spostare l'import non aggiunge niente.
+load_raw = data.load_raw
 
 
 def load_name_map() -> dict[str, str]:

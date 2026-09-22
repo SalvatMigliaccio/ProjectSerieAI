@@ -64,7 +64,7 @@ import unicodedata
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("players")
@@ -316,7 +316,7 @@ def build(df: pd.DataFrame | None = None, save: bool = True,
     che e' informazione nota e quindi lecita.
     """
     if df is None:
-        df = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+        df = data.load_master()
         log.info("caricato matches_master: %d righe", len(df))
 
     df = df.reset_index(drop=True)

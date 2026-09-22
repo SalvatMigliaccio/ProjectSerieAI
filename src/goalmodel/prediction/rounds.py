@@ -42,7 +42,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from . import predict as predict_mod
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
@@ -238,7 +238,7 @@ def stato_giornate(
         log.warning("nessuna partita in calendario per la stagione %s", season)
         return pd.DataFrame()
 
-    master = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    master = data.load_master()
     giocate = set(_chiavi(master[master["FTR"].notna()]))
     # Il percorso si passa esplicitamente invece di lasciare il default, che
     # `already_logged` fissa all'import: e' l'unico modo di far girare lo

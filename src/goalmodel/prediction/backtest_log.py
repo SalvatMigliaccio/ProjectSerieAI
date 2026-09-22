@@ -35,7 +35,7 @@ import logging
 
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from ..evaluation.evaluate import (
     _onehot,
     accuracy,
@@ -131,7 +131,7 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
 
 def attach_results(preds: pd.DataFrame) -> pd.DataFrame:
     """Aggancia i risultati veri. Chiave la quadrupla, mai la data."""
-    truth = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    truth = data.load_master()
     truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR"]].drop_duplicates(subset=KEYS)
     truth["season"] = truth["season"].astype(str)
 

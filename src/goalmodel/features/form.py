@@ -41,7 +41,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("form")
@@ -248,9 +248,8 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
     feature storiche.
     """
     if df is None:
-        path = config.INTERIM / "matches_master.parquet"
-        df = pd.read_parquet(path)
-        log.info("caricato %s: %d righe", path.name, len(df))
+        df = data.load_master()
+        log.info("caricato %s: %d righe", data.MASTER.name, len(df))
 
     long = to_long(df)
     value_cols = [c for c in long.columns if c.endswith(("_for", "_against"))]
