@@ -19,10 +19,16 @@ LE REGOLE
   - un set scartato resta qui e nel dataset, marcato come tale, cosi' si puo'
     rimisurare su un perimetro piu' largo senza ricostruirlo.
 
-COSA QUESTO MODULO NON TOCCA. `models/gbm.py` e i suoi `BLOCCHI_*` restano
-come sono, perche' `report.py` — che e' produzione — dipende da loro. Il
-registro e' uno strato nuovo per gli esperimenti. Convertire il report ai set
-dichiarati sarebbe un cambiamento di produzione, e va deciso a parte.
+ANCHE LA PRODUZIONE PASSA DA QUI, dal 22 settembre 2026 (audit A5). I due
+`BLOCCHI_*` scritti a mano in `models/gbm.py` non ci sono piu':
+`FUORI_DAL_MODELLO` e' ora `sets.fuori_dal_modello()`, cioe' le colonne dei
+set in stato `scartato` o `da misurare`. **Per cambiare cosa vede il modello
+di produzione si cambia lo stato di un set qui**, e la misura che giustifica
+quello stato si legge nella riga accanto.
+
+Verificato prima di sostituire: sulle 64 colonne candidate del dataset vero
+l'insieme derivato e quello scritto a mano coincidono esattamente, quindi il
+passaggio non ha cambiato nessun modello.
 
 IL MERCATO NON E' UNA COLONNA DI BASE. M5 lo usa come punto di partenza
 (`init_score = log(mkt_lambda)`), M1 lo usa come previsione. Nessuno dei due
@@ -173,6 +179,37 @@ def colonne(sets: list[str] | tuple[str, ...]) -> list[str]:
             if c not in out:
                 out.append(c)
     return out
+
+
+# Gli stati che entrano nel modello di produzione. PROVVISORIO c'e' perche'
+# la regola pre-registrata ha ammesso il blocco giocatori e cambiarla a
+# posteriori sarebbe peggio del rischio che copre; SCARTATO e DA_MISURARE no,
+# per la stessa regola: un blocco entra solo se il suo intervallo appaiato sta
+# sotto zero, e tenerlo dentro "intanto" diluirebbe 52 colonne con altre non
+# validate, falsando la misura del blocco successivo.
+IN_PRODUZIONE: tuple[str, ...] = (CONGELATO, PROVVISORIO)
+
+
+def fuori_dal_modello() -> frozenset[str]:
+    """
+    Le colonne che il modello di produzione NON vede — la chiusura di A5.
+
+    PERCHE' QUESTA FUNZIONE ESISTE. Fino a ieri la stessa decisione viveva in
+    due posti che non si parlavano: `gbm.BLOCCHI_SCARTATI` per la produzione e
+    questo registro per gli esperimenti. Non e' un'ipotesi che divergessero:
+    e' gia' successo. Quando il blocco giocatori e' stato ammesso, anche l'M4
+    del report ha iniziato a vedere quelle colonne senza che nessuno lo
+    decidesse, e il risultato e' stato il difetto B1 — una sezione del report
+    sparita per un elenco che nessuno aveva scritto.
+
+    Ora lo stato del set E' la decisione, in un posto solo, con accanto la
+    misura che l'ha prodotta.
+    """
+    return frozenset(
+        c
+        for fs in SETS.values() if fs.stato not in IN_PRODUZIONE
+        for c in fs.colonne
+    )
 
 
 def escludi_per(candidate: list[str], sets: list[str] | tuple[str, ...]) -> tuple[str, ...]:

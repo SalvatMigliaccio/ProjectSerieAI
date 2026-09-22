@@ -62,6 +62,7 @@ import pandas as pd
 from lightgbm import LGBMRegressor, early_stopping, log_evaluation
 
 from .. import config
+from ..features import sets
 from ..features.market import FEATURES_T24
 from .baseline import Model, predictions_from_lambdas
 
@@ -78,74 +79,21 @@ NEVER_FEATURES = {
 # che dicono da quale book arriva la quota.
 MARKET_FEATURES = [c for c in FEATURES_T24 if not c.endswith("_source")]
 
-# BLOCCHI MISURATI E SCARTATI. Restano nel dataset — servono a rimisurarli, per
-# esempio su un perimetro piu' largo — ma NON entrano nel modello.
+# CIO' CHE IL MODELLO DI PRODUZIONE NON VEDE — e non si decide qui.
 #
-# Tenerli "male che vada non fanno danno" sarebbe sbagliato: con ~3400 righe di
-# training la diluizione e' reale e gia' osservata (M4 con il mercato fra
-# cinquanta feature perde contro M5 ancorato di -0.0023, con intervallo netto,
-# proprio perche' le quote si diluivano).
+# Questo elenco stava scritto a mano in questo file, accanto al registro
+# dichiarativo di `features/sets.py` che diceva la stessa cosa in un'altra
+# forma. Due meccanismi per una decisione sola: e' il difetto A5, e non e'
+# rimasto teorico. Quando il blocco giocatori e' stato ammesso nel registro,
+# anche l'M4 del report ha iniziato a vedere quelle colonne senza che nessuno
+# lo decidesse — da li' e' nato B1.
 #
-# Blocco A, contesto. Misurato DUE volte, e la seconda e' quella che vale.
-#
-#   senza coppe (8 set 2026)   +0.00008   IC [-0.00007, +0.00024]
-#   CON coppe   (8 set 2026)   -0.00004   IC [-0.00014, +0.00007]
-#
-# La prima era monca: riposo e congestione di solo campionato sono quasi
-# uguali per tutti, perche' le date delle giornate non cambiano quando una
-# squadra gioca in Europa. La seconda include Champions, Europa e Conference
-# (`ingest --stage cups`), che sono il meccanismo vero — il 23.6% delle partite
-# ha una coppa nei 14 giorni precedenti.
-#
-# Il verdetto non cambia e l'intervallo si stringe (semiampiezza 0.00010,
-# minimo rilevabile 0.00015 contro i 0.00060 attesi da uno shift di 0.10 gol).
-# Le colonne di coppa non ricevono quasi nessuno split — ranghi 61, 63 e 64 su
-# 64 — e `diff_rest_days` SCENDE dal 5o al 28o posto quando il meccanismo vero
-# entra: la sua importanza di prima era struttura spuria, non segnale.
-BLOCCHI_SCARTATI: frozenset[str] = frozenset({
-    "home_rest_days", "away_rest_days", "diff_rest_days",
-    "home_matches_14d", "away_matches_14d", "diff_matches_14d",
-    "home_cup_14d", "away_cup_14d", "diff_cup_14d",
-    "is_midweek", "is_derby", "derby_intensity",
-})
-
-# BLOCCHI COSTRUITI MA NON ANCORA MISURATI. Fuori dal modello esattamente come
-# quelli scartati, e per la stessa ragione: la regola del piano e' che un
-# blocco entra solo se il suo intervallo appaiato sta sotto zero, e finche' la
-# misura non c'e' non puo' entrare. Tenerli dentro "intanto" significherebbe
-# diluire 52 feature con altre nove non validate, e falsare la misura del
-# blocco successivo — che partirebbe da una base diversa da quella dichiarata.
-#
-# Appena un blocco e' misurato, la sua voce si sposta: in BLOCCHI_SCARTATI se
-# l'intervallo contiene lo zero, via da entrambi gli insiemi se sta sotto.
-# Blocco B, giocatori: PROVVISORIO, 11 settembre 2026. NON dichiararlo
-# acquisito.
-#
-# M5+giocatori contro M5: -0.00027 con IC 95% [-0.00054, -0.00001] su 114
-# cluster. Supera la regola pre-registrata, ma:
-#
-#   1. l'estremo superiore e' -0.00001: il 2.25% dei ricampionamenti non
-#      migliora, cioe' p a una coda = 0.0225 contro una soglia di 0.025;
-#   2. NON sopravvive ai confronti multipli. Con tre test di blocco gia'
-#      fatti, Bonferroni chiede p < 0.0083 e Holm si ferma al primo passo.
-#      0.0225 e' 2.7 volte troppo grande: servirebbe un intervallo al 98.3%
-#      ancora tutto sotto zero;
-#   3. il modello con i giocatori resta indistinguibile dal mercato
-#      (-0.00015, IC [-0.00088, +0.00055]). Il blocco migliora M5, non porta
-#      M5 sopra le quote;
-#   4. il guadagno poggia su UNA colonna: `home_quota_minuti_assenti` e' la
-#      prima feature su 61 (5.17%), la sua gemella in trasferta e' 59esima
-#      (0.25%). Un'asimmetria 20:1 non e' un effetto calcistico plausibile.
-#
-# Le colonne restano dentro il modello perche' la regola pre-registrata le ha
-# ammesse e cambiarla a posteriori sarebbe peggio. Ma il blocco va rimisurato
-# quando il test set cresce, e il punto 4 va spiegato prima di costruirci
-# sopra: il blocco C (valore rose) pesa le assenze, quindi ne erediterebbe la
-# fragilita'.
-BLOCCHI_NON_MISURATI: frozenset[str] = frozenset()
-
-# Cio' che il modello di produzione non vede.
-FUORI_DAL_MODELLO: frozenset[str] = BLOCCHI_SCARTATI | BLOCCHI_NON_MISURATI
+# Ora lo STATO DEL SET e' la decisione: `scartato` e `da misurare` restano
+# fuori, `congelato` e `provvisorio` entrano. La misura che ha prodotto ogni
+# stato sta nella descrizione del set, dove si legge insieme alla decisione.
+# Per cambiare cosa entra nel modello si cambia lo stato in `sets.py`, che e'
+# anche il posto dove un test (`tests/test_sets.py`) se ne accorge.
+FUORI_DAL_MODELLO: frozenset[str] = sets.fuori_dal_modello()
 
 # Griglia degli iperparametri. Il numero di alberi NON c'e': lo decide
 # l'arresto anticipato. Si esplora a caso invece che esaustivamente perche'

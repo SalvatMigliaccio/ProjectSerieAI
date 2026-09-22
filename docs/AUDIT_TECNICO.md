@@ -56,8 +56,8 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 | **B1 sezione 3 del report morta** | **chiuso** | M4 si addestra su cio' che esiste al momento di predire |
 | **B3 assert come invariante** | **chiuso** | `raise` al posto di `assert`, `S101` attivo in CI |
 | **A4 report.py, 4 mestieri** | **chiuso** | `sezioni.py` calcola, `pagina.py` impagina, `report.py` orchestra |
+| **A5 doppio registro feature** | **chiuso** | `gbm.FUORI_DAL_MODELLO = sets.fuori_dal_modello()` |
 | licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
-| A5 doppio registro feature | aperto | dipende da A4 |
 | B4-B12 | aperti | igiene, diff piccoli |
 | B13, B14 | aperti | trovati da ruff, vedi sotto |
 
@@ -172,7 +172,7 @@ modello pure.
 da `report.py`: `predict_round` e `close_round` li chiedono a quel modulo e non
 c'era ragione di toccare due file di produzione per un rinominamento.
 
-### A5 — Due registri di feature in parallelo — MEDIA [verificato]
+### A5 — Due registri di feature in parallelo — CHIUSO
 
 Cosa entra nel modello lo decidono **due meccanismi diversi**:
 
@@ -186,8 +186,24 @@ prodotto un effetto non voluto**: quando il blocco giocatori e' stato ammesso,
 anche l'M4 del report ha iniziato a vedere quelle colonne senza che nessuno lo
 decidesse. E' la causa prima di B1 qui sotto.
 
-**Da fare:** convertire `report.py` e `gbm.py` ai set dichiarati. E' un
-cambiamento di produzione: va fatto con `test_production_unchanged` a fianco.
+**Come e' stato chiuso.** I due `BLOCCHI_*` scritti a mano in `gbm.py` sono
+spariti: `FUORI_DAL_MODELLO` e' `sets.fuori_dal_modello()`, che restituisce le
+colonne dei set in stato `scartato` o `da misurare`. Lo **stato del set e' la
+decisione**, in un posto solo, accanto alla misura che l'ha prodotta.
+
+**Verificato prima di sostituire, non dopo.** Sulle 64 colonne candidate del
+dataset vero, l'insieme derivato e quello scritto a mano coincidono
+esattamente (le 12 colonne di CONTESTO). Le 48 di FORMA_VENUE entrano
+nell'insieme derivato ma non sono nel dataset — `experiments/forma_venue.py`
+le costruisce in memoria e non scrive nessun parquet — quindi non cambiano
+niente. `test_production_unchanged` resta verde e M1 e' identico bit a bit,
+ma non e' quello a dimostrarlo: M1 non usa queste colonne, il confronto
+diretto sui due insiemi si'.
+
+`tests/test_sets.py::test_lo_stato_del_set_decide_la_produzione` dichiara
+GIOCATORI scartato e pretende che le sue colonne escano davvero da
+`form_features`. Con l'elenco scritto a mano quel test non avrebbe potuto
+esistere — ed e' esattamente il motivo per cui B1 era possibile.
 
 ### A6 — Nessuna CI, nessun linter, nessun runner dei test — MEDIA [verificato]
 

@@ -104,6 +104,44 @@ def test_dataset_reale() -> None:
     print(f"  BASE+GIOCATORI = {len(con_giocatori)} colonne, niente di piu'    ok")
 
 
+def test_lo_stato_del_set_decide_la_produzione() -> None:
+    """
+    Cambiare lo stato di un set cambia cosa vede il modello di produzione.
+
+    E' la chiusura di A5: finche' la produzione aveva il suo elenco scritto a
+    mano in `gbm.py`, questo test non avrebbe potuto esistere — cambiare lo
+    stato qui non avrebbe avuto nessun effetto li', ed e' esattamente come il
+    blocco giocatori e' finito nel report senza che nessuno lo decidesse.
+
+    Si prova sul set GIOCATORI perche' e' l'unico `provvisorio`: dentro il
+    modello oggi, fuori appena lo si dichiara scartato.
+    """
+    from dataclasses import replace
+
+    from goalmodel.models import gbm
+
+    giocatori = set(sets.SETS["GIOCATORI"].colonne)
+    assert not (giocatori & sets.fuori_dal_modello()), \
+        "GIOCATORI e' provvisorio: le sue colonne devono stare DENTRO il modello"
+
+    originale = sets.SETS["GIOCATORI"]
+    try:
+        sets.SETS["GIOCATORI"] = replace(originale, stato=sets.SCARTATO)
+        assert giocatori <= sets.fuori_dal_modello(), \
+            "scartando il set le sue colonne devono uscire dal modello"
+        # E il modello deve leggerlo adesso, non alla prossima importazione:
+        # una costante calcolata una volta sola darebbe la risposta vecchia.
+        finto = pd.DataFrame({c: [0.0] for c in [*giocatori, "home_goals_for_ewm"]})
+        usate = gbm.form_features(finto, escludi=tuple(sets.fuori_dal_modello()))
+        assert not (set(usate) & giocatori), \
+            "form_features ha usato colonne di un set scartato"
+    finally:
+        sets.SETS["GIOCATORI"] = originale
+
+    assert not (giocatori & sets.fuori_dal_modello()), "stato non ripristinato"
+    print("  lo stato del set decide cosa vede la produzione   ok")
+
+
 def test_esperimenti_non_scrivono_in_produzione() -> None:
     """
     La guardia rifiuta le cartelle protette e lascia passare le altre.

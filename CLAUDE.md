@@ -1113,11 +1113,19 @@ una colonna non registrata resta fuori per default. `tests/test_sets.py`
 fallisce se BASE cambia di una colonna o se il dataset contiene colonne che
 nessun set riconosce.
 
-**Quello che il registro NON ha ancora toccato, e va saputo.** `report.py`
-costruisce M4 da `models/gbm.py` con le esclusioni di default: la sezione di
-divergenza del report vede quindi le colonne GIOCATORI da quando il blocco e'
-stato ammesso. E' produzione e non e' stato modificato. Da qui in poi le
-costanti `BLOCCHI_*` di `gbm.py` non si toccano piu'.
+**Il registro decide anche la produzione, dal 22 settembre 2026 (A5).** Le
+costanti `BLOCCHI_*` scritte a mano in `models/gbm.py` non esistono piu':
+`FUORI_DAL_MODELLO` e' `sets.fuori_dal_modello()`, cioe' le colonne dei set in
+stato `scartato` o `da misurare`. **Per cambiare cosa vede il modello di
+produzione si cambia lo stato di un set in `sets.py`**, non una costante
+altrove. Verificato prima di sostituire: sulle 64 colonne candidate del
+dataset vero i due insiemi coincidevano esattamente, quindi nessun modello e'
+cambiato.
+
+Era proprio questo doppio meccanismo ad aver prodotto B1: quando il blocco
+giocatori e' stato ammesso nel registro, anche l'M4 della sezione di
+divergenza ha iniziato a vedere quelle colonne senza che nessuno lo
+decidesse.
 
 **Esperimenti — `src/goalmodel/experiments/`.** Leggono tutto, scrivono solo in
 `experiments/output/`, gitignorato tranne i `riassunto_*`.
