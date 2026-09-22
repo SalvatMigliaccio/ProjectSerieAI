@@ -48,18 +48,48 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 |---|---|---|
 | A1 ingest alla radice | **chiuso** | `src/goalmodel/ingest.py` + `cli.py` |
 | A2 packaging e pinning | **chiuso** | `pyproject.toml`, `requirements.lock` |
+| A3 KEYS duplicata | **chiuso** | `config.JOIN_KEYS`, una sola definizione |
 | A6 CI, lint, runner test | **chiuso** | `.github/workflows/ci.yml`, ruff, pytest |
+| A7 accesso ai dati sparso | **chiuso** | `data.py` + `features/registry.py` |
 | A8 check.py alla radice | **chiuso** | `scripts/ispeziona_dataset.py` |
-| A3 KEYS duplicata | aperto | prossima fase |
+| **B2 parquet giocatori orfano** | **chiuso** | `features/registry.py`, un elenco solo |
+| licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
 | A4 report.py, 4 mestieri | aperto | prossima fase |
-| A5 doppio registro feature | aperto | prossima fase |
-| A7 accesso ai dati sparso | aperto | prossima fase |
-| B1 sezione 3 del report morta | aperto | prossima fase, per prima |
-| B2 parquet giocatori orfano | aperto | prossima fase, per prima |
-| B3 assert come invariante | aperto | prossima fase |
-| B4-B12 | aperti | prossima fase |
-| B13, B14 | **nuovi**, vedi sotto | trovati da ruff |
-| licenza assente | aperto | **decisione del proprietario**, non del refactoring |
+| A5 doppio registro feature | aperto | dipende da A4 |
+| B1 sezione 3 del report morta | aperto | **prossima**, ora sbloccata da B2 |
+| B3 assert come invariante | aperto | prossima |
+| B4-B12 | aperti | igiene, diff piccoli |
+| B13, B14 | aperti | trovati da ruff, vedi sotto |
+
+### Come e' stato chiuso B2, e perche' non puo' tornare
+
+Non aggiungendo `players.build` a `ricostruisci()` — quello avrebbe corretto
+l'istanza lasciando in piedi la causa, cioe' DUE elenchi scritti a mano che
+nessuno teneva allineati. L'elenco ora e' uno, in `features/registry.py`, e
+lo scorrono sia chi carica sia chi ricostruisce.
+
+`tests/test_registry.py` lo verifica da fuori, eseguendo davvero
+`ricostruisci` con i costruttori sostituiti da registratori. **E' stato
+verificato che il test scatta**: reintroducendo il difetto (`BLOCCHI[:-1]`)
+fallisce nominando il blocco perduto.
+
+### Una nota sul golden test, che vale piu' della correzione
+
+Alla prima esecuzione con dati veri, `test_produzione_invariata` e' fallito
+con scarti di 4.4e-16: uno o due ULP. La diagnosi ha richiesto tre verifiche —
+i passi 1-3 del test passavano bit a bit (quindi i DATI erano identici), il
+codice numerico di `market.py` e' risultato byte per byte uguale a prima del
+riordino, e la dimensione dell'array e' stata esclusa per esperimento (le
+stesse 4580 partite dentro un array da 4610 danno scarto 0.000e+00).
+
+Restava la versione delle librerie, ed e' **esattamente cio' che la voce A2
+prevedeva**. Il riferimento e' stato rigenerato contro l'ambiente ora bloccato
+da `requirements.lock`, e `--sensibilita` conferma che la rete scatta ancora
+al singolo bit.
+
+Vale la pena registrarlo perche' e' la dimostrazione pratica che A2 non era
+burocrazia: senza il lock, quel fallimento sarebbe stato indistinguibile da
+una regressione vera.
 
 Quello che il riordino ha cambiato e' l'impalcatura, non il comportamento:
 nessuna correzione di logica e' stata applicata, e la suite e' passata da

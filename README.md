@@ -156,8 +156,9 @@ requirements.lock         ambiente esatto, universale (Linux + Windows)
 .github/workflows/ci.yml  test su due sistemi operativi a ogni push
 docs/                     COMANDI.md, PROGETTO_SERIE_A.md, AUDIT_TECNICO.md, adr/
 src/goalmodel/
-  config.py               percorsi, leghe, stagioni, iperparametri — unica fonte
+  config.py               percorsi, leghe, stagioni, iperparametri, JOIN_KEYS
   cli.py                  entry point unico: `goalmodel <comando>`
+  data.py                 punto unico di accesso ai file su disco
   ingest.py               scaricamento multi-fonte (4 fonti, 8 stage)
   whoscored_patch.py      aggancio allo scraper localizzato
   normalize.py            nomi squadra (assegnamento bipartito) + join
@@ -167,6 +168,7 @@ src/goalmodel/
     context.py            riposo, congestione, coppe, derby        [SCARTATO]
     players.py            minuti e gol+assist indisponibili        [PROVVISORIO]
     sets.py               registro dei set di feature, con stato
+    registry.py           quali blocchi esistono e come si costruiscono
   models/
     baseline.py           M0/M0b/M1/M1b/M2 + score_matrix condivisa
     dixon_coles.py        M3, gradiente analitico
