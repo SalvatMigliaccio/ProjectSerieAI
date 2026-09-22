@@ -30,7 +30,7 @@ lo passa come feature, quindi non compare nelle liste qui sotto: sta in
 `features/market.py` e ne esce solo sotto forma di ancoraggio.
 
 Uso:
-    python -m src.features.sets            # stato dei set sul dataset reale
+    goalmodel features-sets            # stato dei set sul dataset reale
 """
 
 from __future__ import annotations

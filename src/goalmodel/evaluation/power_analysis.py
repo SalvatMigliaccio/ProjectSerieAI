@@ -45,8 +45,8 @@ differenze appaiate gia' osservate nel walk-forward, e il verdetto segue dal
 numero misurato.
 
 Uso:
-    python -m src.power_analysis
-    python -m src.power_analysis --quota-partite 0.25 --shift-lambda 0.15
+    goalmodel power
+    goalmodel power --quota-partite 0.25 --shift-lambda 0.15
 """
 
 from __future__ import annotations
@@ -144,7 +144,7 @@ def differenze_appaiate(annidata: bool = True) -> tuple[np.ndarray, np.ndarray, 
     path = config.PROCESSED / "walk_forward_predictions.parquet"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path.name} assente: lancia prima python -m src.evaluate"
+            f"{path.name} assente: lancia prima goalmodel evaluate"
         )
     wide = _rps_per_modello(path)
     a, b = "M5 GBM ancorato al mercato", "M1b market-only (diretto)"

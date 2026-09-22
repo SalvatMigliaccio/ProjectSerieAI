@@ -1,9 +1,9 @@
 """
 Un solo entry point per tutti i comandi: `goalmodel <comando> [opzioni]`.
 
-PERCHE' ESISTE. Finche' i comandi erano `python -m src.predict_round`,
-funzionavano solo dalla radice del repository e solo se `src/` era
-importabile da li'. Con il pacchetto installato (`pip install -e .`) il
+PERCHE' ESISTE. Finche' i comandi si lanciavano come `python -m src.<modulo>`
+funzionavano solo dalla radice del repository, e solo se `src/` era importabile
+da li'. Con il pacchetto installato (`pip install -e .`) il
 comando `goalmodel` e' sulla PATH e gira da qualsiasi directory, uguale su
 Linux e su Windows: e' la stessa ragione per cui `ingest.py` e' uscito dalla
 radice.

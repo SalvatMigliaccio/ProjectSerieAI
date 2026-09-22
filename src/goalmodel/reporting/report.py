@@ -23,9 +23,9 @@ Si rigenera quando si vuole da `predictions_log.csv`, che invece e' l'unico
 file irriproducibile del progetto. Perderlo non costa niente.
 
 Uso:
-    python -m src.report
-    python -m src.report --open        # genera e apre nel browser
-    python -m src.report --no-diverge  # salta la sezione 3 (che addestra M4)
+    goalmodel report
+    goalmodel report --open        # genera e apre nel browser
+    goalmodel report --no-diverge  # salta la sezione 3 (che addestra M4)
 """
 
 from __future__ import annotations
@@ -355,7 +355,7 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
         diag.avvisa(
             "M4 si e' fermato a un albero per lato: sta prevedendo la stessa cosa "
             "per tutte le partite, segno che le feature di forma arrivano nulle. "
-            "Ricostruiscile con 'python -m src.features.form'. Sezione saltata."
+            "Ricostruiscile con 'goalmodel features-form'. Sezione saltata."
         )
         return pd.DataFrame()
 
@@ -531,7 +531,7 @@ def _sd_cluster_walk_forward(diag: Diagnostica) -> float | None:
     path = config.PROCESSED / "walk_forward_predictions.parquet"
     if not path.exists():
         diag.avvisa(f"{path.name} assente: non posso stimare quante previsioni "
-                    f"servono. Lancia 'python -m src.evaluate'.")
+                    f"servono. Lancia 'goalmodel evaluate'.")
         return None
     from ..evaluation.evaluate import PROB_COLS, outcome_index, rps
 
@@ -1064,7 +1064,7 @@ def _html_track(tr: TrackRecord | None) -> str:
         if f.get("metodo") == "non stimabile":
             blocchi.append("<p class='sub'>Non riesco a stimare quante previsioni "
                            "servono: manca il walk-forward. Lancia "
-                           "<code>python -m src.evaluate</code>.</p>")
+                           "<code>goalmodel evaluate</code>.</p>")
         else:
             dove_siamo = (
                 f"Oggi il track record vale {f['n_partite']} partite in "
@@ -1181,7 +1181,7 @@ def build(
     falliti: list[str] | tuple[str, ...] = (),
     registro: str = SCRITTO,
     diverge: bool = True,
-    origine: str = "python -m src.predict_round",
+    origine: str = "goalmodel predict-round",
 ) -> Path:
     """
     Scrive `track_record/report.html` e la copia d'archivio della giornata.
@@ -1203,7 +1203,7 @@ def build(
         if eta > config.FIXTURES_MAX_AGE_DAYS:
             diag.avvisa(f"lo snapshot quote ha {eta:.1f} giorni: copre solo il turno "
                         f"imminente e viene sovrascritto. Rilancia "
-                        f"'python ingest.py --stage fixtures'.")
+                        f"'goalmodel ingest --stage fixtures'.")
     else:
         diag.avvisa("snapshot quote assente: le previsioni, se ci sono, vengono dal "
                     "ripiego manuale o dallo storico")
@@ -1270,7 +1270,7 @@ modello <code>{_esc(esito.model_version)}</code></p>
 <footer>Generato da <code>{_esc(origine)}</code>.
 Il dato e' <code>track_record/predictions_log.csv</code>, append-only e
 versionato: questo report ne e' solo una vista e si rigenera con
-<code>python -m src.report</code>.</footer>
+<code>goalmodel report</code>.</footer>
 </main></body></html>"""
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
@@ -1296,10 +1296,10 @@ def main() -> None:
     args = ap.parse_args()
 
     # Rigenerare il report non deve MAI toccare il registro: le previsioni si
-    # scrivono da 'python -m src.predict_round', una volta sola, prima del fischio.
+    # scrivono da 'goalmodel predict-round', una volta sola, prima del fischio.
     esito = predict_mod.run(use_next=True, dry_run=True, quiet=True)
     path = build(esito, registro=RIGENERATO, diverge=not args.no_diverge,
-                 origine="python -m src.report")
+                 origine="goalmodel report")
     print(f"\n{path}")
     if args.apri:
         webbrowser.open(path.resolve().as_uri())

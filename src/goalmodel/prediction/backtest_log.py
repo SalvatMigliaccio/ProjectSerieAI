@@ -23,9 +23,9 @@ informata, quindi usarla gonfierebbe il risultato. La prima e' quella scritta
 con il maggiore anticipo, ed e' l'unica onesta.
 
 Uso:
-    python -m src.backtest_log
-    python -m src.backtest_log --by-season
-    python -m src.backtest_log --pending
+    goalmodel backtest
+    goalmodel backtest --by-season
+    goalmodel backtest --pending
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def load_log(path=PREDICTIONS_LOG, first_only: bool = True) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
             f"{path} non esiste. Nessuna previsione registrata: lancia prima "
-            "python -m src.predict --next"
+            "goalmodel predict --next"
         )
     df = pd.read_csv(path)
     mancanti = [c for c in LOG_COLUMNS if c not in df.columns]

@@ -258,7 +258,7 @@ DC_HALFLIFE = 240
 # variante. Il numero di alberi NON e' qui: lo decide l'arresto anticipato sulla
 # coda del training, con tetto a 3000 (che non viene mai raggiunto: le scelte
 # stanno intorno ai 450).
-# Si riottengono con: python -m src.models.gbm --tune
+# Si riottengono con: goalmodel gbm --tune
 #
 # NOTA SUI BORDI DELLO SPAZIO DI RICERCA. In entrambe le varianti la scelta
 # tocca `num_leaves` al massimo (8) e `colsample_bytree` al minimo (0.6). Non

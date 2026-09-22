@@ -7,13 +7,13 @@ persistente (~/soccerdata/data/), quindi rilanciare uno stage gia' completato
 non ri-scarica nulla.
 
 Uso:
-    python ingest.py --stage matches      # veloce, ~10 secondi
-    python ingest.py --stage understat    # veloce, ~2 minuti
-    python ingest.py --stage elo          # veloce, ~1 minuto
-    python ingest.py --stage schedule     # medio, ~5 minuti
-    python ingest.py --stage lineups      # LENTO, ore
-    python ingest.py --stage missing      # LENTO, richiede browser
-    python ingest.py --stage all
+    goalmodel ingest --stage matches      # veloce, ~10 secondi
+    goalmodel ingest --stage understat    # veloce, ~2 minuti
+    goalmodel ingest --stage elo          # veloce, ~1 minuto
+    goalmodel ingest --stage schedule     # medio, ~5 minuti
+    goalmodel ingest --stage lineups      # LENTO, ore
+    goalmodel ingest --stage missing      # LENTO, richiede browser
+    goalmodel ingest --stage all
 
 ATTENZIONE ai tempi: FBref applica rate limiting e soccerdata lo rispetta
 introducendo un ritardo tra le richieste. Gli stage 'lineups' e 'player_stats'
@@ -132,7 +132,7 @@ def _leggi_csv(src: str | Path) -> pd.DataFrame:
         raise ConnectionError(
             f"{src} ha risposto {exc.code}. Il sito e' spesso irraggiungibile "
             f"dai programmi pur funzionando dal browser: scaricalo a mano e usa "
-            f"'python ingest.py --stage fixtures --fixtures-file <percorso>'."
+            f"'goalmodel ingest --stage fixtures --fixtures-file <percorso>'."
         ) from exc
 
     import io

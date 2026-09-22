@@ -27,7 +27,7 @@ confronto appaiato con bootstrap a cluster sulla giornata e' lo stesso di
 tutti gli altri.
 
 Uso:
-    python -m src.experiments.baseline_mercato
+    python -m goalmodel.experiments.baseline_mercato
 """
 
 from __future__ import annotations

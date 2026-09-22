@@ -52,8 +52,8 @@ vengono comunque calcolate, ma stanno in `FEATURES_CLOSING` e NON vanno usate
 come feature: servono a misurare il drift come diagnostica di mercato.
 
 Uso:
-    python -m src.features.market                # costruisce le feature
-    python -m src.features.market --coverage     # tabella copertura per stagione
+    goalmodel features-market                # costruisce le feature
+    goalmodel features-market --coverage     # tabella copertura per stagione
 """
 
 from __future__ import annotations

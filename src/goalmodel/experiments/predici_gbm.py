@@ -33,9 +33,9 @@ La media dei semi e' la stima dichiarata: un seme solo sposta i lambda di qualch
 millesimo, e non ha senso che la previsione mostrata dipenda da quale.
 
 Uso:
-    python -m src.experiments.predici_gbm            # prima giornata utile
-    python -m src.experiments.predici_gbm --matchday 5
-    python -m src.experiments.predici_gbm --semi 0   # un seme solo, piu' veloce
+    python -m goalmodel.experiments.predici_gbm            # prima giornata utile
+    python -m goalmodel.experiments.predici_gbm --matchday 5
+    python -m goalmodel.experiments.predici_gbm --semi 0   # un seme solo, piu' veloce
 """
 
 from __future__ import annotations

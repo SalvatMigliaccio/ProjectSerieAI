@@ -29,9 +29,9 @@ quote sono cambiate: falsificherebbe il track record a posteriori. Se non c'e'
 niente da fare esce con codice 0 e un messaggio esplicito.
 
 Uso:
-    python -m src.predict_round
-    python -m src.predict_round --round 5
-    python -m src.predict_round --dry-run --skip-ingest
+    goalmodel predict-round
+    goalmodel predict-round --round 5
+    goalmodel predict-round --dry-run --skip-ingest
 """
 
 from __future__ import annotations
@@ -223,12 +223,12 @@ def run(matchday: int | None = None, dry_run: bool = False,
         percorso = report_mod.build(
             esito, falliti=falliti,
             registro=report_mod.DRY_RUN if dry_run else report_mod.SCRITTO,
-            origine="python -m src.predict_round",
+            origine="goalmodel predict-round",
         )
     except Exception as exc:
         log.error("report non scritto: %s", exc)
         log.error("le previsioni sono comunque nel registro. "
-                  "Rigeneralo con 'python -m src.report'.")
+                  "Rigeneralo con 'goalmodel report'.")
 
     _riepilogo(esito, matchday, n_partite, gia_in_registro, falliti,
                dry_run, percorso)
@@ -273,10 +273,10 @@ def _riepilogo(esito: predict_mod.Esito, matchday: int, n_partite: int,
     fatto = f"giornata {matchday}: {nuove} previsioni {scritte}, {stato}"
     if resta:
         sospeso = (f"{resta} partite ancora scoperte: rilancia quando le quote "
-                   f"usciranno, poi 'python -m src.close_round' a risultati usciti")
+                   f"usciranno, poi 'goalmodel close-round' a risultati usciti")
     else:
         sospeso = ("niente da predire su questa giornata; a risultati usciti "
-                   "chiudi con 'python -m src.close_round'")
+                   "chiudi con 'goalmodel close-round'")
     rounds.riepilogo_due_righe(fatto, sospeso)
 
 

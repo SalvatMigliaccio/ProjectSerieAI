@@ -27,7 +27,7 @@ lambda -> P(i gol in casa, j gol fuori). Costruire l'1X2 in un altro modo
 significherebbe avere due modelli incoerenti fra loro.
 
 Uso:
-    python -m src.models.baseline --demo
+    goalmodel baseline --demo
 """
 
 from __future__ import annotations
@@ -516,7 +516,7 @@ def main() -> None:
         _demo()
     else:
         log.info("modelli disponibili: %s", [m.name for m in default_models()])
-        log.info("la valutazione si lancia con: python -m src.evaluate")
+        log.info("la valutazione si lancia con: goalmodel evaluate")
 
 
 if __name__ == "__main__":

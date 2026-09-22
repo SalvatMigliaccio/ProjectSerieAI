@@ -18,20 +18,20 @@ from __future__ import annotations
 import sys
 
 MESSAGGIO = """
-'python -m src.weekly' e' stato diviso in due comandi, che si lanciano quando
-si vuole e quante volte si vuole:
+Il vecchio comando unico 'weekly' e' stato diviso in due, che si lanciano
+quando si vuole e quante volte si vuole:
 
-    python -m src.predict_round     da APERTA a PREDETTA
+    goalmodel predict-round     da APERTA a PREDETTA
         aggiorna dati e quote, trova da solo la prima giornata con partite
         ancora predicibili, le predice tutte, le registra senza duplicare,
         genera il report e lo apre.
 
-    python -m src.close_round       da GIOCATA a CHIUSA
+    goalmodel close-round       da GIOCATA a CHIUSA
         aggiorna i risultati, trova la prima giornata predetta e interamente
         giocata, la aggancia, la archivia in track_record/rounds/ con l'errore
         per singola partita e aggiorna il track record cumulativo.
 
-    python -m src.rounds --status   dove sta ogni giornata della stagione
+    goalmodel rounds --status   dove sta ogni giornata della stagione
 
 Opzioni comuni: --round N, --dry-run, --skip-ingest.
 Dettagli in COMANDI.md.

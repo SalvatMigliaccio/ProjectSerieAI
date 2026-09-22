@@ -38,8 +38,8 @@ futuro, e anche una statistica senza target calcolata sul futuro e' leakage.
 Scrive solo in `experiments/output/`.
 
 Uso:
-    python -m src.experiments.collinearita --descrivi
-    python -m src.experiments.collinearita --misura
+    python -m goalmodel.experiments.collinearita --descrivi
+    python -m goalmodel.experiments.collinearita --misura
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ solo campionato**, che sono quasi uguali per tutti: le date delle giornate non
 cambiano quando una squadra gioca in Europa. Era il blocco senza il suo
 meccanismo, e quel risultato non chiudeva la domanda.
 
-Il calendario UEFA arriva ora da `python ingest.py --stage cups` (Champions,
+Il calendario UEFA arriva ora da `goalmodel ingest --stage cups` (Champions,
 Europa e Conference League da FBref: solo calendario, una richiesta per
 competizione e stagione, niente browser). Se il file manca il modulo funziona
 lo stesso, contando le sole partite di campionato, e lo dichiara.
@@ -45,8 +45,8 @@ strettamente precedente. La partita corrente non entra mai nel proprio
 conteggio. Un assert lo verifica.
 
 Uso:
-    python -m src.features.context
-    python -m src.features.context --no-save
+    goalmodel features-context
+    goalmodel features-context --no-save
 """
 
 from __future__ import annotations
@@ -117,7 +117,7 @@ def carica_coppe() -> pd.DataFrame:
     path = config.RAW / "fbref_cups_schedule.parquet"
     if not path.exists():
         log.warning("%s assente: riposo e congestione contano le sole partite "
-                    "di campionato. Lancia 'python ingest.py --stage cups'.",
+                    "di campionato. Lancia 'goalmodel ingest --stage cups'.",
                     path.name)
         return pd.DataFrame(columns=["team", "date"])
 

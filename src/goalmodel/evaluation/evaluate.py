@@ -44,9 +44,9 @@ stagioni differiscono in difficolta', che e' proprio cio' che l'appaiamento
 toglie di mezzo.
 
 Uso:
-    python -m src.evaluate                 # tabella + confronto appaiato
-    python -m src.evaluate --calibration   # curve di calibrazione ed ECE
-    python -m src.evaluate --bias          # favourite-longshot, stagione per stagione
+    goalmodel evaluate                 # tabella + confronto appaiato
+    goalmodel evaluate --calibration   # curve di calibrazione ed ECE
+    goalmodel evaluate --bias          # favourite-longshot, stagione per stagione
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(
             f"{missing} partite senza giornata: manca una voce in "
-            f"{config.TEAM_NAME_MAP.name}? Lancia python -m src.normalize --report"
+            f"{config.TEAM_NAME_MAP.name}? Lancia goalmodel normalize --report"
         )
     out = out.rename(columns={"week": "matchday"})
     out["matchday"] = out["matchday"].astype(int)
@@ -840,8 +840,8 @@ def all_models() -> list[Model]:
     importano da baseline: metterlo la' chiuderebbe un ciclo di import.
 
     Gli iperparametri sono quelli scelti sulla VALIDAZIONE, non sul test:
-      - half-life di M3, da `python -m src.models.dixon_coles --tune`
-      - iperparametri di M4, da `python -m src.models.gbm --tune`
+      - half-life di M3, da `goalmodel dixon-coles --tune`
+      - iperparametri di M4, da `goalmodel gbm --tune`
     Se si ritarano, vanno aggiornati in config.py e va rifatta la tabella.
     """
     from ..models.dixon_coles import DixonColes

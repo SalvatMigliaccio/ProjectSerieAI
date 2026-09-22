@@ -23,8 +23,8 @@ mercato è cieco.
 | **questo file** | cos'è, come si installa, com'è fatto, come si contribuisce |
 | `COMANDI.md` | **come si lancia qualsiasi cosa**, con tempi misurati |
 | `CLAUDE.md` | decisioni prese, risultati misurati, il **perché** di ognuno |
-| `Doc/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
-| `Doc/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, con priorita' |
+| `docs/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| `docs/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, con priorita' |
 
 I comandi vivono **solo** in `COMANDI.md`. Due elenchi divergono, e viene
 sempre letto quello sbagliato.

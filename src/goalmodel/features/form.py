@@ -29,8 +29,8 @@ La prima stagione serve a inizializzare le medie di lega e gli stati delle
 squadre. Non va usata per l'addestramento: e' marcata con `is_burn_in`.
 
 Uso:
-    python -m src.features.form
-    python -m src.features.form --no-save    # calcola senza scrivere
+    goalmodel features-form
+    goalmodel features-form --no-save    # calcola senza scrivere
 """
 
 from __future__ import annotations

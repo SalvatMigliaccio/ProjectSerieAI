@@ -23,8 +23,8 @@ Strategia:
    Tu lo rivedi, correggi gli errori e lo rinomini in team_name_map.json.
 
 Uso:
-    python -m src.normalize --report     # diagnosi, genera la mappa proposta
-    python -m src.normalize --build      # costruisce interim/matches_master.parquet
+    goalmodel normalize --report     # diagnosi, genera la mappa proposta
+    goalmodel normalize --build      # costruisce interim/matches_master.parquet
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def load_raw(name: str) -> pd.DataFrame:
     path = config.RAW / f"{name}.parquet"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} non trovato. Lancia prima: python ingest.py --stage <stage>"
+            f"{path} non trovato. Lancia prima: goalmodel ingest --stage <stage>"
         )
     df = pd.read_parquet(path)
     log.info("caricato %-24s %6d righe, %3d colonne", name, len(df), df.shape[1])

@@ -41,9 +41,9 @@ previsione inventata sarebbe peggio di nessuna previsione. La partita esce
 dal report con un messaggio esplicito e non finisce nel log.
 
 Uso:
-    python -m src.predict --matchday 3
-    python -m src.predict --next
-    python -m src.predict --team Napoli
+    goalmodel predict --matchday 3
+    goalmodel predict --next
+    goalmodel predict --team Napoli
 """
 
 from __future__ import annotations
@@ -223,7 +223,7 @@ def load_fixtures_odds() -> tuple[pd.DataFrame, pd.Timestamp | None]:
     """Lo snapshot scaricato da football-data, con l'ora in cui e' stato preso."""
     path = config.RAW / "fixtures_odds.parquet"
     if not path.exists():
-        log.warning("%s assente: lancia 'python ingest.py --stage fixtures'", path.name)
+        log.warning("%s assente: lancia 'goalmodel ingest --stage fixtures'", path.name)
         return pd.DataFrame(), None
 
     df = pd.read_parquet(path)
@@ -243,7 +243,7 @@ def load_fixtures_odds() -> tuple[pd.DataFrame, pd.Timestamp | None]:
         if eta > config.FIXTURES_MAX_AGE_DAYS:
             log.warning("piu' vecchio di %d giorni: il file copre solo il turno "
                         "imminente e viene sovrascritto. Rilancia "
-                        "'python ingest.py --stage fixtures'.",
+                        "'goalmodel ingest --stage fixtures'.",
                         config.FIXTURES_MAX_AGE_DAYS)
     elif df.empty:
         log.info("snapshot quote vuoto: il turno non e' ancora pubblicato. "

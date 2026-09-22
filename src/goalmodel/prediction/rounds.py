@@ -28,8 +28,8 @@ questo quei file sono versionati — sono la memoria di cosa e' gia' stato
 archiviato, e in un clone senza di loro tutte le giornate tornerebbero aperte.
 
 Uso:
-    python -m src.rounds --status
-    python -m src.rounds --status --season 2526
+    goalmodel rounds --status
+    goalmodel rounds --status --season 2526
 """
 
 from __future__ import annotations
@@ -368,7 +368,7 @@ def perche_niente_da_fare(tab: pd.DataFrame, azione: str) -> str:
     chiudibili = tab[(tab["stato"] != CHIUSA) & (tab["n_predette"] > 0)]
     if chiudibili.empty:
         return ("Nessuna giornata con previsioni in registro da chiudere: "
-                "predici prima con 'python -m src.predict_round'.")
+                "predici prima con 'goalmodel predict-round'.")
     g = chiudibili.iloc[0]
     return (
         f"La giornata {g['matchday']} e' {g['stato']}: mancano i risultati di "
@@ -411,8 +411,8 @@ def stampa_stato(tab: pd.DataFrame, season: str) -> None:
     conteggi = tab["stato"].value_counts()
     riassunto = "  ".join(f"{s} {int(conteggi[s])}" for s in ORDINE if s in conteggi)
     print(f"\n  {riassunto}")
-    print("  '>' = predicibile ora con 'python -m src.predict_round'")
-    print("  '*' = chiudibile ora con 'python -m src.close_round'")
+    print("  '>' = predicibile ora con 'goalmodel predict-round'")
+    print("  '*' = chiudibile ora con 'goalmodel close-round'")
 
     chiuse = tab[tab["stato"] == CHIUSA].dropna(subset=["rps"])
     if not chiuse.empty:

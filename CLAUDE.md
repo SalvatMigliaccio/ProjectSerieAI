@@ -1471,7 +1471,7 @@ Cosa ne segue, in pratica:
 
 Non sono decorazione: qui hanno conseguenze specifiche, ed e' quello che va
 ricordato. La diagnosi completa dello stato attuale sta in
-`Doc/AUDIT_TECNICO.md`.
+`docs/AUDIT_TECNICO.md`.
 
 ### DRY — un fatto, un posto solo
 

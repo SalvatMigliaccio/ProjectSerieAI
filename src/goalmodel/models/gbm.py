@@ -47,8 +47,8 @@ si riaddestra su tutto il training con quel numero: altrimenti si butterebbe
 via proprio la parte piu' recente, che e' la piu' informativa.
 
 Uso:
-    python -m src.models.gbm --tune          # ricerca iperparametri su validazione
-    python -m src.models.gbm --tune --stride 1   # piu' lenta e piu' fedele
+    goalmodel gbm --tune          # ricerca iperparametri su validazione
+    goalmodel gbm --tune --stride 1   # piu' lenta e piu' fedele
 """
 
 from __future__ import annotations

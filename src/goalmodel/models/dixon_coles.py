@@ -35,8 +35,8 @@ Il gradiente analitico ne costa una. Su ~500 riaddestramenti fra taratura e
 test la differenza e' fra minuti e ore.
 
 Uso:
-    python -m src.models.dixon_coles --tune     # tara la half-life sulla validazione
-    python -m src.models.dixon_coles --check    # verifica il gradiente
+    goalmodel dixon-coles --tune     # tara la half-life sulla validazione
+    goalmodel dixon-coles --check    # verifica il gradiente
 """
 
 from __future__ import annotations

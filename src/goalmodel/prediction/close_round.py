@@ -31,9 +31,9 @@ per cui questo comando non tocca niente che riguardi il modello: scrive
 soltanto cosa e' successo.
 
 Uso:
-    python -m src.close_round
-    python -m src.close_round --round 3
-    python -m src.close_round --dry-run
+    goalmodel close-round
+    goalmodel close-round --round 3
+    goalmodel close-round --dry-run
 """
 
 from __future__ import annotations
@@ -244,7 +244,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
         print("Non la riscrivo: l'archivio di una giornata si scrive una volta sola.")
         rounds.riepilogo_due_righe(
             f"niente: giornata {matchday} gia' archiviata",
-            "usa 'python -m src.rounds --status' per vedere cosa resta",
+            "usa 'goalmodel rounds --status' per vedere cosa resta",
         )
         return 0
 
@@ -253,7 +253,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
         print(f"\nNessuna previsione in registro per la giornata {matchday}.")
         rounds.riepilogo_due_righe(
             f"niente: giornata {matchday} senza previsioni da chiudere",
-            "predici con 'python -m src.predict_round' prima che si giochi",
+            "predici con 'goalmodel predict-round' prima che si giochi",
         )
         return 0
 
@@ -272,7 +272,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
         print("Di solito e' un rinvio che ha cambiato la chiave della partita.")
         rounds.riepilogo_due_righe(
             f"niente: giornata {matchday} con {senza_risultato} risultati non agganciati",
-            "controlla i nomi squadra con 'python -m src.normalize --report'",
+            "controlla i nomi squadra con 'goalmodel normalize --report'",
         )
         return 0
 
@@ -295,7 +295,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
     try:
         report = report_mod.build(esito, falliti=falliti,
                                   registro=report_mod.RIGENERATO,
-                                  origine="python -m src.close_round")
+                                  origine="goalmodel close-round")
         print(f"\n  report:   {report}")
     except Exception as exc:
         log.error("report non rigenerato: %s", exc)
@@ -308,7 +308,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
     sospeso = (f"{len(rimaste)} altre giornate giocate da chiudere: rilancia"
                if len(rimaste) else
                "nessun'altra giornata da chiudere; predici la prossima con "
-               "'python -m src.predict_round'")
+               "'goalmodel predict-round'")
     rounds.riepilogo_due_righe(fatto, sospeso)
     return 0
 

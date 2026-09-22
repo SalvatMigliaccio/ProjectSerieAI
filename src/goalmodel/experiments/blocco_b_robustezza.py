@@ -31,8 +31,8 @@ pestano i piedi. Un processo gia' concluso non si rifa': il suo file c'e'.
 Scrive solo in `experiments/output/`. La guardia di `experiments` lo impone.
 
 Uso:
-    python -m src.experiments.blocco_b_robustezza --lancia --paralleli 8
-    python -m src.experiments.blocco_b_robustezza --analizza
+    python -m goalmodel.experiments.blocco_b_robustezza --lancia --paralleli 8
+    python -m goalmodel.experiments.blocco_b_robustezza --analizza
 """
 
 from __future__ import annotations

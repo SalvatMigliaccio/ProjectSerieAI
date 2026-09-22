@@ -50,8 +50,8 @@ gia' osservato — fra le due partite precedenti — ed e' una misura della
 propensita' a ruotare, non della rotazione di stasera.
 
 Uso:
-    python -m src.features.players
-    python -m src.features.players --no-save
+    goalmodel features-players
+    goalmodel features-players --no-save
 """
 
 from __future__ import annotations
@@ -145,7 +145,7 @@ def carica_assenze() -> pd.DataFrame:
     path = config.RAW / "whoscored_missing.parquet"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path.name} assente: lancia 'python ingest.py --stage missing'"
+            f"{path.name} assente: lancia 'goalmodel ingest --stage missing'"
         )
     miss = pd.read_parquet(path)
 
@@ -213,7 +213,7 @@ def carica_giocatori() -> pd.DataFrame:
     path = config.RAW / "fbref_player_match.parquet"
     if not path.exists():
         raise FileNotFoundError(
-            f"{path.name} assente: lancia 'python ingest.py --stage player_stats'"
+            f"{path.name} assente: lancia 'goalmodel ingest --stage player_stats'"
         )
     df = pd.read_parquet(path)
     # `apply_name_map` pretende home_team/away_team, che qui non ci sono: la

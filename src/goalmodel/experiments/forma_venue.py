@@ -41,9 +41,9 @@ REGOLA DI LETTURA, SCRITTA PRIMA DEI RISULTATI
 I singoli semi si riportano per informazione, non decidono.
 
 Uso:
-    python -m src.experiments.forma_venue --descrivi
-    python -m src.experiments.forma_venue --lancia
-    python -m src.experiments.forma_venue --analizza
+    python -m goalmodel.experiments.forma_venue --descrivi
+    python -m goalmodel.experiments.forma_venue --lancia
+    python -m goalmodel.experiments.forma_venue --analizza
 """
 
 from __future__ import annotations
