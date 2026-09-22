@@ -99,7 +99,7 @@ Richiede Python 3.10+ (usa `X | Y` nelle annotazioni di tipo).
 python -m venv .venv
 .venv\Scripts\activate          # Windows / PowerShell — ambiente di sviluppo
 # source .venv/bin/activate     # Linux / macOS
-pip install -r requirements.txt
+pip install -r pyproject.toml
 ```
 
 Lo stage `missing` (indisponibili da WhoScored) richiede Selenium e un browser
@@ -108,15 +108,15 @@ installato: e' facoltativo, il modello T-24h parte senza.
 ### Primo avvio
 
 ```bash
-python ingest.py --stage matches       # ~10 s
-python ingest.py --stage understat     # ~2 min
-python ingest.py --stage schedule      # ~5 min
-python -m src.normalize --report       # diagnosi nomi squadra
-python -m src.normalize --build        # costruisce matches_master
-python -m src.features.form
-python -m src.features.market
-python -m src.features.context
-python -m src.evaluate                 # tabella modelli + confronti appaiati
+goalmodel ingest --stage matches       # ~10 s
+goalmodel ingest --stage understat     # ~2 min
+goalmodel ingest --stage schedule      # ~5 min
+goalmodel normalize --report       # diagnosi nomi squadra
+goalmodel normalize --build        # costruisce matches_master
+goalmodel features-form
+goalmodel features-market
+goalmodel features-context
+goalmodel evaluate                 # tabella modelli + confronti appaiati
 ```
 
 Dettagli, tempi e casi particolari in `COMANDI.md` sezione 2.
@@ -130,9 +130,9 @@ stato, e lo stato si deduce dai dati — nessun comando chiede il numero e
 nessuno sa che giorno e'.
 
 ```bash
-python -m src.predict_round     # da aperta a predetta
-python -m src.close_round       # da giocata a chiusa
-python -m src.rounds --status   # dove sta ogni giornata della stagione
+goalmodel predict-round     # da aperta a predetta
+goalmodel close-round       # da giocata a chiusa
+goalmodel rounds --status   # dove sta ogni giornata della stagione
 ```
 
 | stato | condizione |
@@ -151,13 +151,19 @@ nulla da fare escono con codice 0 nominando la giornata e il suo stato.
 ## Architettura
 
 ```
-ingest.py                 scaricamento multi-fonte (4 fonti, 8 stage)
-src/
+pyproject.toml            packaging, dipendenze vincolate, config di ruff/pytest/mypy
+requirements.lock         ambiente esatto, universale (Linux + Windows)
+.github/workflows/ci.yml  test su due sistemi operativi a ogni push
+docs/                     COMANDI.md, PROGETTO_SERIE_A.md, AUDIT_TECNICO.md, adr/
+src/goalmodel/
   config.py               percorsi, leghe, stagioni, iperparametri — unica fonte
-  normalize.py            nomi squadra (assegnamento bipartito) + join → matches_master
+  cli.py                  entry point unico: `goalmodel <comando>`
+  ingest.py               scaricamento multi-fonte (4 fonti, 8 stage)
+  whoscored_patch.py      aggancio allo scraper localizzato
+  normalize.py            nomi squadra (assegnamento bipartito) + join
   features/
     form.py               medie mobili esponenziali leakage-safe
-    market.py             de-vigging (Shin + proporzionale) → λ impliciti
+    market.py             de-vigging (Shin + proporzionale) -> lambda impliciti
     context.py            riposo, congestione, coppe, derby        [SCARTATO]
     players.py            minuti e gol+assist indisponibili        [PROVVISORIO]
     sets.py               registro dei set di feature, con stato
@@ -165,20 +171,37 @@ src/
     baseline.py           M0/M0b/M1/M1b/M2 + score_matrix condivisa
     dixon_coles.py        M3, gradiente analitico
     gbm.py                M4/M5/M6, ricerca iperparametri
-  evaluate.py             RPS, calibrazione, walk-forward, bootstrap a cluster
-  predict.py              inferenza + registro append-only
-  rounds.py               ciclo di vita della giornata
-  predict_round.py        aperta → predetta
-  close_round.py          giocata → chiusa
-  backtest_log.py         rilettura del registro, metriche reali
-  report.py               report HTML statico
-  power_analysis.py       effetto minimo rilevabile
+  evaluation/
+    evaluate.py           RPS, calibrazione, walk-forward, bootstrap a cluster
+    power_analysis.py     effetto minimo rilevabile
+  prediction/
+    predict.py            inferenza + registro append-only
+    rounds.py             ciclo di vita della giornata
+    predict_round.py      aperta -> predetta
+    close_round.py        giocata -> chiusa
+    backtest_log.py       rilettura del registro, metriche reali
+  reporting/
+    report.py             report HTML statico
   experiments/            fuori produzione, guardia a runtime sulle scritture
+scripts/                  utilita' di ispezione, fuori dal pacchetto
 tests/                    dati sintetici e test di regressione
 track_record/             registro previsioni + giornate archiviate (VERSIONATO)
 manual/                   mappe e file compilati a mano
 data/                     tutti i parquet (GITIGNORATO, si rigenera)
 ```
+
+### I livelli, e la regola che li tiene separati
+
+Ogni livello puo' importare **solo quelli sotto di se'**:
+
+```
+config -> ingest, normalize -> features/ -> models/ -> evaluation/
+                                                    -> prediction/ -> reporting/
+```
+
+`experiments/` importa tutto e non e' importato da nessuno. La decisione di
+restare su un repository solo, e i segnali che la riaprirebbero, stanno in
+[docs/adr/0001-monolite-modulare.md](docs/adr/0001-monolite-modulare.md).
 
 ### Flusso dei dati
 
@@ -235,16 +258,22 @@ sta in `CLAUDE.md`.
 
 ## Test
 
-Non c'e' un runner: ogni test e' un modulo eseguibile.
+```bash
+pytest                      # tutta la suite: ~1 s senza data/
+pytest -m richiede_dati     # solo quelli che vogliono il dataset vero
+ruff check .                # lint, le stesse regole della CI
+```
+
+I test che hanno bisogno di `data/` sono marcati `richiede_dati` e si
+**saltano** con un messaggio quando il dataset non c'e'. E' la differenza fra
+"qui non puo' girare" e "e' rotto": in CI, dove `data/` non esiste mai, quella
+distinzione e' tutto.
+
+Ogni test resta anche un modulo eseguibile, come prima:
 
 ```bash
-python -m tests.test_form                 # medie mobili leakage-safe
-python -m tests.test_market               # de-vigging, lambda impliciti
-python -m tests.test_kickoff              # fusi orari, ordine previsione/fischio
 python -m tests.test_leakage              # il walk-forward non vede il futuro
-python -m tests.test_predictions_log      # append-only e idempotenza
 python -m tests.test_production_unchanged # M1 identico bit a bit
-python -m tests.test_sets                 # BASE non e' cambiato
 ```
 
 Coprono i punti in cui un errore **non darebbe eccezioni**: un fuso sbagliato
@@ -261,10 +290,14 @@ uno, un leakage produce metriche migliori. Sono i difetti che si auto-premiano.
 ### Prima di ogni commit
 
 ```bash
+ruff check .                                # gli stessi controlli della CI
+pytest                                      # deve essere verde
 python -m tests.test_production_unchanged   # M1 e le quote non sono cambiati
-python -m tests.test_leakage
-python -m tests.test_sets
 ```
+
+La CI gira su **Linux e Windows** a ogni push: un test che passa solo su una
+delle due piattaforme blocca meta' del team, e senza matrice non c'era modo di
+accorgersene.
 
 `test_production_unchanged` fissa su 101 partite gia' giocate le quote di
 ingresso, le fonti scelte, i λ di mercato e tutti i mercati di `all_markets`, e
@@ -285,14 +318,15 @@ dopo un cambiamento di produzione voluto e dichiarato.
    pre-registrate" di `CLAUDE.md`.
 4. **Un comando nuovo si documenta in `COMANDI.md`**, non qui e non in
    `CLAUDE.md`.
-5. **Gli esperimenti vivono in `src/experiments/`** e chiamano
+5. **Gli esperimenti vivono in `src/goalmodel/experiments/`** e chiamano
    `experiments.proteggi_produzione()` in testa.
 
 ### Stile
 
 - Type hints ovunque.
 - Docstring in **italiano** che spiegano il **perche'**, non il cosa.
-- Ogni modulo eseguibile con `python -m src.<modulo>` e un `argparse`.
+- Ogni modulo eseguibile con un `argparse`, raggiungibile sia come
+  `python -m goalmodel.<percorso>` sia come sottocomando di `goalmodel`.
 - Parquet per tutti i dati intermedi.
 - `logging`, mai `print` (tranne l'impaginazione a terminale dei comandi).
 - Niente notebook nel codice di produzione.
@@ -300,9 +334,14 @@ dopo un cambiamento di produzione voluto e dichiarato.
 
 ### Ambiente
 
-Si sviluppa su **Windows con PowerShell**. Per cancellare file usare
-`Remove-Item ... -ErrorAction SilentlyContinue`, non `rm -f`. Evitare
-`python -c "..."` con apici annidati.
+Due piattaforme, nessuna delle due privilegiata: **Linux** e **Windows con
+PowerShell**. Il codice deve funzionare su entrambe e la CI le prova tutte e
+due.
+
+- Niente comandi di shell dentro i moduli: `pathlib` e `shutil`.
+- Niente percorsi come stringa: sempre `Path`.
+- Su PowerShell, per cancellare file `Remove-Item ... -ErrorAction
+  SilentlyContinue`, non `rm -f`; evitare `python -c "..."` con apici annidati.
 
 ---
 
@@ -316,8 +355,12 @@ Si sviluppa su **Windows con PowerShell**. Per cancellare file usare
 - ClubElo era irraggiungibile all'ultima ingestion: lo stage `elo` e'
   facoltativo.
 - I debiti architetturali e i difetti noti sono elencati e ordinati per
-  priorita' in `Doc/AUDIT_TECNICO.md`.
+  priorita' in [docs/AUDIT_TECNICO.md](docs/AUDIT_TECNICO.md), con lo stato di
+  ciascuno.
 
 ## Licenza
 
-Non specificata. I dati provengono da fonti terze con i loro termini d'uso.
+**Non ancora scelta.** Senza un file `LICENSE` il codice e' per difetto "tutti
+i diritti riservati": va bene per un repository privato, va deciso prima di
+renderlo pubblico. I dati provengono da fonti terze con i loro termini d'uso,
+che la licenza del codice non copre.

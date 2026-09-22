@@ -98,7 +98,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 ### Fatti noti sui dati
 
 - **Copertura quote, verificata stagione per stagione**
-  (`python -m src.features.market --coverage`):
+  (`goalmodel features-market --coverage`):
   - `B365` in apertura e' l'**unico** book con terzina 1X2 completa al 100%
     su tutte e 13 le stagioni. E' il riferimento scelto.
   - **Pinnacle e' morto**: `PS` copre il 52% della 2025/26 e lo 0% della
@@ -115,7 +115,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   ~3 punti di probabilita': non e' rumore, e' proprio l'informazione che a
   T-24h non si ha. Si calcola solo come diagnostica.
 - **La distorsione favorito-sfavorito del mercato NON esiste nella forma
-  generale.** Verificata fuori campione (`python -m src.evaluate --bias`):
+  generale.** Verificata fuori campione (`goalmodel evaluate --bias`):
   impilando i tre esiti, l'ECE del mercato vale 0.010 su tutto lo storico e
   0.022 sul test, nessun bin fuori dall'intervallo di confidenza, e la
   pendenza di calibrazione e' 1.06-1.09, cioe' *sopra* 1 — il segno opposto
@@ -155,7 +155,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
     `dict.update` al primo livello e si porterebbe via anche le mappe di
     FBref, Understat e MatchHistory.
   - `IndexError: list index out of range` a `whoscored.py:290` e' il link
-    "Fixtures" che non esiste. Rimedio: `src/whoscored_patch.py`, che cerca
+    "Fixtures" che non esiste. Rimedio: `src/goalmodel/whoscored_patch.py`, che cerca
     l'href invece del testo — gli URL restano in inglese in ogni lingua.
     **Attenzione alle maiuscole**: l'href e' `/fixtures` minuscolo e XPath 1.0
     non ha `lower-case()`, quindi serve `translate()`. Cercare `/Fixtures` non
@@ -201,7 +201,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 
 ### Moduli scritti e verificati
 
-- `ingest.py` — download multi-fonte. Legge leghe e stagioni da `src/config.py`.
+- `src/goalmodel/ingest.py` — download multi-fonte. Legge leghe e stagioni da `src/goalmodel/config.py`.
   Fail-fast dopo 3 errori consecutivi su ClubElo.
   Lo stage `fixtures` scarica le quote del turno imminente: filtra su `Div`
   (`config.FOOTBALL_DATA_DIV`), deduce la stagione dalla data (stacco a
@@ -209,14 +209,14 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   applica `team_name_map.json` e **avvisa nominando le squadre non
   riconosciute** — un nome non mappato non darebbe errore, farebbe sparire la
   partita dalla previsione in silenzio
-- `src/config.py` — percorsi, leghe, stagioni, iperparametri
-- `src/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
+- `src/goalmodel/config.py` — percorsi, leghe, stagioni, iperparametri
+- `src/goalmodel/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
   (`scipy.optimize.linear_sum_assignment`), non fuzzy matching greedy. Risolve
   per esclusione i casi che difflib non trova, come Internazionale -> Inter.
   `--report --apply` scrive la mappa automaticamente sopra confidenza 0.75
-- `src/features/form.py` — medie mobili esponenziali leakage-safe, continue
+- `src/goalmodel/features/form.py` — medie mobili esponenziali leakage-safe, continue
   attraverso le stagioni con attenuazione del 30% al confine
-- `src/features/market.py` — de-vigging proporzionale e di Shin su 1X2 e
+- `src/goalmodel/features/market.py` — de-vigging proporzionale e di Shin su 1X2 e
   over/under 2.5, riferimento `B365` in **apertura**. Produce anche il
   benchmark market-only sulla scala dei gol (`mkt_lambda_home/away`,
   ottenuti invertendo un Poisson indipendente su totale e supremazia).
@@ -225,22 +225,22 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   (scarto 9e-16) e contro i risultati veri: over 2.5 atteso 0.515 contro
   0.520 reale, gol totali 2.75 contro 2.72, gol casa 1.51 contro 1.48.
   Usare `FEATURES_T24`, mai `FEATURES_CLOSING`
-- `src/evaluate.py` — RPS, log loss, Brier, accuratezza, curve di calibrazione
+- `src/goalmodel/evaluation/evaluate.py` — RPS, log loss, Brier, accuratezza, curve di calibrazione
   ed ECE, harness di walk-forward per giornata. **Il ciclo di valutazione e'
   stato costruito prima delle altre feature**, di proposito: ogni feature
   successiva si misura sullo stesso test set invece di accumularsi non
   validata
-- `src/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
+- `src/goalmodel/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
   `score_matrix` (lambda -> matrice dei risultati esatti -> 1X2 e over/under)
   con correzione Dixon-Coles opzionale, spenta di default. `valid_rho_floor`
   da il rho minimo ammissibile: la correzione DC non e' valida per ogni rho,
   serve rho > -1/max(lam, mu) o escono probabilita' negative
-- `src/models/dixon_coles.py` — M3, decadimento temporale esponenziale e rho
+- `src/goalmodel/models/dixon_coles.py` — M3, decadimento temporale esponenziale e rho
   stimato **insieme** ad attacchi e difese, non fissato a priori. Gradiente
   analitico (verificato a 1.8e-8 relativo contro differenza finita centrata:
   con la differenza in avanti di `approx_fprime` l'errore di troncamento e'
   1e-4 e sembra un bug del gradiente). Un fit costa 25-70 ms
-- `src/models/gbm.py` — M4 (LightGBM Poisson a due gol separati, con e senza
+- `src/goalmodel/models/gbm.py` — M4 (LightGBM Poisson a due gol separati, con e senza
   feature di mercato), **M5** (`MarketAnchoredGBM`, ancorato al mercato via
   `init_score = log(mkt_lambda)`: stima il residuo, non il livello) e **M6**
   (`LogBlend`, media geometrica fra i lambda del mercato e quelli di M4).
@@ -252,7 +252,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   `exp(somma degli alberi)` e NON riaggiunge l'init_score. Va sommato a mano
   in scala logaritmica, come fa `MarketAnchoredGBM.predict`. Sbagliarlo non
   solleva nessun errore: produce semplicemente il modello sbagliato
-- `src/predict.py` — inferenza settimanale. Modello **parametrico**, con M1
+- `src/goalmodel/prediction/predict.py` — inferenza settimanale. Modello **parametrico**, con M1
   (market-only) come predefinito: e' l'unica scelta coerente con il test set,
   che dice che nessun modello statistico batte il mercato. Quando un M7 lo
   battera' con intervallo netto, qui cambia un argomento.
@@ -264,14 +264,14 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   `assert_no_post_match` (nessuna colonna post-partita valorizzata sulle righe
   future), il controllo di duplicazione storico/futuro, e l'assert che il
   timestamp UTC preceda il calcio d'inizio
-- `src/backtest_log.py` — rilegge `predictions_log.csv`, aggancia i risultati
+- `src/goalmodel/prediction/backtest_log.py` — rilegge `predictions_log.csv`, aggancia i risultati
   veri sulla quadrupla e calcola RPS e calibrazione **solo** sulle previsioni
   scritte prima del calcio d'inizio. Quando ci sono piu' righe per la stessa
   partita usa la PRIMA per timestamp: il registro e' append-only e la piu'
   recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
   registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
   distingue un errore del modello da un prezzo cambiato
-- `src/features/context.py` — **blocco A**: riposo, congestione su finestra
+- `src/goalmodel/features/context.py` — **blocco A**: riposo, congestione su finestra
   (d-14, d) aperta da entrambi i lati, infrasettimanale, derby da
   `manual/derbies.csv` con coppia NON ordinata. Solo calendario, nessuna
   ingestion nuova. **Le coppe europee non ci sono e non ci possono essere**:
@@ -280,28 +280,28 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   gioca in Europa dalla classifica dell'anno prima; usare l'orario di calcio
   d'inizio come indizio) sono peggio del buco — la prima e' una funzione dei
   risultati passati, cioe' proprio cio' che il piano esclude
-- `src/report.py` — il report settimanale in HTML statico: CSS dentro il file,
+- `src/goalmodel/reporting/report.py` — il report settimanale in HTML statico: CSS dentro il file,
   grafici in SVG generato a mano, nessun CDN e nessun framework. Cinque
   sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
   di quelle squadre, divergenza fra M4-senza-mercato e M1 (**diagnostica, non
   segnale di scommessa**), track record con la linea del backtest e la stima di
   quante previsioni servono ancora, stato del sistema. Lo chiamano in coda i
-  due comandi di giornata, ma gira anche da solo con `python -m src.report
+  due comandi di giornata, ma gira anche da solo con `goalmodel report
   --open` — e in
   quel caso **non tocca il registro**, e il report lo dichiara.
   La sezione 3 addestra M4 e controlla che non sia degenerato: con le feature
   di forma nulle LightGBM si ferma a un albero e prevede la stessa cosa per
   tutte le partite, senza sollevare niente
-- `src/rounds.py` — il ciclo di vita della giornata e la tabella di stato. E'
+- `src/goalmodel/prediction/rounds.py` — il ciclo di vita della giornata e la tabella di stato. E'
   qui che si decide su quale giornata agire, guardando quote, registro e
   risultati: nessun comando chiede il numero e nessuno sa che giorno e'.
   Lo stato CHIUSA e' l'esistenza del file di archivio, non una colonna che
   potrebbe divergere dai fatti
-- `src/predict_round.py` — porta una giornata da aperta a predetta. Gestisce la
+- `src/goalmodel/prediction/predict_round.py` — porta una giornata da aperta a predetta. Gestisce la
   giornata coperta a meta' (lo snapshot copre solo il turno imminente):
   registra quelle che puo', nomina quelle che restano, e al lancio dopo
   completa senza duplicare
-- `src/close_round.py` — porta una giornata da giocata a chiusa. Non chiude una
+- `src/goalmodel/prediction/close_round.py` — porta una giornata da giocata a chiusa. Non chiude una
   giornata incompleta nemmeno se glielo si chiede con `--round`: un RPS
   archiviato su nove partite su dieci non sarebbe piu' correggibile. Scrive
   l'errore per singola partita e rifa' il cumulativo da zero dai file di
@@ -461,7 +461,7 @@ la stessa risposta. Non e' un problema di forma del modello.
 
 ### Cosa usa davvero M4 senza mercato — la diagnosi
 
-`python -m src.models.gbm --importance`, guadagno medio su 3 stagioni x 2 lati,
+`goalmodel gbm --importance`, guadagno medio su 3 stagioni x 2 lati,
 aggregato per statistica sommando le viste casa/fuori/differenza:
 
 ```
@@ -533,11 +533,11 @@ contro il 95% nominale.
   feature di contesto, l'half-life ottima deve **accorciarsi**. Se si ritara
   e resta sui 240 giorni, quelle feature non stanno funzionando — e va
   indagato quello, non accettato il risultato. Ritarare sempre con
-  `python -m src.models.dixon_coles --tune` dopo ogni nuovo blocco di feature.
+  `goalmodel dixon-coles --tune` dopo ogni nuovo blocco di feature.
 
 ### Potenza: cosa questo test set puo' vedere — rifatto due volte
 
-`python -m src.power_analysis`. Tre errori corretti, e ognuno cambiava la
+`goalmodel power`. Tre errori corretti, e ognuno cambiava la
 conclusione. Il terzo la ribalta.
 
 **1. Soglia e quota non sono la stessa cosa.** "Oltre il 15% dei minuti
@@ -595,7 +595,7 @@ all'11% non arriva alla soglia in Serie A.
 
 ### Blocco A — contesto — MISURATO DUE VOLTE E SCARTATO
 
-`python -m src.evaluate --blocco contesto`, 8 settembre 2026. Nove colonne:
+`goalmodel evaluate --blocco contesto`, 8 settembre 2026. Nove colonne:
 riposo, congestione su finestra (d-14, d), infrasettimanale, derby.
 
 | modello | RPS | skill_closed | delta mercato | IC 95% |
@@ -652,7 +652,7 @@ cambiano quando una squadra gioca in Europa. Il meccanismo — giocare il
 martedi' in Champions e la domenica in campionato — era proprio la parte che
 mancava.
 
-`python ingest.py --stage cups` scarica Champions, Europa e Conference League
+`goalmodel ingest --stage cups` scarica Champions, Europa e Conference League
 da FBref: **solo calendario, una richiesta per competizione e stagione, niente
 browser** (4140 partite). Le tre coppe sono chiavi nuove in `LEAGUE_DICT`,
 registrate a runtime da `ingest.registra_coppe` — vedi `config.FBREF_CUPS`, e i
@@ -696,8 +696,8 @@ quando il calendario, coppe comprese, e' noto da mesi.
 
 ### Blocco B — giocatori e infortuni — PROVVISORIO
 
-`python -m src.evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
-da `src/features/players.py`: quota di minuti indisponibili, quota di
+`goalmodel evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
+da `src/goalmodel/features/players.py`: quota di minuti indisponibili, quota di
 gol+assist indisponibili, numero di assenti, per lato e in differenza.
 
 **E' il primo blocco che supera la regola.** E va letto con la stessa
@@ -737,7 +737,7 @@ prudenza con cui sono stati letti i risultati nulli.
 
 ### La diagnostica sui NaN: il modello usa il contenuto
 
-`python -m src.evaluate --blocco-nan giocatori`. Il blocco ha NaN su tutto
+`goalmodel evaluate --blocco-nan giocatori`. Il blocco ha NaN su tutto
 cio' che precede il 2021/22, e LightGBM puo' splittare su "so / non so"
 guadagnando — perche' quella separazione coincide con il tempo, non con gli
 infortuni. Si riaddestra sulle sole stagioni coperte, dove di NaN non ce ne
@@ -782,7 +782,7 @@ poggerebbe su una colonna sola e su un caso.
 
 ### Verifiche di robustezza — 15 settembre 2026
 
-`python -m src.experiments.blocco_b_robustezza`, 15 walk-forward (3 varianti x
+`python -m goalmodel.experiments.blocco_b_robustezza`, 15 walk-forward (3 varianti x
 5 semi). Riassunto completo e versionato in
 `experiments/output/riassunto_bloccoB_robustezza.md`. **Regola scritta prima
 dei risultati: queste verifiche possono solo declassare, mai promuovere.**
@@ -927,7 +927,7 @@ dall'inizio.
 
 Verificare anche se **l'half-life ottima di M3 si accorcia dai 240 giorni**:
 la predizione falsificabile e' gia' scritta sopra, e non dipende dalla potenza
-sull'RPS. Ritarare con `python -m src.models.dixon_coles --tune`.
+sull'RPS. Ritarare con `goalmodel dixon-coles --tune`.
 
 #### Blocco D — forma per sede — MISURATO IN VALIDAZIONE E SCARTATO, A COSTO ZERO
 
@@ -952,7 +952,7 @@ quella in trasferta sulle sole in trasferta, piu' la differenza. Half-life 10,
 non tarata. Medie di lega della regressione di fine stagione calcolate **per
 sede**: in casa si segna di piu', e tirare la forma casalinga verso la media
 di tutte le partite la sporcherebbe. Costruite in memoria da
-`src/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
+`src/goalmodel/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
 toccarle e senza scrivere nessun parquet.
 
 **Non e' una copia di BASE**: in validazione la correlazione fra una colonna
@@ -1019,7 +1019,7 @@ di mercato che le pesa non contera'.
 
 #### Fuori dal piano
 
-`src/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
+`src/goalmodel/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
 di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un quarto modo
 di misurare la forza della squadra non cambierebbe il quadro.
 
@@ -1039,7 +1039,7 @@ confrontano per prime. `--sensibilita` prova che la rete scatta: un solo bit
 spostato con `np.nextafter` fa fallire il ramo giusto. `--rigenera` solo dopo
 un cambiamento di produzione voluto e dichiarato.
 
-**Registro dei set — `src/features/sets.py`.** Ogni colonna appartiene a un set
+**Registro dei set — `src/goalmodel/features/sets.py`.** Ogni colonna appartiene a un set
 con uno stato: `BASE` (congelato, 52 colonne scritte per esteso),
 `CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_VENUE` (da misurare).
 I modelli sperimentali dichiarano i set (`M5Set(sets=["BASE", "GIOCATORI"])`);
@@ -1053,7 +1053,7 @@ divergenza del report vede quindi le colonne GIOCATORI da quando il blocco e'
 stato ammesso. E' produzione e non e' stato modificato. Da qui in poi le
 costanti `BLOCCHI_*` di `gbm.py` non si toccano piu'.
 
-**Esperimenti — `src/experiments/`.** Leggono tutto, scrivono solo in
+**Esperimenti — `src/goalmodel/experiments/`.** Leggono tutto, scrivono solo in
 `experiments/output/`, gitignorato tranne i `riassunto_*`.
 `experiments.proteggi_produzione()` sostituisce `to_parquet` e `to_csv` nel
 processo dell'esperimento e rifiuta qualsiasi scrittura in `data/processed/` o
@@ -1070,7 +1070,7 @@ produzione resta su M1. Nessuna promozione perche' "sembra meglio".
 
 ### Prevedere una giornata con M5 senza promuoverlo
 
-`src/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
+`src/goalmodel/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
 calendario, stesse quote, stesse feature, stesse protezioni sul calcio
 d'inizio — passandogli `M5MediaSemi(["BASE"])` e `dry_run=True`. Stampa M5
 accanto a M1 con lo scarto per partita e non tocca il registro.
@@ -1106,7 +1106,7 @@ prima**, cosi' un risultato non dipende dal seme che capita.
 
 ### Collinearita' — nessuna riduzione, BASE resta com'e'
 
-`python -m src.experiments.collinearita --misura`, **in validazione**
+`python -m goalmodel.experiments.collinearita --misura`, **in validazione**
 (2021/22, 2022/23, 759 partite), tre semi. Soglie dichiarate prima: selezione
 per correlazione assoluta sopra **0.95** (golosa, nell'ordine di BASE), PCA per
 blocco di statistica fino al **95%** della varianza. Statistiche stimate solo
@@ -1127,7 +1127,7 @@ consumato.
 
 ### Baseline di mercato — B365 con Shin resta, 15 settembre 2026
 
-`python -m src.experiments.baseline_mercato`, **in validazione** (2021/22,
+`python -m goalmodel.experiments.baseline_mercato`, **in validazione** (2021/22,
 2022/23): anche scegliere la baseline guardando il test sarebbe una ricerca di
 specifica sul test. Funzioni nuove in `market.py` (`devig_power`,
 `devig_odds_ratio`, `consenso`, `market_block_alternativo`), fuori dal percorso
@@ -1206,9 +1206,9 @@ stato, e lo stato si deduce dai dati:
 | **chiusa** | risultati agganciati, errore calcolato, archiviata | `close_round` |
 
 ```bash
-python -m src.predict_round     # da aperta a predetta
-python -m src.close_round       # da giocata a chiusa
-python -m src.rounds --status   # dove sta ogni giornata della stagione
+goalmodel predict-round     # da aperta a predetta
+goalmodel close-round       # da giocata a chiusa
+goalmodel rounds --status   # dove sta ogni giornata della stagione
 ```
 
 Opzioni comuni: `--round N` per forzare una giornata invece di dedurla,
@@ -1219,7 +1219,7 @@ precondizioni opposte: predire vuole le quote e nessun risultato, chiudere
 vuole tutti i risultati. Una delle due era sempre fuori tempo. E "sabato
 mattina" individua la giornata giusta solo finche' il calendario e' regolare —
 un infrasettimanale, un rinvio, una partita spostata per la coppa, e non piu'.
-`src/weekly.py` resta come rimando: stampa i due comandi ed esce con codice 2.
+`src/goalmodel/prediction/weekly.py` resta come rimando: stampa i due comandi ed esce con codice 2.
 
 **Nessun giorno della settimana compare nel codice.** Nota informativa, non un
 vincolo: football-data pubblica le quote il **venerdi' entro le 17:00 UK** per
@@ -1298,14 +1298,14 @@ presenti, e la vecchiaia dello snapshot viene comunque segnalata. I passi
 locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
 previsione sarebbe sbagliata in silenzio.
 
-**Il report va su file, non solo a schermo.** Lo scrive `src/report.py`, in
+**Il report va su file, non solo a schermo.** Lo scrive `src/goalmodel/reporting/report.py`, in
 coda a entrambi i comandi: `track_record/report.html` a percorso fisso, piu'
 una copia d'archivio in
 `data/processed/reports/giornata_<stagione>_<NN>.html`. Una per giornata e non
 una sola sovrascritta: riaprire il report di tre turni fa e' esattamente cio'
 che serve per capire come sono andate le previsioni. Resta comunque una
 **vista** — il dato e' il registro, il report si rigenera con
-`python -m src.report` e per questo non e' versionato.
+`goalmodel report` e per questo non e' versionato.
 
 **Il registro e' l'unico dato che non si rigenera.** Tutto il resto si
 riscarica; le previsioni no, perche' vanno scritte prima del calcio d'inizio e
@@ -1390,10 +1390,27 @@ Sono tutti in **`COMANDI.md`**, con tempi di esecuzione misurati, file
 prodotti da ciascuno, e la lista delle cose da non fare. Non duplicarli qui:
 due elenchi divergono, e quello sbagliato viene sempre letto per primo.
 
-Regola dell'ambiente, che vale ovunque: si sviluppa su **Windows con
-PowerShell**. Per cancellare file usare `Remove-Item ... -ErrorAction
-SilentlyContinue`, non `rm -f`. Evitare `python -c "..."` con apici annidati:
-mettere il codice in un file.
+### L'ambiente: DUE piattaforme, non una
+
+Il progetto si sviluppa su **Linux** (sviluppatore principale, `.venv` nella
+radice del repository) e su **Windows con PowerShell** (secondo sviluppatore).
+Nessuna delle due e' "quella giusta": il codice deve funzionare su entrambe, e
+la CI le prova tutte e due proprio per questo.
+
+Cosa ne segue, in pratica:
+
+- **Niente comandi di shell nel codice.** Un `rm -f` o un `Remove-Item` dentro
+  un modulo lo lega a una piattaforma. Si usa `pathlib` e `shutil`.
+- **Niente percorsi con la barra scritta a mano.** Sempre `Path` e `/`, mai
+  `"data\\raw"` ne' `"data/raw"` come stringa.
+- **Quando scrivi un comando nella documentazione**, preferisci la forma
+  `goalmodel <comando>`: e' identica sulle due piattaforme e non dipende dalla
+  directory corrente. `python -m goalmodel.<modulo>` funziona comunque.
+- **Su PowerShell** per cancellare file usare `Remove-Item ... -ErrorAction
+  SilentlyContinue`, non `rm -f`. Evitare `python -c "..."` con apici
+  annidati: mettere il codice in un file.
+- **Un test che passa su una sola piattaforma blocca meta' del team.** Prima
+  della CI non c'era modo di accorgersene; ora si vede nel job che fallisce.
 
 ## Note operative
 
@@ -1412,7 +1429,9 @@ mettere il codice in un file.
 ## Stile del codice
 
 - Type hints, docstring in italiano che spiegano il **perche'**, non il cosa
-- Ogni modulo eseguibile con `python -m src.<modulo>` e un argparse
+- Ogni modulo eseguibile con un `argparse`, raggiungibile sia come
+  `python -m goalmodel.<percorso>` sia come sottocomando di `goalmodel`
+  (registrarlo in `src/goalmodel/cli.py`, una riga)
 - Parquet per tutti i dati intermedi
 - Niente notebook nel codice di produzione: solo esplorazione in `notebooks/`
 - Log via `logging`, non `print`
@@ -1425,7 +1444,7 @@ ricordato. La diagnosi completa dello stato attuale sta in
 
 ### DRY — un fatto, un posto solo
 
-- **Una costante condivisa sta in `src/config.py`**, non ricopiata. La chiave
+- **Una costante condivisa sta in `src/goalmodel/config.py`**, non ricopiata. La chiave
   di join e' la regola non negoziabile n.5: se e' scritta in quattordici file,
   allargare ai Big 5 significa modificarne quattordici e **dimenticarne uno non
   da' errore** — da' un merge che perde righe in silenzio. Stessa cosa per
@@ -1549,7 +1568,7 @@ sotto sono quelle che mordono davvero.
 - `manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
   date, coach_out, coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
 - `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
-  arrivano da `python ingest.py --stage fixtures`. Serve compilarlo a mano
+  arrivano da `goalmodel ingest --stage fixtures`. Serve compilarlo a mano
   soltanto per le partite che lo snapshot non copre o quando football-data e'
   irraggiungibile. Colonne `league, season, home_team, away_team, B365H,
   B365D, B365A, B365>2.5, B365<2.5`: servono **entrambi** i mercati, perche' i 

@@ -27,8 +27,43 @@ pipeline che lo ricostruisce, e questo ha gia' rotto una sezione del report.
 | severita' | n. | temi |
 |---|---|---|
 | alta | 5 | parquet giocatori orfano, report rotto, asserts strippabili, zero pinning, root/package invertiti |
-| media | 9 | DRY su KEYS, SRP su report.py, doppio registro feature, no CI, trust boundary rete, guardia parziale, except larghi, file handle, escape HTML |
+| media | 11 | DRY su KEYS, SRP su report.py, doppio registro feature, no CI, trust boundary rete, guardia parziale, except larghi, file handle, escape HTML, zip non stretto, controllo inerte |
 | bassa | 6 | dead code, iterrows, perf ewma, check.py, no licenza, log CSV riletto |
+
+Le ultime due voci di severita' media (B13, B14) sono emerse da `ruff` dopo la
+diagnosi a mano, ed e' un dato in se': uno strumento automatico ha trovato in
+un secondo due difetti che la lettura non aveva visto, in un repository dove
+finora nessun linter era mai girato.
+
+---
+
+## Stato delle correzioni
+
+Aggiornato al 22 settembre 2026, branch `refactor/struttura-enterprise`.
+**La diagnosi sotto resta scritta al presente storico**: descrive il codice
+com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
+`src/predict.py` vanno letti con il layout di allora.
+
+| voce | stato | dove |
+|---|---|---|
+| A1 ingest alla radice | **chiuso** | `src/goalmodel/ingest.py` + `cli.py` |
+| A2 packaging e pinning | **chiuso** | `pyproject.toml`, `requirements.lock` |
+| A6 CI, lint, runner test | **chiuso** | `.github/workflows/ci.yml`, ruff, pytest |
+| A8 check.py alla radice | **chiuso** | `scripts/ispeziona_dataset.py` |
+| A3 KEYS duplicata | aperto | prossima fase |
+| A4 report.py, 4 mestieri | aperto | prossima fase |
+| A5 doppio registro feature | aperto | prossima fase |
+| A7 accesso ai dati sparso | aperto | prossima fase |
+| B1 sezione 3 del report morta | aperto | prossima fase, per prima |
+| B2 parquet giocatori orfano | aperto | prossima fase, per prima |
+| B3 assert come invariante | aperto | prossima fase |
+| B4-B12 | aperti | prossima fase |
+| B13, B14 | **nuovi**, vedi sotto | trovati da ruff |
+| licenza assente | aperto | **decisione del proprietario**, non del refactoring |
+
+Quello che il riordino ha cambiato e' l'impalcatura, non il comportamento:
+nessuna correzione di logica e' stata applicata, e la suite e' passata da
+"nessun runner" a 36 passati / 7 saltati su due piattaforme.
 
 ---
 
@@ -327,6 +362,54 @@ diventa un fastidio.
 volte con un ciclo Python. Il file oggi pesa 3 KB: e' irrilevante, e
 riscriverlo ora sarebbe ottimizzazione prematura. Annotato perche' la
 struttura e' append-only per sempre e quel file non verra' mai potato.
+
+### B13 — `zip()` senza `strict`: tronca in silenzio — MEDIA [verificato]
+
+Diciannove occorrenze, trovate da `ruff` (regola `B905`) e non dall'ispezione
+a mano. `zip(a, b)` senza `strict=True` si ferma alla sequenza piu' corta
+**senza dire niente**.
+
+Dove morde davvero: in `models/gbm.py` si zippano colonne di lambda di mercato
+con nomi di colonna di gol, e in `evaluation/` si zippano modelli con le loro
+previsioni. Se una delle due sequenze perdesse un elemento — una colonna
+rinominata, un modello che non predice — il risultato sarebbe piu' corto e
+nessuno lo saprebbe.
+
+E' esattamente la classe di difetto che il progetto teme di piu': non solleva,
+produce numeri plausibili. Che nessuna delle diciannove sia oggi sbagliata non
+toglie che nessuna sia protetta.
+
+**Da fare:** `strict=True` ovunque le due sequenze debbano avere la stessa
+lunghezza per costruzione, che e' il caso in tutti e diciannove.
+
+### B14 — Un controllo che non controlla, dentro la rete di sicurezza — MEDIA [verificato]
+
+`tests/test_production_unchanged.py`, in `verifica()`:
+
+```python
+mancanti = corrente["mkt_lambda_home"].isna() & rif["mkt_lambda_home"].notna()
+```
+
+`mancanti` viene calcolata e **mai usata**. Nessun `assert`, nessun `if`,
+nessuna stampa. Trovata da `ruff` (`F841`), non a occhio.
+
+Cosa avrebbe dovuto fare: segnalare le righe dove il run corrente ha perso un
+lambda di mercato che il riferimento aveva — cioe' una regressione del
+de-vigging che non cambia i valori ma li fa sparire. E' un controllo sensato,
+scritto e lasciato scollegato.
+
+**Perche' pesa piu' del solito.** Questo file e' la rete di sicurezza della
+produzione: e' il test che si lancia prima di ogni commit e che autorizza a
+dire "M1 non e' cambiato". Un controllo silenziosamente inerte qui e' lo stesso
+difetto che il progetto insegue nel modello — qualcosa che sembra misurare e
+non misura.
+
+Altre due `F841` (`keys` in `evaluation/power_analysis.py`, `q` in
+`features/players.py`) vanno guardate con la stessa domanda: era un controllo
+mai collegato, o solo un residuo?
+
+**Da fare:** decidere, per ciascuna, se collegare il controllo o cancellare la
+riga. Non lasciarle come sono.
 
 ---
 

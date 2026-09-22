@@ -681,7 +681,7 @@ serie-a-predictor/
 
 ## 14. Pipeline di ingestion
 
-Il modulo `ingest.py` e' gia' scritto, con API verificata. Stage indipendenti e
+Il modulo `src/goalmodel/ingest.py` e' gia' scritto, con API verificata. Stage indipendenti e
 ri-eseguibili: `soccerdata` mantiene una cache locale persistente in
 `~/soccerdata/data/`, quindi rilanciare uno stage completato non ri-scarica nulla.
 
@@ -691,15 +691,15 @@ pip install soccerdata pandas pyarrow lightgbm scikit-learn statsmodels
 
 | Stage | Comando | Tempo | Note |
 |---|---|---|---|
-| `matches` | `python ingest.py --stage matches` | ~10 secondi | Risultati e quote |
-| `understat` | `python ingest.py --stage understat` | ~2 minuti | **xG, PPDA, xPts** |
-| `schedule` | `python ingest.py --stage schedule` | ~5 minuti | Fornisce i `match_id` |
-| `elo` | `python ingest.py --stage elo` | ~1 minuto | Richiede `schedule` |
-| `shots` | `python ingest.py --stage shots` | Decine di minuti | Opzionale |
-| `team_stats` | `python ingest.py --stage team_stats` | Ore | Opta avanzate |
-| `lineups` | `python ingest.py --stage lineups` | Ore | Una richiesta per partita |
-| `player_stats` | `python ingest.py --stage player_stats` | Molte ore | Lanciare una stagione alla volta |
-| `missing` | `python ingest.py --stage missing` | Ore | **Richiede browser (Selenium)** |
+| `matches` | `goalmodel ingest --stage matches` | ~10 secondi | Risultati e quote |
+| `understat` | `goalmodel ingest --stage understat` | ~2 minuti | **xG, PPDA, xPts** |
+| `schedule` | `goalmodel ingest --stage schedule` | ~5 minuti | Fornisce i `match_id` |
+| `elo` | `goalmodel ingest --stage elo` | ~1 minuto | Richiede `schedule` |
+| `shots` | `goalmodel ingest --stage shots` | Decine di minuti | Opzionale |
+| `team_stats` | `goalmodel ingest --stage team_stats` | Ore | Opta avanzate |
+| `lineups` | `goalmodel ingest --stage lineups` | Ore | Una richiesta per partita |
+| `player_stats` | `goalmodel ingest --stage player_stats` | Molte ore | Lanciare una stagione alla volta |
+| `missing` | `goalmodel ingest --stage missing` | Ore | **Richiede browser (Selenium)** |
 
 **I primi quattro stage bastano per l'80% del potere predittivo.** In una decina
 di minuti hai xG, PPDA, xPts, Elo e quote: cioe' i blocchi feature 1, 2, 3 e 5.
@@ -735,8 +735,8 @@ script dopo ogni giornata.
 ### Il ciclo
 
 ```bash
-python ingest.py --stage matches      # riscarica solo la stagione corrente
-python ingest.py --stage understat    # idem
+goalmodel ingest --stage matches      # riscarica solo la stagione corrente
+goalmodel ingest --stage understat    # idem
 python build_features.py              # ricostruisce features.parquet
 python train.py                       # riallena da zero
 python predict.py --matchday N        # predice la prossima giornata
