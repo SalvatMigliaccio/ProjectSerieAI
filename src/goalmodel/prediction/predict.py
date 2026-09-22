@@ -426,13 +426,40 @@ def predict_fixtures(
     # Le quote effettivamente usate, recuperate dal book che market.py ha
     # scelto. Registrarle permette, a posteriori, di distinguere un errore del
     # modello da un prezzo cambiato fra previsione e calcio d'inizio.
+    #
+    # UNA COLONNA RINOMINATA NON DEVE PASSARE IN SILENZIO (audit B10). Il nome
+    # della colonna si compone a stringa — `B365` + `H` — quindi se
+    # football-data rinominasse un book la quota diventerebbe NaN senza nessun
+    # errore, e il buco si scoprirebbe mesi dopo rileggendo il track record,
+    # che e' esattamente l'uso per cui quelle quote si salvano. Il ciclo e'
+    # sui BOOK, che sono una manciata, non sulle righe.
+    fonte = out["mkt_1x2_source"].astype("string")
+    colonne_assenti: set[str] = set()
     for etichetta, suffisso in (("odds_home", "H"), ("odds_draw", "D"), ("odds_away", "A")):
-        out[etichetta] = [
-            float(r[f"{r['mkt_1x2_source']}{suffisso}"])
-            if pd.notna(r.get("mkt_1x2_source")) and f"{r['mkt_1x2_source']}{suffisso}" in r
-            else np.nan
-            for _, r in out.iterrows()
-        ]
+        nomi = fonte + suffisso
+        valori = np.full(len(out), np.nan)
+        for col in nomi.dropna().unique():
+            if col not in out.columns:
+                colonne_assenti.add(col)
+                continue
+            riga = (nomi == col).to_numpy(dtype=bool)
+            valori[riga] = pd.to_numeric(out.loc[riga, col], errors="coerce").to_numpy(float)
+        out[etichetta] = valori
+
+    if colonne_assenti:
+        log.warning(
+            "quote non registrate: %s non esistono in questo snapshot, ma "
+            "pick_odds le ha scelte come fonte. Il track record restera' "
+            "senza la quota di quelle partite, e a mesi di distanza non si "
+            "potra' piu' distinguere un errore del modello da un prezzo "
+            "cambiato. Controlla i nomi di colonna di football-data.",
+            sorted(colonne_assenti),
+        )
+    persi = int((fonte.notna()
+                 & out[["odds_home", "odds_draw", "odds_away"]].isna().any(axis=1)).sum())
+    if persi:
+        log.warning("%d partite su %d hanno una fonte 1X2 ma almeno una quota "
+                    "vuota", persi, len(out))
     # Book e provenienza insieme: "B365-fixtures" non e' la stessa cosa di
     # "B365-manual", perche' il primo e' lo snapshot ufficiale delle 17:00 del
     # venerdi' e il secondo e' una quota copiata a mano in un momento ignoto.

@@ -473,7 +473,7 @@ resta dov'era, perche' lo stack e' la rete, non il piano.
 `Path.open()`), e con loro `S603`: i due `subprocess.Popen` hanno ora il
 `noqa` con il motivo scritto accanto, forma a lista e `sys.executable`.
 
-### B9 — `gbm.tune()`: variabile morta e conteggio fuorviante — BASSA [verificato]
+### B9 — `gbm.tune()`: variabile morta e conteggio fuorviante — CHIUSO
 
 `gbm.py:574`: `configs = sample_configs(n_configs, seed=seed)` viene calcolata
 dopo che `jobs` e' gia' costruito, e serve solo a `len(configs)` nel log della
@@ -481,9 +481,12 @@ riga 576. Ignora lo spazio esteso della variante ancorata: quel log dice
 "24 configurazioni x 3 varianti" anche se lo spazio ancorato ne avesse un
 numero diverso.
 
-**Da fare:** cancellare la riga, loggare `len(jobs)`.
+**Come e' stato chiuso.** Riga cancellata, il log conta `len(jobs)`. Non era
+solo una variabile morta: il numero stampato era **sbagliato**, perche' la
+variante ancorata usa uno spazio di ricerca esteso e "n_configs x varianti"
+non corrisponde ai run veri.
 
-### B10 — Estrazione delle quote riga per riga con fallback silenzioso — BASSA [verificato]
+### B10 — Estrazione delle quote riga per riga con fallback silenzioso — CHIUSO
 
 `predict.predict_fixtures` (`predict.py:427-437`) costruisce le tre colonne di
 quota con `out.iterrows()` e nomi di colonna composti a stringa
@@ -494,10 +497,20 @@ Se football-data rinominasse una colonna, la quota registrata diventerebbe
 rileggendo il track record — che e' proprio l'uso per cui quelle quote si
 salvano.
 
-**Da fare:** vettorializzare con un `lookup`, e loggare quante righe hanno
-perso la quota.
+**Come e' stato chiuso.** Il ciclo e' ora sui **book**, che sono tre (`B365`,
+`BW`, `Avg`), non sulle 4609 righe. E soprattutto non e' piu' muto: una
+colonna che il book dichiara ma che nello snapshot non esiste produce un
+`log.warning` che la nomina e dice cosa se ne perde — la possibilita', a mesi
+di distanza, di distinguere un errore del modello da un prezzo cambiato. Un
+secondo avviso conta le partite che hanno una fonte 1X2 ma almeno una quota
+vuota.
 
-### B11 — `form.ewma_by_team` e' un ciclo `iloc` per riga — BASSA [verificato]
+**Verificato bit a bit prima di sostituire**: sulle 4609 righe reali con fonte
+1X2, vecchia e nuova implementazione danno array identici (`array_equal` con
+`equal_nan=True`) su tutte e tre le colonne. Il golden di produzione resta
+invariato.
+
+### B11 — `form.ewma_by_team` e' un ciclo `iloc` per riga — ACCETTATO, NON SI FA
 
 `form.py:170` fa `row = long.iloc[pos]` dentro il ciclo interno: una Series
 nuova per ognuna delle ~9.000 righe, poi accesso per etichetta a 16 colonne.
@@ -506,16 +519,28 @@ Il docstring dice "meno di un secondo", ed e' plausibile. Ma la funzione gira
 **a ogni previsione**, perche' `predict.build_features()` ricostruisce le
 feature da zero su storico + partite future. Estrarre le colonne in array
 numpy prima del ciclo darebbe lo stesso controllo esatto con un ordine di
-grandezza in meno di lavoro. Da fare solo se il tempo di `predict_round`
-diventa un fastidio.
+grandezza in meno di lavoro.
 
-### B12 — Il registro viene riletto per intero a ogni controllo — BASSA [verificato]
+**MISURATO, E NON SI FA (22 settembre 2026).** `form.build` su 4610 righe
+costa **0.87 s**. Gira una volta per `predict_round`, dove l'addestramento
+del modello costa ordini di grandezza di piu'. Riscrivere un ciclo che e'
+**leakage-safe per costruzione** — scrive lo stato prima di ogni partita e
+salta i nulli — per guadagnare meno di un secondo significa mettere a rischio
+la regola non negoziabile n.1 in cambio di niente. Si riapre se e quando
+arrivano i Big 5, che moltiplicherebbero le righe per cinque.
+
+### B12 — Il registro viene riletto per intero a ogni controllo — ACCETTATO, NON SI FA
 
 `predict.already_logged()` legge tutto `predictions_log.csv` a ogni chiamata
 (tre volte per `predict_round`), e `append_log` conta le righe del file due
-volte con un ciclo Python. Il file oggi pesa 3 KB: e' irrilevante, e
-riscriverlo ora sarebbe ottimizzazione prematura. Annotato perche' la
-struttura e' append-only per sempre e quel file non verra' mai potato.
+volte con un ciclo Python. Il file oggi pesa 3 KB.
+
+**ACCETTATO (22 settembre 2026).** Il conto che decide: 28 righe oggi, dieci
+partite a giornata, 38 giornate — circa 380 righe l'anno, cioe' ~40 KB dopo
+dieci stagioni. Rileggerlo per intero restera' irrilevante per tutta la vita
+utile del progetto. La voce resta scritta perche' il file e' append-only per
+sempre e non verra' mai potato: se un giorno ci finissero i Big 5 e piu'
+model_version, il conto va rifatto.
 
 ### B13 — `zip()` senza `strict`: tronca in silenzio — CHIUSO
 

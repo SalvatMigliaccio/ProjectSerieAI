@@ -519,9 +519,12 @@ def tune(
         for v in variants
         for c in sample_configs(n_configs, seed=seed, space=space_for(v))
     ]
-    configs = sample_configs(n_configs, seed=seed)
-    log.info("%d configurazioni x %d varianti = %d run, stride %d, %d processi",
-             len(configs), len(variants), len(jobs), stride, n_workers)
+    # `len(jobs)` e non un conteggio a parte: la variante ancorata usa uno
+    # spazio esteso, quindi "n_configs x varianti" e' un numero che puo' non
+    # corrispondere ai run veri. Prima qui si ricampionava lo spazio comune
+    # solo per contarlo, e il log diceva la cifra sbagliata (audit B9).
+    log.info("%d run su %d varianti, stride %d, %d processi",
+             len(jobs), len(variants), stride, n_workers)
 
     rows = Parallel(n_jobs=n_workers, verbose=10)(
         delayed(_score_config)(df, v, c, validation_seasons, stride) for v, c in jobs
