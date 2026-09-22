@@ -532,7 +532,7 @@ def _score_config(df: pd.DataFrame, variant: str, cfg: dict,
 
     # Nei processi figli il log del walk-forward e' solo rumore interlacciato.
     _logging.getLogger("evaluate").setLevel(_logging.WARNING)
-    from ..evaluate import PROB_COLS, outcome_index, rps, walk_forward
+    from ..evaluation.evaluate import PROB_COLS, outcome_index, rps, walk_forward
 
     model = VARIANTS[variant](cfg)
     preds = walk_forward(df, [model], test_seasons=validation_seasons, stride=stride)
@@ -594,7 +594,7 @@ def tune_blend_weight(
     tengono i suoi lambda, e si cerca il peso a griglia: non serve
     riaddestrare per ogni peso, perche' il peso non entra nell'addestramento.
     """
-    from ..evaluate import PROB_COLS, outcome_index, rps, walk_forward
+    from ..evaluation.evaluate import PROB_COLS, outcome_index, rps, walk_forward
     from .baseline import predictions_from_lambdas
 
     gbm_params = gbm_params or config.GBM_PARAMS_NO_MARKET
@@ -694,7 +694,7 @@ def main() -> None:
     ap.add_argument("--variants", default=",".join(VARIANTS), help="varianti da tarare")
     args = ap.parse_args()
 
-    from ..evaluate import load_dataset
+    from ..evaluation.evaluate import load_dataset
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 50)
 

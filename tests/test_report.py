@@ -22,12 +22,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src import predict as predict_mod  # noqa: E402
-from src import report  # noqa: E402
-from src.models.baseline import predictions_from_lambdas  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.prediction import predict as predict_mod  # noqa: E402
+from goalmodel.reporting import report  # noqa: E402
+from goalmodel.models.baseline import predictions_from_lambdas  # noqa: E402
 
 rng = np.random.default_rng(11)
 

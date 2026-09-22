@@ -20,3 +20,11 @@ track_record/report.html
 experiments/output/*
 !experiments/output/riassunto_*.csv
 !experiments/output/riassunto_*.md
+
+# Artefatti di build e di packaging: si rigenerano con `pip install -e .`
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

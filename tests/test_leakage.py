@@ -22,11 +22,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.evaluate import walk_forward  # noqa: E402
-from src.models.baseline import Model, PRED_COLS  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.evaluation.evaluate import walk_forward  # noqa: E402
+from goalmodel.models.baseline import Model, PRED_COLS  # noqa: E402
 
 
 class Spia(Model):

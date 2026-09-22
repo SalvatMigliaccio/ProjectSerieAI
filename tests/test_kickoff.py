@@ -24,13 +24,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.normalize import (  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.normalize import (  # noqa: E402
     apply_name_map, load_name_map, load_raw, normalize_season,
 )
-from src.predict import kickoff  # noqa: E402
+from goalmodel.prediction.predict import kickoff  # noqa: E402
 
 KEYS = ["league", "season", "home_team", "away_team"]
 
@@ -135,7 +134,7 @@ def test_ordine_previsione_fischio() -> None:
     Non fallisce sulle due righe storiche note — sono conservate di proposito —
     ma verifica che `flag_post_kickoff` continui a riconoscerle.
     """
-    from src.backtest_log import flag_post_kickoff, load_log
+    from goalmodel.prediction.backtest_log import flag_post_kickoff, load_log
 
     try:
         log = load_log()

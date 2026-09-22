@@ -57,9 +57,9 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import config
-from .models.baseline import Model, default_models
-from .normalize import apply_name_map, load_name_map, load_raw, normalize_season
+from .. import config
+from ..models.baseline import Model, default_models
+from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("evaluate")
@@ -704,8 +704,8 @@ def report(preds: pd.DataFrame, reference: str = "M1b market-only (diretto)") ->
 
 def colonne_blocco(nome: str, df: pd.DataFrame) -> list[str]:
     """Le colonne che un blocco aggiunge, quelle presenti nel dataset."""
-    from .features.context import FEATURES_CONTEXT, FEATURES_DERBY
-    from .features.players import FEATURES_PLAYERS
+    from ..features.context import FEATURES_CONTEXT, FEATURES_DERBY
+    from ..features.players import FEATURES_PLAYERS
 
     blocchi = {
         "contesto": FEATURES_CONTEXT + FEATURES_DERBY,
@@ -739,8 +739,8 @@ def misura_blocco(nome: str, floor: bool = True) -> tuple[pd.DataFrame, pd.DataF
     mercato si misura il livello del modello; contro M5 si misura il blocco, ed
     e' l'unica differenza in cui il blocco e' l'unica cosa cambiata.
     """
-    from .models.baseline import BaseRate, MarketDirect
-    from .models.gbm import MarketAnchoredGBM
+    from ..models.baseline import BaseRate, MarketDirect
+    from ..models.gbm import MarketAnchoredGBM
 
     df = load_dataset()
     colonne = colonne_blocco(nome, df)
@@ -755,7 +755,7 @@ def misura_blocco(nome: str, floor: bool = True) -> tuple[pd.DataFrame, pd.DataF
     # gia' misurati e scartati. La variante aggiunge SOLO il blocco in esame —
     # non anche gli altri blocchi bocciati, che tornerebbero dentro di
     # straforo e renderebbero la differenza non attribuibile.
-    from .models.gbm import FUORI_DAL_MODELLO
+    from ..models.gbm import FUORI_DAL_MODELLO
 
     senza = MarketAnchoredGBM(escludi=tuple(FUORI_DAL_MODELLO | set(colonne)),
                               **config.GBM_PARAMS_ANCHORED)
@@ -796,7 +796,7 @@ def diagnostica_nan(nome: str) -> pd.DataFrame:
     Non e' un test sul RPS e non decide se tenere il blocco: decide come
     leggere la sua importanza.
     """
-    from .models.gbm import FUORI_DAL_MODELLO, MarketAnchoredGBM
+    from ..models.gbm import FUORI_DAL_MODELLO, MarketAnchoredGBM
 
     df = load_dataset()
     colonne = colonne_blocco(nome, df)
@@ -844,8 +844,8 @@ def all_models() -> list[Model]:
       - iperparametri di M4, da `python -m src.models.gbm --tune`
     Se si ritarano, vanno aggiornati in config.py e va rifatta la tabella.
     """
-    from .models.dixon_coles import DixonColes
-    from .models.gbm import LogBlend, MarketAnchoredGBM, PoissonGBM
+    from ..models.dixon_coles import DixonColes
+    from ..models.gbm import LogBlend, MarketAnchoredGBM, PoissonGBM
 
     return default_models() + [
         DixonColes(halflife_days=config.DC_HALFLIFE),

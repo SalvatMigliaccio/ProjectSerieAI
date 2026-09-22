@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 
 from .. import config, experiments
-from ..evaluate import KEYS, PROB_COLS, load_dataset, paired_pairs, walk_forward
+from ..evaluation.evaluate import KEYS, PROB_COLS, load_dataset, paired_pairs, walk_forward
 from ..models.baseline import PRED_COLS
 from .modelli import M5Set, media_log_lambda
 

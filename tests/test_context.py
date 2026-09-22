@@ -18,10 +18,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.features import context  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.features import context  # noqa: E402
 
 # I calendari di questi test sono sintetici: le coppe vere non c'entrano, e
 # caricarle farebbe ereditare alle squadre inventate le partite europee delle

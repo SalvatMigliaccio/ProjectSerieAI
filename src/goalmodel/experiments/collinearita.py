@@ -51,7 +51,7 @@ import numpy as np
 import pandas as pd
 
 from .. import config, experiments
-from ..evaluate import KEYS, load_dataset, paired_pairs, walk_forward
+from ..evaluation.evaluate import KEYS, load_dataset, paired_pairs, walk_forward
 from ..features import sets as sets_mod
 from ..models.baseline import PRED_COLS
 from .modelli import M5Colonne, M5Set

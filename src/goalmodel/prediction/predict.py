@@ -57,12 +57,12 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from . import config
-from .features import context as context_mod
-from .features import form as form_mod
-from .features import market as market_mod
-from .models.baseline import Model, MarketOnly, score_matrix
-from .normalize import apply_name_map, load_name_map, load_raw, normalize_season
+from .. import config
+from ..features import context as context_mod
+from ..features import form as form_mod
+from ..features import market as market_mod
+from ..models.baseline import Model, MarketOnly, score_matrix
+from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("predict")

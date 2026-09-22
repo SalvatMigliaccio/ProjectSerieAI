@@ -38,7 +38,7 @@ import logging
 import pandas as pd
 
 from .. import config, experiments
-from ..evaluate import KEYS, add_matchday, compare, paired_pairs
+from ..evaluation.evaluate import KEYS, add_matchday, compare, paired_pairs
 from ..features import market
 from ..models.baseline import PRED_COLS, predictions_from_lambdas
 

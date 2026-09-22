@@ -36,8 +36,8 @@ import logging
 import numpy as np
 import pandas as pd
 
-from . import config
-from .evaluate import (
+from .. import config
+from ..evaluation.evaluate import (
     _onehot,
     accuracy,
     brier,
@@ -94,7 +94,7 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
     resta visibile.
     """
     from .predict import kickoff
-    from .normalize import apply_name_map, load_name_map, load_raw, normalize_season
+    from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
     out = preds.copy()
     out["post_kickoff"] = False

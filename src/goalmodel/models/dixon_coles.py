@@ -276,7 +276,7 @@ def tune_halflife(
     half-life, il risultato riportato sarebbe il massimo di cinque tentativi e
     non una stima onesta.
     """
-    from ..evaluate import outcome_index, rps, walk_forward, PROB_COLS
+    from ..evaluation.evaluate import outcome_index, rps, walk_forward, PROB_COLS
 
     grid = grid or config.DC_HALFLIFE_GRID
     validation_seasons = validation_seasons or config.VALIDATION_SEASONS
@@ -346,7 +346,7 @@ def main() -> None:
         _check_gradient()
         return
     if args.tune:
-        from ..evaluate import load_dataset
+        from ..evaluation.evaluate import load_dataset
         print(tune_halflife(load_dataset()).to_string(index=False))
         return
     ap.print_help()

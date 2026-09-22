@@ -212,7 +212,7 @@ def verifica(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     argparse.ArgumentParser(description="Stato dei set di feature").parse_args()
-    from ..evaluate import load_dataset
+    from ..evaluation.evaluate import load_dataset
     from ..models.gbm import form_features
 
     df = load_dataset()

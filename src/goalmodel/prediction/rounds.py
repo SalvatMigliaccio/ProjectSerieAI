@@ -42,7 +42,7 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 
-from . import config
+from .. import config
 from . import predict as predict_mod
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
@@ -127,7 +127,7 @@ def aggiorna_dati(stage: tuple[str, ...], skip_ingest: bool) -> list[str]:
         log.info("--- [1] ingestion saltata su richiesta (--skip-ingest)")
         return []
 
-    import ingest
+    from .. import ingest
 
     disponibili = {
         "matches": ("risultati football-data", ingest.ingest_matches),
@@ -154,8 +154,8 @@ def ricostruisci() -> None:
     resto del progetto. Saltarlo farebbe cercare invano i risultati di partite
     gia' giocate.
     """
-    from . import normalize
-    from .features import context, form, market
+    from .. import normalize
+    from ..features import context, form, market
 
     passo("2", "matches_master", normalize.cmd_build, fatale=True)
     passo("3a", "feature di forma", form.build, fatale=True)
@@ -173,7 +173,7 @@ def file_giornata(season: str, matchday: int) -> Path:
 
 def calendario() -> pd.DataFrame:
     """Il calendario completo, normalizzato, con giornata e calcio d'inizio."""
-    from .normalize import apply_name_map, load_name_map, load_raw, normalize_season
+    from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
     sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), load_name_map()))
     sched = sched[sched["league"].isin(config.LEAGUES)].dropna(subset=["week"]).copy()

@@ -16,10 +16,9 @@ from pathlib import Path
 
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.features import sets  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.features import sets  # noqa: E402
 
 # BASE per esteso, copiato a mano e non importato: se qualcuno modifica la
 # definizione in `sets.py` — anche con buone intenzioni — questo elenco non
@@ -78,8 +77,8 @@ def test_set_disgiunti() -> None:
 
 def test_dataset_reale() -> None:
     """Ogni colonna candidata appartiene a un set, e BASE si ricostruisce esatto."""
-    from src.evaluate import load_dataset
-    from src.models.gbm import form_features
+    from goalmodel.evaluation.evaluate import load_dataset
+    from goalmodel.models.gbm import form_features
 
     df = load_dataset()
     candidate = form_features(df, escludi=())
@@ -112,7 +111,7 @@ def test_esperimenti_non_scrivono_in_produzione() -> None:
     Si prova per ultima: `proteggi_produzione` resta attiva nel processo, e
     il resto del test non deve girare con pandas modificato.
     """
-    from src import experiments
+    from goalmodel import experiments
 
     experiments.proteggi_produzione()
     df = pd.DataFrame({"a": [1]})

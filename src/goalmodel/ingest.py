@@ -32,7 +32,7 @@ from pathlib import Path
 import pandas as pd
 import soccerdata as sd
 
-from src import config
+from . import config
 
 # ---------------------------------------------------------------------------
 # Configurazione
@@ -201,7 +201,7 @@ def ingest_fixtures(source: str | Path | None = None) -> pd.DataFrame:
     df["downloaded_at"] = downloaded_at
 
     # Nomi squadra sulla convenzione del progetto, PRIMA di qualsiasi verifica.
-    from src.normalize import apply_name_map, load_name_map
+    from .normalize import apply_name_map, load_name_map
     df = apply_name_map(df, load_name_map())
 
     _check_fixture_teams(df)
@@ -472,7 +472,7 @@ def applica_locale_whoscored() -> None:
     """
     from soccerdata._config import LEAGUE_DICT
 
-    from src import whoscored_patch
+    from . import whoscored_patch
 
     for chiave, nome in config.WHOSCORED_LEAGUE_OVERRIDE.items():
         if chiave in LEAGUE_DICT:

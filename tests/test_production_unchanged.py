@@ -45,11 +45,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.features import market  # noqa: E402
-from src.models.baseline import PRED_COLS, MarketOnly, all_markets  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.features import market  # noqa: E402
+from goalmodel.models.baseline import PRED_COLS, MarketOnly, all_markets  # noqa: E402
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "m1_riferimento.parquet"
 KEYS = ["league", "season", "home_team", "away_team"]

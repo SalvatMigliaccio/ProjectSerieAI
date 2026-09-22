@@ -19,9 +19,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.features import players  # noqa: E402
+from goalmodel.features import players  # noqa: E402
 
 
 def rosa() -> pd.DataFrame:

@@ -44,11 +44,11 @@ import webbrowser
 import numpy as np
 import pandas as pd
 
-from . import config
+from .. import config
 from . import predict as predict_mod
-from . import report as report_mod
+from ..reporting import report as report_mod
 from . import rounds
-from .report import quando, selezioni
+from ..reporting.report import quando, selezioni
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("predict_round")

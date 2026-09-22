@@ -56,7 +56,7 @@ import sys
 import pandas as pd
 
 from .. import config, experiments
-from ..evaluate import KEYS, load_dataset, paired_pairs, walk_forward
+from ..evaluation.evaluate import KEYS, load_dataset, paired_pairs, walk_forward
 from ..features import form
 from ..features import sets as sets_mod
 from ..models.baseline import PRED_COLS

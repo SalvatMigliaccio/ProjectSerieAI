@@ -39,8 +39,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from . import config
-from . import predict as predict_mod
+from .. import config
+from ..prediction import predict as predict_mod
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("report")
@@ -146,7 +146,7 @@ def selezioni(preds: pd.DataFrame, minimo: float = 0.65) -> pd.DataFrame:
     sull'esito piu' probabile si vince il 53.9% delle volte con ROI -1.8%, e
     la doppia chance piu' sicura vince l'80.6% delle volte con ROI -2.9%.
     """
-    from .models.baseline import all_markets, fair_odds
+    from ..models.baseline import all_markets, fair_odds
 
     if preds.empty:
         return pd.DataFrame()
@@ -315,8 +315,8 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
     if preds.empty:
         return pd.DataFrame()
 
-    from .evaluate import load_dataset
-    from .models.gbm import PoissonGBM
+    from ..evaluation.evaluate import load_dataset
+    from ..models.gbm import PoissonGBM
 
     try:
         df = load_dataset()
@@ -395,8 +395,8 @@ class TrackRecord:
 
 def carica_track_record(diag: Diagnostica) -> TrackRecord | None:
     """Registro + risultati veri, con l'RPS di ogni singola partita."""
-    from . import backtest_log as bl
-    from .evaluate import _onehot, accuracy, calibration_table, outcome_index, rps
+    from ..prediction import backtest_log as bl
+    from ..evaluation.evaluate import _onehot, accuracy, calibration_table, outcome_index, rps
 
     # Il percorso si legge da `predict_mod` al momento della chiamata, non dal
     # default di `load_log`, che viene fissato all'import: e' l'unico modo di
@@ -475,7 +475,7 @@ def fabbisogno(risolte: pd.DataFrame, diag: Diagnostica,
     non e' "quante ne mancano rispetto all'intervallo di adesso" ma "quante ne
     servono in tutto", che a registro vuoto e' la stessa cosa.
     """
-    from .evaluate import cluster_bootstrap
+    from ..evaluation.evaluate import cluster_bootstrap
 
     if risolte.empty:
         n_cluster, per_cluster = 0, 10.0  # una giornata di Serie A
@@ -533,7 +533,7 @@ def _sd_cluster_walk_forward(diag: Diagnostica) -> float | None:
         diag.avvisa(f"{path.name} assente: non posso stimare quante previsioni "
                     f"servono. Lancia 'python -m src.evaluate'.")
         return None
-    from .evaluate import PROB_COLS, outcome_index, rps
+    from ..evaluation.evaluate import PROB_COLS, outcome_index, rps
 
     wf = pd.read_parquet(path)
     rif = "M1b market-only (diretto)"

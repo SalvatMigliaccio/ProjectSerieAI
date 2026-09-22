@@ -9,7 +9,10 @@ from pathlib import Path
 # Percorsi
 # ---------------------------------------------------------------------------
 
-ROOT = Path(__file__).resolve().parent.parent
+# src/goalmodel/config.py -> src/goalmodel -> src -> radice del repository.
+# Con il layout src/ il pacchetto sta due livelli sotto la radice: se un
+# giorno il pacchetto si sposta, QUESTA riga e' l'unica da cambiare.
+ROOT = Path(__file__).resolve().parents[2]
 
 DATA = ROOT / "data"
 RAW = DATA / "raw"

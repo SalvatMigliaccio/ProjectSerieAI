@@ -17,9 +17,8 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import brentq
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.features.market import (  # noqa: E402
+from goalmodel.features.market import (  # noqa: E402
     devig_proportional, devig_shin, implied_total_goals, implied_lambdas,
 )
 
@@ -155,7 +154,7 @@ def test_lambda_impliciti() -> None:
         "la scomposizione non conserva il totale"
 
     # e la P(1) ricostruita dai due lambda deve tornare quella di partenza
-    from src.models.baseline import score_matrix, outcomes_from_matrix
+    from goalmodel.models.baseline import score_matrix, outcomes_from_matrix
     rico = outcomes_from_matrix(score_matrix(lam_h, lam_a))["p_home"].to_numpy()
     assert np.allclose(rico, p_home, atol=1e-4), \
         f"la P(1) non si ricostruisce: {rico.round(4)} contro {p_home}"

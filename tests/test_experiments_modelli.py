@@ -21,13 +21,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src import config  # noqa: E402
-from src.evaluate import load_dataset  # noqa: E402
-from src.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda  # noqa: E402
-from src.features import sets  # noqa: E402
-from src.models.baseline import PRED_COLS  # noqa: E402
+from goalmodel import config  # noqa: E402
+from goalmodel.evaluation.evaluate import load_dataset  # noqa: E402
+from goalmodel.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda  # noqa: E402
+from goalmodel.features import sets  # noqa: E402
+from goalmodel.models.baseline import PRED_COLS  # noqa: E402
 
 SEMI = (0, 1, 2)
 
