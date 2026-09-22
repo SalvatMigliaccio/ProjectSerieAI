@@ -420,6 +420,28 @@ def test_etag_identifies_the_resource() -> None:
     assert len({season_tag, rounds_tag, band_tag, other_band}) == 4
 
 
+def test_etag_follows_the_configuration() -> None:
+    """
+    A setting that changes the answer must change the tag.
+
+    Lowering QUOTA_MINIMA_SELEZIONE from 1.50 to 1.30 changed /api/picks
+    without touching a data file: the tag stayed put, the browser got 304 on
+    every revalidation, and the closed rounds showed the old picks forever.
+    """
+    url = f"/api/picks/{SEASON}"
+    prima = client.get(url)
+    originale = config.QUOTA_MINIMA_SELEZIONE
+    try:
+        config.QUOTA_MINIMA_SELEZIONE = originale + 0.05
+        dopo = client.get(url, headers={"If-None-Match": prima.headers["etag"]})
+    finally:
+        config.QUOTA_MINIMA_SELEZIONE = originale
+
+    assert dopo.headers["etag"] != prima.headers["etag"], "the tag ignored the setting"
+    assert dopo.status_code == 200, "a changed answer must not be served as 304"
+    assert dopo.json()["min_odds"] == round(originale + 0.05, 2)
+
+
 def test_openapi_file_is_in_sync() -> None:
     """
     `web/openapi.json` is the file handed to the frontend: it must not age in

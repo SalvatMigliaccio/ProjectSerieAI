@@ -178,7 +178,27 @@ SEASON_REGRESSION = 0.30
 # il margine del book (5.19% misurato) e' identico su tutti i mercati derivati
 # dalle stesse quote, quindi filtrare per quota sposta varianza e vincita
 # potenziale, non il vantaggio — che resta negativo ovunque.
-QUOTA_MINIMA_SELEZIONE = 1.50
+#
+# 1.30 DAL 22 SETTEMBRE 2026 (era 1.50). Misurata sulle 1140 partite del test
+# set, stesso codice della produzione (`report.selezioni` per scegliere,
+# `backend/api/selections.resolve` per l'esito):
+#
+#     soglia   vinte   quota equa media   giornate tutte vinte
+#      1.50     62%        1.62               0 su 114
+#      1.40     68%        1.48               2 su 114
+#      1.30     74%        1.36               3 su 114
+#      1.20     81%        1.26              16 su 114
+#
+# 1.35 non compare perche' vince quanto 1.40 pagando meno. Il 63% osservato
+# in produzione a 1.50 (10 su 16) coincideva con l'atteso.
+#
+# CAMBIARLA RICALCOLA ANCHE IL PASSATO. Le selezioni non si salvano, si
+# ricalcolano dai lambda del registro: da oggi anche le giornate 3-5 mostrano
+# le selezioni a 1.30, non quelle stampate allora a 1.50. E' voluto — il
+# criterio e' esattamente la cosa che si vuole poter ritoccare — ma il
+# cumulativo di stagione in dashboard cambia per questo, non perche' il
+# modello abbia fatto meglio.
+QUOTA_MINIMA_SELEZIONE = 1.30
 
 # Numero massimo di gol per lato nella matrice dei risultati esatti.
 MAX_GOALS = 10

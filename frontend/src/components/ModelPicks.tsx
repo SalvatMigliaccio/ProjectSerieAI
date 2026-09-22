@@ -36,7 +36,7 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
         </h3>
         <p className="small faint">
           Una per partita, la più probabile fra quelle che pagano almeno{" "}
-          {num(picks.data?.min_odds ?? 1.5, 2)}. Soglia dichiarata dal progetto,
+          {picks.data ? num(picks.data.min_odds, 2) : "…"}. Soglia dichiarata dal progetto,
           non modificabile da qui.
           {picks.data && picks.data.with_min_odds_resolved > 0 && (
             <>

@@ -105,6 +105,24 @@ def _guard_writes() -> None:
     pd.DataFrame.to_parquet = _wrap(pd.DataFrame.to_parquet, "parquet")
 
 
+def config_digest() -> str:
+    """
+    A digest of every setting in `src/config.py`.
+
+    Computed on each request, not once at startup, and from the values rather
+    than the file: it is a few dozen constants, it costs nothing, and it lets a
+    test change one and see the tag move. Every public constant enters, not a
+    hand-picked list of "the ones the API uses" — that list would be exactly
+    as incomplete as the ETag was, the day someone adds a constant.
+    """
+    semplici = (int, float, str, bool, tuple, list, dict)
+    voci = sorted(
+        (nome, repr(valore)) for nome, valore in vars(config).items()
+        if nome.isupper() and isinstance(valore, semplici)
+    )
+    return hashlib.md5(repr(voci).encode()).hexdigest()[:8]
+
+
 def _assert_read_only_routes(app: FastAPI) -> None:
     """A write route must never reach production, so fail at startup instead."""
     allowed = {"GET", "HEAD", "OPTIONS"}
@@ -141,17 +159,27 @@ def create_app() -> FastAPI:
 
     def etag_for(request: Request) -> str | None:
         """
-        ETag over: the schema, the resource asked for, and the data on disk.
+        ETag over: the schema, the configuration, the resource asked for, and
+        the data on disk.
 
         The resource belongs in it because the tag is otherwise identical on
         every URL, and an entity tag that does not identify the entity is a
         trap waiting for the first caching proxy.
+
+        The configuration belongs in it for the same reason as the schema, and
+        it was missing until 22 September 2026: lowering
+        `QUOTA_MINIMA_SELEZIONE` from 1.50 to 1.30 changed what /api/picks
+        returns without touching a single data file, so the tag stayed the
+        same, every revalidation got a 304, and the browser kept showing the
+        old picks — forever, for the closed rounds, whose files never change
+        again.
         """
         try:
             fingerprint = repr(store._fingerprint(store.default_sources()))
         except Exception:  # noqa: BLE001 - never fail a request over an ETag
             return None
-        material = f"{schema_digest}|{request.url.path}?{request.url.query}|{fingerprint}"
+        material = (f"{schema_digest}|{config_digest()}|"
+                    f"{request.url.path}?{request.url.query}|{fingerprint}")
         return '"' + hashlib.md5(material.encode()).hexdigest()[:16] + '"'
 
     @app.middleware("http")

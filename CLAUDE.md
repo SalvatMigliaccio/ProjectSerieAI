@@ -1276,7 +1276,9 @@ giocate su 3420 risultano positive. Un numero del genere in interfaccia
 sarebbe circolare e falso insieme.
 
 **Filtrare per quota sposta la varianza, non il margine.** Vale per la soglia
-minima del report (1.50) come per il tetto della dashboard (1.20): il margine
+minima della linea del modello (1.30 dal 22 settembre 2026, prima 1.50: la
+tabella della scelta e' accanto a `config.QUOTA_MINIMA_SELEZIONE`) come per la
+banda della dashboard (1.20): il margine
 del book e' identico su tutti i mercati derivati dalle stesse quote. Misurato:
 la doppia chance piu' sicura vince l'80.6% delle volte e rende -2.9%, con
 intervallo che esclude lo zero.
