@@ -11,10 +11,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from goalmodel import config
 from goalmodel.experiments.forma_venue import costruisci
 from goalmodel.features import sets as sets_mod
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 
 def _partite() -> pd.DataFrame:

@@ -51,7 +51,7 @@ from .predict import LOG_COLUMNS, PREDICTIONS_LOG
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("backtest_log")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 PROB_COLS = ["p_home", "p_draw", "p_away"]
 
 

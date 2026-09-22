@@ -69,7 +69,7 @@ from .. import config
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("players")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 # Motivi di assenza che NON contano come indisponibilita'. Un giocatore "in
 # dubbio" a T-24h e' incerto, non assente: contarlo fra gli assenti sovrastima

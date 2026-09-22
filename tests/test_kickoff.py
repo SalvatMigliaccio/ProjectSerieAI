@@ -30,7 +30,7 @@ from goalmodel.normalize import (
 )
 from goalmodel.prediction.predict import kickoff
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 
 def test_fuso_sintetico() -> None:

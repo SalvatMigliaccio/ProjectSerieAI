@@ -64,7 +64,7 @@ from ..normalize import apply_name_map, load_name_map, load_raw, normalize_seaso
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("evaluate")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 OUTCOMES = ("H", "D", "A")
 PROB_COLS = ["p_home", "p_draw", "p_away"]
 

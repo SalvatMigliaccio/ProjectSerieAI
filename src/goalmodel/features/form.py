@@ -59,7 +59,7 @@ STATS: dict[str, tuple[str, str]] = {
     "points": ("home_points", "away_points"),
 }
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 
 # ---------------------------------------------------------------------------

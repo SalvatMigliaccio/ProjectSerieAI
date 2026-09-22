@@ -56,7 +56,7 @@ ARCHIVIO = config.PROCESSED / "reports"
 
 GIORNI = ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 # Cosa e' successo al registro mentre si costruiva il report. Va dichiarato
 # nel report stesso: un file che elenca dieci previsioni senza dire se sono

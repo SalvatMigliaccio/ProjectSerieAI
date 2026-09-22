@@ -51,7 +51,7 @@ from goalmodel.features import market
 from goalmodel.models.baseline import PRED_COLS, MarketOnly, all_markets
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "m1_riferimento.parquet"
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 PER_STAGIONE = 8
 PER_FONTE = 4
 FONTI = ["mkt_1x2_source", "mkt_ou_source"]

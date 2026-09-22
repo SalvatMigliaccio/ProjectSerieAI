@@ -607,7 +607,7 @@ def tune_blend_weight(
     )
     # walk_forward tiene solo chiavi, esito e previsioni: i lambda di mercato
     # vanno riagganciati dal dataset.
-    keys = ["league", "season", "home_team", "away_team"]
+    keys = config.JOIN_KEYS
     preds = preds.merge(df[keys + list(MKT_LAMBDA)], on=keys, how="left", validate="many_to_one")
     ok = preds.dropna(subset=["lambda_home", "lambda_away", *MKT_LAMBDA]).reset_index(drop=True)
     y = outcome_index(ok["FTR"])

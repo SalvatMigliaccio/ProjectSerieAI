@@ -48,7 +48,7 @@ from . import predict as predict_mod
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("rounds")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 SEP = "=" * 72
 
 # Le giornate archiviate. Versionate: l'esistenza del file E' lo stato.

@@ -62,7 +62,7 @@ from .. import config
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("context")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 # Finestra della congestione, in giorni. Due settimane: e' l'orizzonte su cui
 # si accumula il debito di recupero, e coincide con il ciclo di chi gioca

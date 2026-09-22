@@ -64,6 +64,22 @@ CURRENT_SEASON = "2627"
 
 SQUADRA_TARGET = "Napoli"
 
+# ---------------------------------------------------------------------------
+# La chiave di join — regola non negoziabile n.5
+# ---------------------------------------------------------------------------
+
+# NON E' LA DATA, ed e' una decisione bloccata. In un campionato all'italiana
+# la quadrupla e' univoca, e questo evita del tutto i fusi orari e le partite
+# rinviate: Udinese-Roma 2023/24 e' iniziata il 14 aprile e finita il 25, e le
+# due fonti registrano date diverse. La data resta come controllo di coerenza.
+#
+# STA QUI E NON IN DIECI MODULI. Era ricopiata in quattordici posti, compresi
+# i test. Aggiungere una dimensione — i Big 5 sono nel piano — voleva dire
+# modificarli tutti e sperare di non dimenticarne uno; e dimenticarne uno non
+# da' nessun errore, da' un merge che perde righe in silenzio.
+JOIN_KEYS = ["league", "season", "home_team", "away_team"]
+
+
 # Fuso orario in cui ciascuna fonte esprime gli orari di calcio d'inizio.
 #
 # NON E' UN DETTAGLIO. fbref pubblica l'orario nel fuso LOCALE DELLO STADIO,

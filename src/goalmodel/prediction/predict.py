@@ -67,7 +67,7 @@ from ..normalize import apply_name_map, load_name_map, load_raw, normalize_seaso
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("predict")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 PREDICTIONS_LOG = config.TRACK_RECORD / "predictions_log.csv"
 
 # Le previsioni ricostruite con --as-of NON vanno nel registro vero. Sono

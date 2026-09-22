@@ -70,7 +70,7 @@ from .. import config
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("market")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 # Catene di ripiego, in ordine di preferenza. Il primo book con la terzina
 # completa vince, riga per riga. Serve solo a tappare buchi sporadici: la

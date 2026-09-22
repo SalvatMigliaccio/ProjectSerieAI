@@ -44,7 +44,7 @@ from . import config
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("normalize")
 
-JOIN_KEYS = ["league", "season", "home_team", "away_team"]
+JOIN_KEYS = config.JOIN_KEYS
 
 # Tabella base e fonti da agganciare. La base definisce lo spazio dei nomi
 # canonico e il numero di righe atteso.
