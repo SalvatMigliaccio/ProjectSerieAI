@@ -1,0 +1,112 @@
+# Packaging, dipendenze e configurazione degli strumenti in un file solo.
+#
+# PERCHE' I LIMITI SUPERIORI NON SONO BUROCRAZIA. Il progetto verifica
+# `test_production_unchanged` BIT A BIT: un aggiornamento silenzioso di
+# LightGBM, scipy o pandas fa fallire quel test senza che il codice sia
+# cambiato, e non resta modo di distinguere una regressione vera da un
+# aggiornamento di libreria. Da qui il vincolo `>=X,<Y` su ogni dipendenza
+# diretta, e `requirements.lock` per l'ambiente esatto.
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goalmodel"
+version = "0.1.0"
+description = "Modello probabilistico sui gol nel calcio, con il mercato come riferimento misurato"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "andrew21111" }]
+keywords = ["football", "poisson", "dixon-coles", "forecasting", "betting-markets"]
+
+dependencies = [
+    "pandas>=3.0,<4",
+    "numpy>=2.5,<3",
+    "pyarrow>=25,<26",
+    "scipy>=1.18,<2",
+    "scikit-learn>=1.9,<2",
+    "statsmodels>=0.15,<0.16",
+    "lightgbm>=4.7,<5",
+    "joblib>=1.6,<2",
+    "matplotlib>=3.11,<4",
+    "soccerdata>=1.9.1,<2",
+]
+
+[project.optional-dependencies]
+# Solo per lo stage `missing`, che guida un browser vero su WhoScored.
+# Fuori dalle dipendenze base: il modello T-24h gira senza.
+scraping = ["selenium>=4.49,<5"]
+dev = [
+    "pytest>=9.0,<10",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+]
+
+[project.scripts]
+goalmodel = "goalmodel.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+# I test girano SENZA RETE e senza toccare data/. Quelli che hanno bisogno del
+# dataset vero sono marcati `richiede_dati` e vengono saltati dove non c'e'.
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "richiede_dati: ha bisogno di data/ popolata da un'ingestion vera",
+    "lento: oltre il minuto; escluso di default in CI con -m 'not lento'",
+]
+filterwarnings = ["error::DeprecationWarning:goalmodel.*"]
+
+# ---------------------------------------------------------------------------
+# ruff — formattazione e lint
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: import inutilizzati, variabili morte (B9)
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # bugbear: except larghi, mutabili di default
+    "SIM",       # semplificazioni
+    "PTH",       # usa pathlib invece di os.path
+    "RUF",
+    "S",         # bandit: regole di sicurezza
+]
+ignore = [
+    "E501",    # la lunghezza riga la impone il formatter
+    "S101",    # assert: ce ne sono di legittimi nei _demo(); quelli di
+               # produzione sono un finding aperto (B3) e si tolgono li'
+]
+
+[tool.ruff.lint.per-file-ignores]
+# I test possono usare assert liberamente ed essere meno severi.
+"tests/*" = ["S", "E402"]
+"scripts/*" = ["T201"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["goalmodel"]
+
+# ---------------------------------------------------------------------------
+# mypy — graduale: si parte permissivi e si stringe modulo per modulo
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["src/goalmodel"]
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
