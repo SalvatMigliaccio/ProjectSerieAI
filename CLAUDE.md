@@ -685,7 +685,22 @@ mancava.
 
 `goalmodel ingest --stage cups` scarica Champions, Europa e Conference League
 da FBref: **solo calendario, una richiesta per competizione e stagione, niente
-browser** (4140 partite). Le tre coppe sono chiavi nuove in `LEAGUE_DICT`,
+browser**.
+
+**ATTENZIONE, LE 4140 PARTITE ERANO DUE COPPE SU TRE.** Il numero scritto qui
+in origine — 4140 — e' esattamente Champions (1766) piu' Europa (2374): la
+Conference League **non e' mai stata scaricata**. `ingest_cups` metteva il
+`try` per competizione invece che per stagione, e `KeyError: '1415'` (la
+Conference non esiste prima del 2021/22) si portava via l'intera coppa,
+comprese le stagioni in cui esisteva. Corretto il 22 settembre 2026, con
+isolamento per (coppa, stagione) e un test che lo verifica.
+
+**Cosa ne segue per il blocco A.** Il 23.6% di partite con una coppa nei 14
+giorni precedenti e' calcolato SENZA la Conference, e le stagioni scoperte —
+dal 2021/22 — sono proprio quelle che si sovrappongono al test set. Roma,
+Fiorentina, Lazio e Atalanta ci hanno giocato. Il blocco e' stato misurato
+nullo e scartato, quindi la conclusione non cambia; ma se un giorno si
+riapre, va rimisurato sui dati completi, non su questi. Le tre coppe sono chiavi nuove in `LEAGUE_DICT`,
 registrate a runtime da `ingest.registra_coppe` — vedi `config.FBREF_CUPS`, e i
 nomi devono essere quelli esatti della pagina `fbref.com/en/comps/`.
 

@@ -193,8 +193,61 @@ def main() -> None:
     test_no_parallel_resta_seriale()
     test_uno_stage_rotto_non_ferma_gli_altri()
     test_ogni_stage_ha_un_host_dichiarato()
+    test_coppa_sopravvive_a_una_stagione_mancante()
     print("\ntutti i controlli sullo scheduler superati")
 
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------------------
+# Isolamento degli errori nell'ingestion delle coppe
+# ---------------------------------------------------------------------------
+
+def test_coppa_sopravvive_a_una_stagione_mancante() -> None:
+    """
+    Una stagione in cui la competizione non esisteva non deve portarsi via
+    le stagioni in cui esisteva.
+
+    E' GIA' SUCCESSO. La Conference League non esiste prima del 2021/22 e
+    soccerdata solleva `KeyError: '1415'` invece di restituire vuoto: con il
+    `try` messo per competizione invece che per stagione, l'eccezione si
+    portava via l'intera coppa. Il file conteneva 4140 partite di sola
+    Champions ed Europa, zero di Conference, e quel 4140 era finito nella
+    documentazione come se le coppe fossero tre.
+    """
+    import pandas as pd
+
+    from goalmodel import ingest
+
+    VIVE = {"2122", "2223", "2324"}
+
+    class FBrefFinto:
+        def __init__(self, leagues, seasons):
+            self.stagione = seasons[0]
+
+        def read_schedule(self):
+            if self.stagione not in VIVE:
+                raise KeyError(self.stagione)      # come fa soccerdata
+            return pd.DataFrame({"game": [f"g{self.stagione}"]})
+
+    orig_fb, orig_seasons = ingest.sd.FBref, ingest.SEASONS
+    orig_registra = ingest.registra_coppe
+    orig_save = pd.DataFrame.to_parquet
+    ingest.sd.FBref = FBrefFinto
+    ingest.SEASONS = ["1415", "1516", "2122", "2223", "2324"]
+    ingest.registra_coppe = lambda: ["UEFA-Conference League"]
+    pd.DataFrame.to_parquet = lambda self, *a, **k: None
+    try:
+        out = ingest.ingest_cups()
+    finally:
+        ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
+        ingest.registra_coppe = orig_registra
+        pd.DataFrame.to_parquet = orig_save
+
+    assert len(out) == len(VIVE), (
+        f"{len(out)} stagioni raccolte invece di {len(VIVE)}: una stagione "
+        f"mancante si e' portata via anche quelle che c'erano"
+    )
+    print("7. coppe: una stagione assente non ne uccide altre   ok")

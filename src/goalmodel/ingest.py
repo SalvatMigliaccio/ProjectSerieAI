@@ -360,20 +360,48 @@ def ingest_cups() -> pd.DataFrame:
     squadra gioca il martedi'. E' ingestion di solo calendario — una richiesta
     per competizione e stagione, niente browser.
 
-    Le competizioni si scaricano una per volta: una stagione senza quella coppa
-    (la Conference prima del 2021/22) fa fallire l'intera chiamata se sono
-    tutte insieme, e si perderebbero anche quelle che ci sono.
+    SI ISOLA PER (COMPETIZIONE, STAGIONE), NON PER COMPETIZIONE. La versione
+    precedente chiedeva tutte le stagioni di una coppa in una chiamata sola e
+    catturava l'errore per competizione. Sembra abbastanza, e non lo e': la
+    Conference League non esiste prima del 2021/22, soccerdata solleva
+    `KeyError: '1415'` invece di restituire vuoto, e l'eccezione si portava via
+    l'INTERA competizione — comprese le stagioni che c'erano.
+
+    Non e' un'ipotesi: e' successo. Il file conteneva 4140 partite di sola
+    Champions (1766) ed Europa (2374), zero di Conference, e il numero 4140
+    era finito nella documentazione come se le coppe fossero tre. Le stagioni
+    2021/22 in poi della Conference non sono mai state scaricate, e sono
+    proprio quelle che si sovrappongono al test set.
+
+    Il numero di richieste non cambia: soccerdata ne fa comunque una per
+    stagione. Cambia solo dove si mette il `try`.
     """
     coppe = registra_coppe()
     pezzi = []
     for coppa in barra(coppe, "coppe"):
-        try:
-            fb = sd.FBref(leagues=[coppa], seasons=SEASONS)
-            df = fb.read_schedule().reset_index()
+        righe_coppa = 0
+        stagioni_ok = 0
+        for stagione in SEASONS:
+            try:
+                fb = sd.FBref(leagues=[coppa], seasons=[stagione])
+                df = fb.read_schedule().reset_index()
+            except Exception as exc:
+                # Una stagione in cui la competizione non esisteva ancora e'
+                # NORMALE (la Conference prima del 2021/22): si annota a
+                # livello debug e si va avanti.
+                log.debug("%s %s non disponibile: %s", coppa, stagione,
+                          type(exc).__name__)
+                continue
+            if df.empty:
+                continue
             pezzi.append(df.assign(competition=coppa))
-            log.info("%-26s %5d partite", coppa, len(df))
-        except Exception as exc:
-            log.warning("%s non scaricata: %s", coppa, exc)
+            righe_coppa += len(df)
+            stagioni_ok += 1
+        if righe_coppa:
+            log.info("%-26s %5d partite su %d stagioni",
+                     coppa, righe_coppa, stagioni_ok)
+        else:
+            log.warning("%s: nessuna stagione disponibile", coppa)
 
     if not pezzi:
         raise RuntimeError("nessuna coppa scaricata")
