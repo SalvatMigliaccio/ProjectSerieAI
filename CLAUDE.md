@@ -22,14 +22,28 @@ livello puo' importare **solo quelli sotto di se'**:
 ```
 config
   ingest, normalize        acquisizione e unificazione delle fonti
+    risultati              la catena di fonti per il risultato vero
     features/              forma, mercato, contesto, giocatori
       models/              M0..M6, dalla lambda alla matrice dei risultati
         evaluation/        RPS, calibrazione, walk-forward, potenza
           prediction/      previsione, registro, ciclo della giornata
-            reporting/     report HTML
+            reporting/     sezioni (calcolo) -> pagina (HTML) -> report (regia)
 
 experiments/               importa tutto, non e' importato da nessuno
 ```
+
+Fuori dal pacchetto, e di proposito:
+
+```
+backend/                   API HTTP in sola lettura. Importa goalmodel, mai
+                           il contrario. Dipendenze nell'extra `api`
+frontend/                  React + Vite. Consuma web/openapi.json
+```
+
+`backend` e' un secondo pacchetto installabile, non un sottomodulo di
+`goalmodel`: ha dipendenze proprie (FastAPI, uvicorn) e un ciclo di rilascio
+proprio. Chi lavora al modello non deve installare un web server per lanciare
+un walk-forward.
 
 **Un import all'indietro e' una decisione di architettura, non una comodita'.**
 Ce n'e' gia' uno da sciogliere: `models/gbm.py` e `models/dixon_coles.py`
@@ -1279,6 +1293,86 @@ il weekend e il **martedi' entro le 13:00** per gli infrasettimanali. Lanciare
 `predict_round` prima di quei momenti trovera' la giornata ancora `futura`, e
 lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 
+### Il track record si scrive solo da processi locali — regola, non preferenza
+
+**Le uniche cose che scrivono nel registro sono `predict_round` e
+`close_round`, lanciati sulla macchina.** Nessuna richiesta HTTP, mai. L'API in
+`backend/api/` e' una **vista**: espone solo GET, e un test fallisce all'avvio
+se una rotta dichiara un metodo diverso da GET/HEAD/OPTIONS.
+
+**Struttura del monorepo**: `src/` e' la pipeline (produzione), `backend/`
+l'API che la legge, `frontend/` la dashboard (React + TypeScript, Vite). La
+dipendenza e' a senso unico — `frontend` -> `backend` -> `src`, mai il
+contrario — ed e' il motivo per cui spostare l'API fuori da `src/` non ha
+richiesto di toccare un solo modulo di produzione.
+
+Il frontend parla con l'API **solo via HTTP e solo in GET**: non importa nulla
+di Python e non conosce i percorsi dei file. I tipi in `frontend/src/api/types.ts`
+ricalcano `web/openapi.json`, che e' il contratto e va riesportato quando gli
+schemi cambiano (`tests/test_api.py` fallisce se diverge).
+
+Il motivo e' lo stesso per cui il registro e' append-only con backup e con due
+difese sul calcio d'inizio: **una previsione vale solo se e' stata scritta
+prima del fischio**, da un processo che non sapeva il risultato. Un endpoint di
+scrittura e' esattamente il modo di perdere quella garanzia — chiunque abbia
+l'URL potrebbe aggiungere una riga a partita finita, e a mesi di distanza
+nessuno saprebbe distinguerla dalle altre.
+
+Se un giorno servisse far partire una previsione da remoto, **non si aggiunge
+un POST**: si fa girare il comando locale (scheduler, o a mano). La
+disponibilita' dell'API non e' un problema del track record; la sua integrita'
+si'.
+
+Garanzie verificate, non promesse: `backend/api/__init__.py` sostituisce
+`to_csv`/`to_parquet` e rifiuta ogni scrittura sotto `track_record/` e `data/`
+— lo stesso idioma di `src/experiments/` — e `tests/test_api.py` verifica che
+nessuna rotta di scrittura esista e che `lightgbm` non finisca in
+`sys.modules`: **l'API non esegue mai modelli.**
+
+### Le selezioni si mostrano, il valore atteso no — regola
+
+Il progetto **mostra le selezioni** su tutti i mercati (`report.selezioni`,
+tabella di `predict_round`, sezione del report, `GET /api/selections`), con
+probabilita' e **quota equa** accanto. Serve a scegliere cosa giocare sapendo
+quanto e' probabile e quanto pagherebbe a valore atteso zero.
+
+**Quello che non si espone mai, da nessuna parte: valore atteso, puntata
+consigliata, stake, "value".** Non e' prudenza, e' aritmetica misurata: M1 *e'*
+la linea di apertura del book con il margine tolto, quindi l'EV calcolato sulle
+sue probabilita' contro quelle stesse quote e' **-5.2% su ogni riga**, e zero
+giocate su 3420 risultano positive. Un numero del genere in interfaccia
+sarebbe circolare e falso insieme.
+
+**Filtrare per quota sposta la varianza, non il margine.** Vale per la soglia
+minima della linea del modello (1.30 dal 22 settembre 2026, prima 1.50: la
+tabella della scelta e' accanto a `config.QUOTA_MINIMA_SELEZIONE`) come per la
+banda della dashboard (1.20): il margine
+del book e' identico su tutti i mercati derivati dalle stesse quote. Misurato:
+la doppia chance piu' sicura vince l'80.6% delle volte e rende -2.9%, con
+intervallo che esclude lo zero.
+
+**La linea principale e' quella di M1, e non si ritaglia a richiesta.**
+`GET /api/picks` non accetta parametri di quota: usa
+`config.QUOTA_MINIMA_SELEZIONE` e restituisce le stesse selezioni che
+`predict_round` stampa il venerdi' e che il report pubblica. La banda
+regolabile (`/api/selections`) e' una lettura **secondaria**, dichiarata tale
+anche in pagina. Se una soglia scelta nell'interfaccia potesse ridefinire le
+selezioni del modello, il track record misurerebbe una cosa e la dashboard ne
+mostrerebbe un'altra — ed e' il modo piu' rapido di rendere insensato tutto il
+resto. `tests/test_api.py` verifica che nessun parametro le sposti.
+
+**La "selezione migliore" si ricalcola, non si salva.** Una per partita, la
+piu' probabile dentro la banda di quota richiesta. Il registro conserva i due
+lambda, e da quelli ogni mercato si ricostruisce esatto: congelare la scelta
+significherebbe non poter piu' cambiare il criterio sulle giornate gia' chiuse
+— ed e' proprio il criterio la cosa che si vorra' ritoccare. Vale anche per
+`predict_round`: il registro resta la distribuzione, mai la giocata.
+
+**La quota del book esiste solo per l'1X2**, ed e' l'unica che il registro
+conserva. Per doppia chance, over/under e mercati gol resta vuota: stimarla
+applicando un margine medio sarebbe inventare un numero con l'aria di essere
+misurato — vale per il report come per l'API.
+
 ### `predict_round` — da aperta a predetta
 
 Aggiorna dati e quote, ricostruisce dataset e feature, individua **da solo** la
@@ -1304,6 +1398,26 @@ giornata predetta e **interamente** giocata, aggancia i risultati veri e la
 archivia in `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione,
 risultato ed errore di ogni singola partita. Poi rifa' il riepilogo cumulativo
 in `track_record/rounds/riepilogo.csv` e rigenera il report.
+
+**I risultati arrivano da una catena di fonti** (`src/risultati.py`, dal 21
+settembre 2026): football-data per primo, poi Understat, poi FBref. Il motivo
+e' stato misurato: football-data aggiorna il file della stagione un paio di
+volte a settimana, e il lunedi' sera della giornata 5 non aveva ancora nessuno
+dei dieci risultati, mentre Understat — scaricato dallo stesso comando alla
+stessa ora — li aveva tutti. Il ripiego scatta **subito**, appena la fonte
+principale manca (scelta esplicita). Il file di giornata registra la
+provenienza in `fonte_risultato`.
+
+Quanto ci si puo' fidare: su 4600 partite in entrambe le fonti, football-data e
+Understat coincidono nel **99.98%**. L'unica differenza e' Sassuolo-Pescara
+2016/17 — 2-1 in campo, 0-3 a tavolino — perche' football-data registra il
+risultato **ufficiale** e Understat quello del campo. Per questo
+`close_round` chiama `riconcilia()` all'avvio: se una giornata chiusa con un
+risultato di ripiego diverge da quello ufficiale pubblicato dopo, lo
+**avvisa**, ma non riscrive l'archivio. La catena tocca solo i risultati:
+`matches_master`, il dataset del modello, resta costruito da football-data.
+Verificato con `tests/test_risultati.py` e con l'impronta di produzione
+invariata.
 
 **Una giornata incompleta non si chiude.** Se anche una sola partita non ha il
 risultato — posticipo, rinvio — la giornata resta aperta e si riprova al lancio
@@ -1544,9 +1658,29 @@ non misurato non entra — vale per il codice.
 
 ## Sicurezza — regole di codice
 
-Il progetto non ha utenti ne' superficie di rete in ingresso, quindi la
-sicurezza qui e' soprattutto **integrita' dei dati e del registro**. Le regole
-sotto sono quelle che mordono davvero.
+**QUESTA PREMESSA E' CAMBIATA IL 22 SETTEMBRE 2026.** Fino a ieri era vero
+che il progetto non avesse utenti ne' superficie di rete in ingresso. Con
+`backend/api/` esiste un servizio HTTP, e da qui in poi le regole sotto non
+bastano piu' da sole: valgono ancora tutte, ma sopra di esse c'e' una
+superficie esposta.
+
+Cosa regge oggi quella superficie, e va saputo prima di toccarla:
+`_assert_read_only_routes()` fallisce **all'avvio** se una rotta dichiara un
+metodo diverso da GET/HEAD/OPTIONS, e `_guard_writes()` sostituisce
+`to_csv`/`to_parquet` e rifiuta ogni scrittura sotto `track_record/` e `data/`
+— lo stesso idioma di `experiments.proteggi_produzione()`, con gli stessi
+limiti dichiarati. Nessun modello viene mai caricato: gli import pesanti stanno
+dentro le funzioni, e `tests/test_api.py` lo verifica **in un sottoprocesso**,
+perche' su `sys.modules` condiviso la risposta sarebbe quella della sessione di
+test, non quella dell'API.
+
+Il giorno in cui arrivano autenticazione e scritture, quella garanzia va
+**ristretta al registro di proposito**, non persa per distrazione: una
+previsione vale solo se scritta prima del fischio da un processo locale, e un
+endpoint di scrittura e' esattamente il modo in cui quella garanzia si perde.
+
+Il resto della sicurezza qui resta **integrita' dei dati e del registro**. Le
+regole sotto sono quelle che mordono davvero.
 
 1. **Nessun segreto nel repository.** Niente chiavi, token, credenziali,
    nemmeno in un commento o in un file di esempio. Se un giorno servira'

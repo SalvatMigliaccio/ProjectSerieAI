@@ -67,7 +67,7 @@ COLONNE = [
     "p_home", "p_draw", "p_away", "p_over25", "p_btts",
     "lambda_home", "lambda_away",
     "odds_home", "odds_draw", "odds_away", "odds_source",
-    "FTHG", "FTAG", "FTR", "esito_previsto", "azzeccato",
+    "FTHG", "FTAG", "FTR", "fonte_risultato", "esito_previsto", "azzeccato",
     "rps", "log_loss", "brier", "rps_mercato", "valida",
 ]
 
@@ -201,6 +201,12 @@ def run(matchday: int | None = None, dry_run: bool = False,
     except rounds.PassoFallito as exc:
         log.error("%s", exc)
         return 1
+
+    # Le giornate gia' chiuse con un risultato di ripiego, confrontate con
+    # quello ufficiale se football-data nel frattempo l'ha pubblicato. Solo un
+    # avviso: l'archivio non si riscrive.
+    from .risultati import riconcilia
+    riconcilia()
 
     tab = rounds.stato_giornate()
     if matchday is None:

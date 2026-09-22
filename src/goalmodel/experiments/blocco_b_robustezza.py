@@ -94,7 +94,7 @@ def lancia(paralleli: int) -> None:
             fh = open(experiments.percorso(f"log_bloccoB_{v}_s{s}.txt"), "w",
                       encoding="utf-8")
             p = subprocess.Popen(
-                [sys.executable, "-m", "src.experiments.blocco_b_robustezza",
+                [sys.executable, "-m", "goalmodel.experiments.blocco_b_robustezza",
                  "--variante", v, "--seed", str(s)],
                 stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT,
             )

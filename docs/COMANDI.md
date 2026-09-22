@@ -432,6 +432,8 @@ python -m goalmodel.experiments.predici_gbm --matchday 5
 python -m goalmodel.experiments.predici_gbm --semi 0             # un seme solo, piu' veloce
 python -m goalmodel.experiments.predici_gbm --team Napoli
 python -m goalmodel.experiments.predici_gbm --as-of 2026-09-11 --matchday 4
+python -m goalmodel.experiments.predici_gbm --verifica           # a risultati usciti
+python -m goalmodel.experiments.predici_gbm --verifica --matchday 4
 ```
 
 Addestra M5 (GBM Poisson ancorato al mercato, media di 5 semi, le 52 colonne di
@@ -444,10 +446,322 @@ registro**: il track record resta di M1, che e' il modello di produzione.
 training a quella data**, altrimenti il modello si addestrerebbe anche sulla
 giornata che dice di prevedere.
 
+**`--verifica` e' il lunedi'.** Rilegge i file salvati, li aggancia ai risultati
+sulla quadrupla e stampa, sulle STESSE partite, RPS ed esiti dei due modelli con
+la differenza appaiata. Per questo il file salvato porta `season`, `matchday`,
+le due squadre, il calcio d'inizio e `timestamp_prediction`: senza la chiave non
+si aggancia, e senza l'istante una previsione a risultati usciti non si
+distingue da un commento.
+
+I file scritti prima che il formato avesse la chiave vengono **saltati con un
+avviso**, non fusi: fonderli darebbe righe che il merge non aggancia e che
+resterebbero per sempre "non ancora giocate". Si riscrivono con `--as-of`.
+
+Niente intervalli di confidenza su dieci partite: sul test set la differenza fra
+i due e' +0.00011 con IC [-0.00056, +0.00077], e un bootstrap su una giornata
+sarebbe un ornamento. Questo conto dice cosa e' successo, non promuove niente.
+
 Serve che le quote del turno ci siano: `goalmodel ingest --stage fixtures`.
 Se football-data non ha ancora pubblicato la Serie A, il file ha zero righe, il
 comando lo dice e non predice niente — non e' un errore, e' il turno non ancora
 uscito.
+
+---
+
+## 7ter. API in sola lettura sul track record
+
+**Dove sta.** Monorepo: `backend/api/` contiene l'API, `src/` resta la
+pipeline. La dipendenza e' a senso unico — `backend` importa `src.config`,
+`src.rounds`, `src.predict`, `src.backtest_log`, `src.evaluate` e
+`src.models.baseline`, in sola lettura; `src` non sa che il backend esiste.
+Il frontend andra' in una cartella sua accanto a queste due. **Tutti i comandi
+si lanciano dalla radice del repository**, dove `src` e `backend` sono
+entrambi importabili.
+
+```bash
+python -m backend.api --port 8000                          # http://127.0.0.1:8000/docs
+python -m backend.api --export-openapi web/openapi.json    # il file per il frontend
+python -m tests.test_api                                   # tutti gli endpoint
+```
+
+Funziona anche con uvicorn chiamato direttamente — `backend.api:app` e' un'app
+costruita all'import, senza fabbrica da invocare:
+
+```bash
+uvicorn backend.api:app --port 8000
+uvicorn backend.api:app --port 8000 --reload          # ricarica a ogni salvataggio
+uvicorn backend.api:app --host 0.0.0.0 --port 8000    # SOLO se sai perche'
+```
+
+Le due strade sono la stessa cosa: `python -m backend.api` passa proprio
+`"backend.api:app"` a uvicorn. La differenza e' che il modulo stampa anche le
+origini CORS attive e l'indirizzo di `/docs`, e accetta `--export-openapi`.
+Il default resta `127.0.0.1`: in sviluppo l'unica via d'ingresso e' il tunnel.
+
+**Sola lettura per costruzione**: solo GET, e l'app rifiuta di avviarsi se una
+rotta dichiara POST/PUT/DELETE. Le scritture sotto `track_record/` e `data/`
+sono bloccate a runtime. Il track record lo scrivono `predict_round` e
+`close_round`, mai una richiesta HTTP.
+
+| endpoint | cosa restituisce |
+|---|---|
+| `GET /api/season/{season}` | RPS di produzione, riferimento 0.1881, hits e denominatore, `sample_significant` |
+| `GET /api/rounds/{season}` | una voce per giornata: stato, conteggi, RPS archiviato |
+| `GET /api/rounds/{season}/{n}` | le partite di una giornata |
+| `GET /api/matches/{season}` | tutte le partite. Filtri: `team`, `status`, `from`, `to` |
+| `GET /api/track-record/{season}` | serie per giornata e per partita, calibrazione |
+| `GET /api/standings/{season}` | la classifica calcolata dai risultati. Spareggio: punti, **scontri diretti**, differenza reti |
+| `GET /api/picks/{season}` | **le selezioni principali**: una per partita, con la soglia dichiarata in `config.QUOTA_MINIMA_SELEZIONE`. Nessun parametro di quota |
+| `GET /api/selections/{season}` | esploratore: i mercati dentro una banda. Filtri: `min_odds`/`max_odds` (default 1.30-1.40), `matchday` |
+| `GET /api/status` | ultime esecuzioni, giornata corrente, eta' dello snapshot, prossima azione |
+| `GET /api/health` | vivo/degradato e data dell'ultimo aggiornamento |
+
+La stagione si scrive `2026-27` o `2627`, la risposta usa sempre la prima.
+`status` di una partita vale `predicted`, `resolved` o `invalid` — quest'ultimo
+sono le righe scritte dopo il fischio: **hanno il risultato ma non le
+metriche**, e `invalid_reason` dice perche'.
+
+**Niente valore atteso, stake o consigli di scommessa.** Quota equa e overround
+si', sono descrittivi: l'EV calcolato sulle probabilita' di M1 contro le quote
+da cui derivano e' circolare, e misurato vale -5.2% su ogni riga.
+
+### Le selezioni sotto soglia
+
+`GET /api/selections/2627?max_odds=1.20` ricostruisce **tutti i mercati** che
+il modello prezza — 1X2, doppia chance, over/under su cinque linee, gol-gol,
+no gol, casa segna, fuori segna — e tiene quelli la cui **quota equa** sta
+sotto la soglia. Non serve nessun dato nuovo: ogni mercato e' una somma diversa
+sulla stessa matrice dei risultati, e i due lambda sono nel registro.
+
+Riusa `report.selezioni()`, la stessa funzione della tabella di
+`predict_round` e del report HTML: due implementazioni divergerebbero, e il
+primo sintomo sarebbe una dashboard che contraddice il terminale del venerdi'.
+
+Due cose da sapere leggendo la risposta:
+
+- **`book_odds` e' null su tutto tranne l'1X2.** Il registro conserva solo
+  quella. Per doppia chance e mercati gol il prezzo vero ce l'ha il tuo book:
+  stimarlo con un margine medio sarebbe un numero inventato con l'aria di
+  essere misurato.
+- **I mercati triviali non escono mai** (`over 0.5`, `under 4.5`, ...): nessun
+  book li paga abbastanza da essere una giocata, e sotto 1.20 sarebbero tre
+  quarti dell'elenco. Sono elencati in `excluded_markets`, cosi' l'esclusione
+  si vede invece di essere silenziosa.
+
+**La banda, non il tetto.** Sotto 1.20 restano quasi solo quasi-certezze che
+pagano troppo poco; il default e' **1.30-1.40**, dove probabilita' e prezzo
+stanno insieme. `min_odds` e `max_odds` cambiano la banda.
+
+**`best_per_match`**: una selezione per partita, la piu' probabile dentro la
+banda (a parita', la quota piu' alta). Non e' salvata nel registro, si
+**ricalcola** dai due lambda: congelarla significherebbe non poter piu'
+cambiare il criterio sulle giornate gia' chiuse.
+
+**`matches_covered` contro `matches_total`**: una banda stretta lascia partite
+senza nessun mercato dentro, e il buco va letto — 1.40-1.50 copre 12 partite su
+18, 1.30-1.40 ne copre 17.
+
+Misurato sulle giornate 3 e 4:
+
+| banda | selezioni | vinte | una per partita |
+|---|---|---|---|
+| 1.20 - 1.30 | 22 su 16 partite | 15/18 | — |
+| **1.30 - 1.40** | **36 su 17 partite** | **26/32** | **13/15** |
+| 1.40 - 1.50 | 20 su 12 partite | 15/19 | — |
+
+Sotto quota equa 1.20 ci sarebbero 12 selezioni (10 vinte su 11), ma con i
+mercati triviali dentro sarebbero 41, di cui 30 fra `over 0.5` e `under 4.5`.
+
+CORS: `AI_NAPLES_CORS_ORIGINS="http://localhost:5173,https://tuo-frontend"`.
+Senza variabile valgono i soli localhost di sviluppo, mai `*`.
+
+Le risposte portano `Cache-Control: public, max-age=300` e un ETag derivato
+dagli mtime dei file: fra un venerdi' e il martedi' successivo il frontend
+riceve 304 e il server non lavora.
+
+### Far vedere il sito a qualcuno — UN SOLO TUNNEL, sulla 5173
+
+```bash
+python -m backend.api --port 8000      # terminale 1, resta su 127.0.0.1
+cd frontend && npm run dev             # terminale 2
+ngrok http 5173                        # terminale 3 — e' questo l'URL da dare
+```
+
+Il tunnel va sul **frontend**, non sull'API. Chi apre il link chiede
+`/api/...` alla stessa origine della pagina, il server di sviluppo gira quelle
+richieste all'API locale (`server.proxy` in `vite.config.ts`), e l'API resta
+raggiungibile solo da questo computer.
+
+**Perche' non due tunnel.** Sarebbe la strada ovvia — uno sulla 5173 e uno
+sulla 8000, con `?api=` a dire al frontend dove chiamare — e costa due URL da
+tenere allineati a ogni riavvio, il dominio del frontend da aggiungere in
+`AI_NAPLES_CORS_ORIGINS`, e nel piano gratuito di ngrok un secondo agente che
+non c'e'. Con il proxy non esiste una seconda origine, quindi il CORS non entra
+nemmeno in gioco.
+
+Tre cose che facevano fallire questo giro, tutte verificate:
+
+- **Vite ascoltava solo su `[::1]`.** `netstat` mostrava `[::1]:5173` in
+  ascolto e niente su `127.0.0.1:5173`: dal browser di casa il sito si apriva,
+  ma un tunnel che si collega all'IPv4 di loopback prendeva "connection
+  refused". Ora `server.host: true`, quindi il server di sviluppo e'
+  raggiungibile anche dalla rete locale finche' resta acceso.
+- **Vite rifiuta gli Host che non conosce** ("Blocked request. This host is not
+  allowed"), e un tunnel ne porta sempre uno nuovo: in `allowedHosts` ci sono i
+  domini dei servizi di tunneling, non `true` — che accetterebbe qualunque
+  Host, DNS rebinding compreso.
+- **`127.0.0.1:8000` fuori da localhost e' il computer di chi guarda.** Se la
+  pagina non arriva da localhost, `client.ts` chiama la propria origine invece
+  dell'indirizzo locale: li' quell'indirizzo non e' "quasi giusto", e' l'API di
+  qualcun altro.
+
+Per esporre invece la sola API (un altro frontend, una prova con `curl`):
+`ngrok http 8000`, e il dominio del frontend va in `AI_NAPLES_CORS_ORIGINS`.
+L'URL pubblico cambia a ogni riavvio nel piano gratuito, quindi il frontend lo
+legge da `?api=` o da una variabile d'ambiente, mai dal codice.
+
+Per un deploy stabile, in ordine di parti mobili:
+
+1. **Export statico** — se il frontend non ha bisogno dei filtri, i JSON su
+   GitHub Pages: zero server, zero uptime da garantire.
+2. **Container** con `track_record/` montato in sola lettura.
+3. **VPS** con uvicorn dietro nginx e HTTPS.
+
+---
+
+## 7quater. Scheduler di Windows
+
+```bash
+scripts\predict_round.cmd     # venerdi' — M1 nel registro, poi M5 in coda
+scripts\close_round.cmd       # martedi'
+scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
+```
+
+**`predict_round.cmd` fa due cose, in quest'ordine**: scrive le previsioni di
+M1 nel registro, poi lancia M5 che salva la sua opinione sulla stessa giornata
+in `experiments/output/`. Concatenati e non due task separati per due motivi:
+M5 non fa ingestion propria e deve leggere il dataset che `predict_round` ha
+appena ricostruito; e ogni trigger che fa partire l'uno — compresi i recuperi
+che Windows esegue in ritardo al risveglio — copre anche l'altro, senza una
+seconda serie di orari da tenere allineata.
+
+**L'uscita di M5 viene scartata di proposito.** E' diagnostica: se il GBM non
+si addestra, il registro e' stato scritto lo stesso, e il task non deve
+riportare una giornata fallita per qualcosa che il registro non lo tocca
+nemmeno. Per lo stesso motivo M5 non compare in `last_run.json`: `/api/status`
+parla del track record, e un'entrata li' farebbe pensare che sia stato toccato.
+
+Registrano tutto in `logs\scheduler_YYYYMMDD.log` e scrivono `logs\last_run.json`,
+che e' quello che legge `GET /api/status` — il log resta per gli umani, l'API
+non ne parsa la prosa.
+
+**I task sono registrati su questa macchina dal 18 settembre 2026.** Questi sono
+i comandi con cui ricrearli altrove, o qui dopo una reinstallazione:
+
+```powershell
+$repo = "D:\Progetti\AI_Naples"
+schtasks /create /tn "AI_Naples predict_round 1815"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 18:15 /f
+schtasks /create /tn "AI_Naples predict_round 1915"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 19:15 /f
+schtasks /create /tn "AI_Naples predict_round 2000"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 20:00 /f
+schtasks /create /tn "AI_Naples predict_round sabato" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d SAT /st 09:00 /f
+schtasks /create /tn "AI_Naples close_round"          /tr "$repo\scripts\close_round.cmd"   /sc weekly /d TUE /st 09:00 /f
+```
+
+**Le impostazioni predefinite di `schtasks` fanno fallire i task in silenzio, e
+vanno cambiate subito dopo averli creati.** Di default Windows non avvia un task
+se il portatile e' a batteria, e lo ferma se ci passa mentre gira: su un
+portatile staccato dalla presa non parte niente e non resta traccia.
+
+```powershell
+foreach ($n in (Get-ScheduledTask -TaskName "AI_Naples*").TaskName) {
+  Set-ScheduledTask -TaskName $n -Settings (New-ScheduledTaskSettingsSet `
+    -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+    -WakeToRun -ExecutionTimeLimit (New-TimeSpan -Hours 1) -MultipleInstances IgnoreNew)
+}
+```
+
+- `-StartWhenAvailable` recupera un orario mancato (PC spento alle 18:15, acceso
+  alle 21): il run parte appena puo'. Le partite gia' cominciate restano fuori
+  da sole, se ne occupa l'assert sul calcio d'inizio.
+- `-WakeToRun` sveglia il PC sospeso. Funziona solo se i timer di riattivazione
+  non sono disabilitati nelle opzioni di risparmio energia.
+- `-MultipleInstances IgnoreNew`: se il run delle 18:15 sta ancora girando alle
+  19:15, il secondo non parte invece di sovrapporsi.
+- Serve comunque che il PC sia **acceso**: un task che non parte non lascia log,
+  e te ne accorgi solo dal buco nel track record.
+
+I rilanci sono ridondanti di proposito: i comandi sono idempotenti, una partita
+gia' in registro viene saltata.
+
+**Perche' quegli orari.** football-data pubblica le quote **entro le 17:00 UK,
+cioe' le 18:00 italiane**, e il margine fino al primo fischio e' stretto: la
+giornata 5 ha Monza-Sassuolo alle **20:45**.
+
+| orario | cosa trova |
+|---|---|
+| ven 18:15 | le quote appena pubblicate, nel caso normale |
+| ven 19:15 | rete di sicurezza se alle 18 non erano ancora uscite |
+| ven 20:00 | ultima occasione prima del fischio delle 20:45 |
+| sab 09:00 | le partite che lo snapshot del venerdi' non copriva |
+
+Una previsione scritta dopo il fischio non e' una previsione: se tutti i run del
+venerdi' saltano, la partita del venerdi' sera e' persa per sempre dal track
+record, mentre le altre nove restano recuperabili il sabato.
+
+Verifica manuale, senza aspettare venerdi':
+
+```powershell
+schtasks /run /tn "AI_Naples predict_round 1815"
+Get-ScheduledTask -TaskName "AI_Naples*" | Get-ScheduledTaskInfo |
+  Select-Object TaskName, NextRunTime, LastRunTime, LastTaskResult
+Get-Content logs\scheduler_*.log -Tail 30
+Get-Content logs\last_run.json
+```
+
+`LastTaskResult` e' un codice Windows, non l'uscita del comando: `267011`
+(0x41303) vuol dire "mai eseguito", `267009` (0x41301) "in esecuzione adesso",
+`0` finito bene. L'esito vero del comando sta in `last_run.json`.
+
+---
+
+## 7quinquies. Frontend — React + TypeScript
+
+```bash
+cd frontend
+npm install            # solo la prima volta
+npm run dev            # http://localhost:5173
+npm run build          # typecheck + bundle in frontend/dist
+npm run preview        # serve il dist gia' costruito
+npm run typecheck      # solo tsc, senza bundle
+```
+
+Serve l'API accesa: `python -m backend.api --port 8000` dalla radice del
+repository, in un altro terminale.
+
+**L'URL dell'API e' una variabile d'ambiente.** Copia `.env.example` in
+`.env.local` e metti `VITE_API_BASE_URL`. Per provare un tunnel senza
+ricostruire, si puo' passare `?api=https://...` nella query: viene ricordato in
+`localStorage`, perche' l'URL di ngrok cambia a ogni riavvio.
+
+**La porta 5173 non e' casuale**: e' fra le origini CORS che l'API accetta per
+default. Se la cambi, aggiorna `AI_NAPLES_CORS_ORIGINS` lato backend, o il
+browser blocchera' le chiamate senza che il server se ne accorga.
+
+Due schermate, in `src/pages/`:
+
+| schermata | cosa mostra |
+|---|---|
+| `/` | cosa fa il modello, l'avvertenza sul non essere uno strumento di scommessa, e tre numeri da `/api/season` |
+| `/#/dashboard` | barra di stato, selettore delle 38 giornate, tabella partite con riga espandibile, pannello track record con RPS cumulativo |
+
+Il router e' `HashRouter`: il sito e' statico e puo' finire su qualsiasi host
+senza regole di rewrite, e con i path veri ricaricare `/dashboard` darebbe 404.
+
+**Cosa il frontend non fa, e non deve fare.** Nessuna chiamata che non sia una
+GET, nessun consiglio di scommessa, nessun valore atteso. Quota equa e
+overround si', sono descrittivi. I campi null si mostrano vuoti — mai zero, che
+su un RPS significherebbe previsione perfetta — e le percentuali portano sempre
+il denominatore: `44% (7 su 16)`, mai `44%`.
 
 ---
 
@@ -480,6 +794,7 @@ python -m tests.test_market            # de-vigging di Shin, lambda impliciti
 python -m tests.test_kickoff           # fusi orari e ordine previsione/fischio
 python -m tests.test_leakage           # il walk-forward non vede il futuro
 python -m tests.test_predictions_log   # append-only e idempotenza del registro
+python -m tests.test_api               # i sette endpoint, i null, sola lettura
 ```
 
 I quattro test centrali coprono i punti in cui un errore **non darebbe
@@ -520,6 +835,9 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | `track_record/rounds/riepilogo.csv` | `close_round` | cumulativo per giornata, rifatto da zero a ogni chiusura |
 | `track_record/report.html` | `*_round`, `report` | il report a percorso fisso. NON versionato: si rigenera |
 | `data/processed/reports/giornata_*.html` | `*_round`, `report` | archivio del report, uno per giornata |
+| **`web/openapi.json`** | `backend.api --export-openapi` | **il contratto per il frontend. Versionato: un test fallisce se diverge dall'app** |
+| `logs/scheduler_*.log` | `scripts\*.cmd` | un file al giorno, output completo dei comandi. NON versionato |
+| `logs/last_run.json` | `scripts\*.cmd` | esito dell'ultima esecuzione di ciascun comando, letto da `/api/status`. NON versionato |
 
 Tutto `data/` e' in `.gitignore`.
 

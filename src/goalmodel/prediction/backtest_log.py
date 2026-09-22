@@ -35,7 +35,7 @@ import logging
 
 import pandas as pd
 
-from .. import config, data
+from .. import config
 from ..evaluation.evaluate import (
     _onehot,
     accuracy,
@@ -131,8 +131,13 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
 
 def attach_results(preds: pd.DataFrame) -> pd.DataFrame:
     """Aggancia i risultati veri. Chiave la quadrupla, mai la data."""
-    truth = data.load_master()
-    truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR"]].drop_duplicates(subset=KEYS)
+    # I risultati arrivano dalla catena di fonti (football-data, poi Understat,
+    # poi FBref), con la provenienza in `fonte_risultato`: vedi
+    # `goalmodel/risultati.py`, che a sua volta legge da `data.py`.
+    from ..risultati import risultati
+    truth = risultati()
+    truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR", "fonte_risultato"]]
+    truth = truth.drop_duplicates(subset=KEYS)
     truth["season"] = truth["season"].astype(str)
 
     if "post_kickoff" not in preds.columns:

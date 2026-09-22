@@ -243,7 +243,12 @@ def stato_giornate(
         return pd.DataFrame()
 
     master = data.load_master()
-    giocate = set(_chiavi(master[master["FTR"].notna()]))
+    # Giocata = ha un risultato in QUALUNQUE fonte della catena, non solo in
+    # football-data: altrimenti la giornata risulterebbe "predetta" per giorni
+    # dopo l'ultimo fischio, e `close_round` non la vedrebbe mai. Vedi
+    # `goalmodel/risultati.py`. Le quote restano da `master`, che non cambia.
+    from ..risultati import risultati
+    giocate = set(_chiavi(risultati()))
     # Il percorso si passa esplicitamente invece di lasciare il default, che
     # `already_logged` fissa all'import: e' l'unico modo di far girare lo
     # stato su un registro finto in un test.

@@ -1,0 +1,11 @@
+# Qui vanno le immagini statiche, servite alla radice del sito.
+#
+#   hero-bg.jpg      2400x1400, JPG q80, < 400 kB. Stadio notturno, niente
+#                    testo, meta' sinistra scura: sopra ci va il titolo.
+#   hero-player.webp facoltativa. Ritaglio con trasparenza, ~1400 px di
+#                    altezza, nessun logo di club o sponsor.
+#
+# Senza `hero-bg.jpg` la hero resta leggibile: il fondale dipinto in
+# styles.css (.hero::before) e' gia' un fondale, non un rettangolo vuoto.
+# Vite avvisa in build che il file non si risolve, ed e' atteso finche' non
+# lo aggiungi.

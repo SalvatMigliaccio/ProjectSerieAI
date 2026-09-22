@@ -46,13 +46,31 @@ dev = [
     "pytest-cov>=6.0",
     "ruff>=0.9",
     "mypy>=1.14",
+    # Solo per il TestClient di FastAPI in tests/test_api.py.
+    "httpx>=0.27,<1",
+]
+
+# L'API in sola lettura sul track record (`backend/api/`). E' un extra e non
+# una dipendenza normale perche' ingestion, feature, modelli e i due comandi
+# di giornata girano senza: chi lavora al modello non deve installare un web
+# server per lanciare un walk-forward.
+api = [
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.27,<1",
 ]
 
 [project.scripts]
 goalmodel = "goalmodel.cli:main"
 
+# DUE radici, e non e' un compromesso. `goalmodel` e' la libreria e sta in
+# src-layout (A1); `backend` e' un deployable diverso — altre dipendenze, altro
+# ciclo di rilascio, e un giorno forse un altro repository — quindi resta un
+# pacchetto suo alla radice invece di finire dentro la libreria che consuma.
+# Dichiararlo qui serve a una cosa sola: che `import backend` funzioni da
+# qualunque directory, esattamente come `import goalmodel`.
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["src", "."]
+include = ["goalmodel*", "backend*"]
 
 # ---------------------------------------------------------------------------
 # pytest
@@ -73,6 +91,10 @@ filterwarnings = ["error::DeprecationWarning:goalmodel.*"]
 # ruff — formattazione e lint
 # ---------------------------------------------------------------------------
 [tool.ruff]
+# `.claude/skills/` e' strumentazione di terze parti versionata con il
+# repository, non codice del progetto: 347 findings che non diciamo di voler
+# correggere renderebbero il gate di CI rumore invece che segnale.
+extend-exclude = [".claude", "frontend"]
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]

@@ -157,7 +157,7 @@ def lancia() -> None:
     for s in coda:
         fh = open(experiments.percorso(f"log_sede_s{s}.txt"), "w", encoding="utf-8")
         processi.append((s, fh, subprocess.Popen(
-            [sys.executable, "-m", "src.experiments.forma_venue", "--seed", str(s)],
+            [sys.executable, "-m", "goalmodel.experiments.forma_venue", "--seed", str(s)],
             stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT)))
     for s, fh, p in processi:
         p.wait()
