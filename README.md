@@ -360,7 +360,16 @@ due.
 
 ## Licenza
 
-**Non ancora scelta.** Senza un file `LICENSE` il codice e' per difetto "tutti
-i diritti riservati": va bene per un repository privato, va deciso prima di
-renderlo pubblico. I dati provengono da fonti terze con i loro termini d'uso,
-che la licenza del codice non copre.
+**GNU AGPL-3.0-or-later** — vedi [LICENSE](LICENSE).
+
+La clausola che distingue la AGPL dalla GPL: chi fa girare una versione
+modificata di questo programma **come servizio accessibile in rete** deve
+offrirne il sorgente a chi lo usa. E' il motivo della scelta — il progetto
+potrebbe diventare un servizio, e la stessa condizione vale per chiunque altro
+voglia farlo.
+
+**La licenza copre il codice, non i dati.** Risultati, quote, xG e calendari
+arrivano da fonti terze (football-data.co.uk, Understat, FBref, WhoScored) con
+i loro termini d'uso, che questa licenza non estende e non puo' estendere. Lo
+stesso vale per `track_record/`, che contiene previsioni prodotte da questo
+progetto e non dati di terzi.
