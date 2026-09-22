@@ -309,8 +309,17 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
     try:
         modello.fit(train)
         alt = modello.predict(preds)
-    except Exception as exc:  # il report deve uscire comunque
-        diag.avvisa(f"M4 non ha prodotto previsioni ({exc}): sezione divergenza saltata")
+    except Exception as exc:
+        # LARGO DI PROPOSITO, MA NON MUTO (audit B4). Il report deve uscire
+        # comunque: una sezione diagnostica mancante e' meglio di nessun
+        # report, e questa sezione addestra un modello, cioe' il punto dove e'
+        # piu' facile che qualcosa vada storto. Il prezzo e' che un errore di
+        # programmazione qui somiglia a un problema di dati, quindi il
+        # traceback finisce nel log — dove si puo' leggere — e non solo la
+        # riga riassuntiva nella diagnostica del report.
+        log.exception("divergenza: M4 ha sollevato, sezione saltata")
+        diag.avvisa(f"M4 non ha prodotto previsioni ({type(exc).__name__}: {exc}): "
+                    f"sezione divergenza saltata. Il traceback e' nel log.")
         return pd.DataFrame()
 
     # Un albero per lato significa che l'arresto anticipato non ha trovato

@@ -80,6 +80,23 @@ def titolo(testo: str) -> None:
     print(f"\n{SEP}\n  {testo}\n{SEP}")
 
 
+# Le eccezioni che un passo di rete puo' produrre e per cui "si prosegue con i
+# dati gia' presenti" e' una risposta onesta (audit B4).
+#
+# `except Exception` copriva anche un TypeError o un KeyError del nostro
+# codice dentro `ingest_fixtures`, e lo riportava come "non e' fatale, il sito
+# era giu'": il comando proseguiva su una premessa falsa e l'errore vero
+# restava invisibile in una riga di log. Sono due situazioni opposte — una
+# rete che non risponde e un bug — e vanno distinte.
+#
+# `ConnectionError` copre anche l'HTTPError sollevato da `_leggi_csv`, e
+# `OSError` e' la radice di `socket.timeout`, `URLError` e `ConnectionError`
+# stessa: l'elenco e' largo quanto la rete, non piu'.
+ERRORI_DI_RETE: tuple[type[BaseException], ...] = (
+    ConnectionError, TimeoutError, OSError,
+)
+
+
 def passo(numero: str, nome: str, fn: Callable, fatale: bool) -> bool:
     """
     Esegue un passo, riferendo con chiarezza cosa e' successo.
@@ -88,6 +105,11 @@ def passo(numero: str, nome: str, fn: Callable, fatale: bool) -> bool:
     quanto dovrebbe, e restare senza previsione perche' un sito era giu' dieci
     minuti sarebbe il modo peggiore di fallire. I passi locali si': su dati
     incoerenti qualsiasi previsione sarebbe sbagliata in silenzio.
+
+    UN BUG NON E' UN SITO GIU'. Un passo non fatale assorbe solo gli errori di
+    rete; qualsiasi altra eccezione risale, anche con `fatale=False`, perche'
+    "si prosegue con i dati gia' presenti" sarebbe una frase falsa e il
+    comando andrebbe avanti su una premessa sbagliata.
     """
     log.info("--- [%s] %s", numero, nome)
     try:
@@ -100,6 +122,11 @@ def passo(numero: str, nome: str, fn: Callable, fatale: bool) -> bool:
                 f"    Il comando si ferma qui: proseguire produrrebbe una "
                 f"previsione su dati incoerenti."
             ) from exc
+        if not isinstance(exc, ERRORI_DI_RETE):
+            log.error("passo [%s] '%s' non e' fallito per la rete ma per un "
+                      "errore del programma (%s): non si prosegue.",
+                      numero, nome, type(exc).__name__)
+            raise
         log.warning("passo [%s] '%s' fallito: %s", numero, nome, exc)
         log.warning("non e' fatale: si prosegue con i dati gia' presenti")
         return False

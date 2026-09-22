@@ -42,3 +42,7 @@ frontend/node_modules/
 frontend/dist/
 frontend/.env.local
 frontend/.env
+
+# Artefatti di seleniumbase: lock e download temporanei dello scraper
+# WhoScored. Si rigenerano a ogni avvio del browser.
+downloaded_files/

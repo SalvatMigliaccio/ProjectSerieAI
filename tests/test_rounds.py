@@ -241,3 +241,37 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_un_passo_di_rete_assorbe_solo_la_rete() -> None:
+    """
+    Un passo non fatale assorbe i problemi di rete, non i bug — audit B4.
+
+    PERCHE' CONTA. `except Exception` copriva anche un TypeError o un KeyError
+    dentro `ingest_fixtures`, e lo riportava come "non e' fatale: si prosegue
+    con i dati gia' presenti". Il comando andava avanti su una premessa falsa
+    e l'errore vero restava una riga di log fra le altre. Sono due situazioni
+    opposte: una rete che non risponde e un programma sbagliato.
+    """
+    def cade(exc: BaseException):
+        def _f() -> None:
+            raise exc
+        return _f
+
+    # La rete: si assorbe e si prosegue, che e' tutto il senso di fatale=False.
+    for errore in (ConnectionError("503"), TimeoutError("scaduto"),
+                   OSError("host irraggiungibile")):
+        assert rounds.passo("1", "rete", cade(errore), fatale=False) is False, \
+            f"{type(errore).__name__} doveva essere assorbito"
+
+    # Un bug: risale anche con fatale=False.
+    for errore in (TypeError("None non e' iterabile"), KeyError("1415"),
+                   ValueError("colonna assente")):
+        with pytest.raises(type(errore)):
+            rounds.passo("2", "bug travestito", cade(errore), fatale=False)
+
+    # E un passo fatale si ferma comunque, qualunque sia la causa.
+    with pytest.raises(rounds.PassoFallito):
+        rounds.passo("3", "locale", cade(ConnectionError("503")), fatale=True)
+
+    print("  un passo di rete assorbe la rete, non i bug   ok")

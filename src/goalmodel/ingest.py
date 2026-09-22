@@ -122,6 +122,18 @@ def season_from_date(d: pd.Timestamp) -> str:
     return f"{start % 100:02d}{(start + 1) % 100:02d}"
 
 
+# Tetto alla risposta di rete. Il CSV piu' grosso di football-data e' una
+# stagione completa dei Big 5, sotto il mezzo megabyte: venti sono tre ordini
+# di grandezza di margine e restano un tetto vero.
+MAX_BYTES_CSV = 20 * 1024 * 1024
+
+# Cosa accettiamo come CSV. Una pagina di errore o un captcha arriva come
+# `text/html`, e con `latin-1` — che non fallisce MAI sulla decodifica —
+# entrerebbe in `read_csv` come dati validi.
+CONTENT_TYPE_AMMESSI = ("text/csv", "text/plain", "application/csv",
+                        "application/octet-stream", "application/vnd.ms-excel")
+
+
 def _leggi_csv(src: str | Path) -> pd.DataFrame:
     """
     Legge il CSV da rete con header da browser, o da file locale.
@@ -131,6 +143,20 @@ def _leggi_csv(src: str | Path) -> pd.DataFrame:
     503 anche con header completi mentre altri host rispondono 200, quindi il
     blocco e' verso l'ambiente, non verso l'User-Agent — ma costa una riga e
     toglie una variabile quando il download fallisce.
+
+    IL CONFINE DI FIDUCIA STA QUI (audit B5). Quello che torna dalla rete e'
+    ostile finche' non e' verificato, e tre cose lo verificano prima che
+    `read_csv` lo veda:
+
+      - lo **schema** dell'URL dev'essere http/https. `urlopen` apre anche
+        `file://`, quindi senza questo controllo un percorso che arriva da
+        configurazione leggerebbe un file locale credendo di essere in rete;
+      - la **dimensione** ha un tetto: `resp.read()` senza limite mette in
+        memoria qualsiasi cosa il server mandi;
+      - il **content-type** dev'essere testo. `encoding="latin-1"` non
+        fallisce mai sulla decodifica: una pagina HTML di errore o un captcha
+        entrerebbero come dati validi, e arriverebbero fino al controllo delle
+        colonne — che e' la difesa giusta, ma e' l'ultima, non la prima.
     """
     src = str(src)
     if not src.startswith(("http://", "https://")):
@@ -139,7 +165,9 @@ def _leggi_csv(src: str | Path) -> pd.DataFrame:
     import urllib.error
     import urllib.request
 
-    req = urllib.request.Request(src, headers={
+    # Lo schema e' verificato sopra (http/https): il `noqa` copre sia la
+    # Request sia la urlopen, che ruff segnala entrambe.
+    req = urllib.request.Request(src, headers={  # noqa: S310
         "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                        "AppleWebKit/537.36 (KHTML, like Gecko) "
                        "Chrome/131.0.0.0 Safari/537.36"),
@@ -148,14 +176,31 @@ def _leggi_csv(src: str | Path) -> pd.DataFrame:
         "Referer": "https://www.football-data.co.uk/matches.php",
     })
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            dati = resp.read()
+        with urllib.request.urlopen(req, timeout=60) as resp:  # noqa: S310
+            tipo = resp.headers.get_content_type()
+            if tipo not in CONTENT_TYPE_AMMESSI:
+                raise ConnectionError(
+                    f"{src} ha risposto con content-type '{tipo}', non un CSV. "
+                    f"Di solito e' una pagina di errore o un captcha servito "
+                    f"al posto del file: aprilo nel browser per vedere cosa "
+                    f"risponde davvero."
+                )
+            # Un byte in piu' del tetto: serve a distinguere "grande quanto il
+            # tetto" da "troncato al tetto", che senza sarebbero lo stesso.
+            dati = resp.read(MAX_BYTES_CSV + 1)
     except urllib.error.HTTPError as exc:
         raise ConnectionError(
             f"{src} ha risposto {exc.code}. Il sito e' spesso irraggiungibile "
             f"dai programmi pur funzionando dal browser: scaricalo a mano e usa "
             f"'goalmodel ingest --stage fixtures --fixtures-file <percorso>'."
         ) from exc
+
+    if len(dati) > MAX_BYTES_CSV:
+        raise ConnectionError(
+            f"{src} ha mandato piu' di {MAX_BYTES_CSV // (1024 * 1024)} MB: "
+            f"il CSV piu' grosso atteso e' sotto il mezzo megabyte, quindi "
+            f"non e' il file che stiamo chiedendo."
+        )
 
     import io
     return pd.read_csv(io.BytesIO(dati), encoding="latin-1")

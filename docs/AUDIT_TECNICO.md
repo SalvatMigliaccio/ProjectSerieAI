@@ -347,7 +347,7 @@ con `-O` e pretende che tre difese di tre moduli diversi sollevino ancora.
 Serve un processo separato perche' il flag si decide all'avvio. Con gli assert
 al loro posto lo stesso scenario passa in silenzio — provato.
 
-### B4 — `except Exception` largo in due punti caldi — MEDIA [verificato]
+### B4 — `except Exception` largo in due punti caldi — CHIUSO
 
 - `rounds.passo()` (`rounds.py:97`) con `fatale=False` cattura **qualsiasi**
   eccezione e la riporta come "non e' fatale: si prosegue". Il commento parla
@@ -357,10 +357,28 @@ al loro posto lo stesso scenario passa in silenzio — provato.
   il report. Qui e' difendibile, ma nasconde anche gli errori di
   programmazione.
 
-**Da fare:** restringere a `(ConnectionError, HTTPError, TimeoutError, OSError)`
-nel passo di rete; nel report, loggare il traceback nella diagnostica.
+**Come e' stato chiuso.** I due punti hanno risposte diverse, perche' sono
+problemi diversi.
 
-### B5 — Confine di fiducia sul CSV remoto — MEDIA [verificato]
+`rounds.passo()` assorbe ora solo `ERRORI_DI_RETE = (ConnectionError,
+TimeoutError, OSError)`. Qualsiasi altra eccezione risale **anche con
+`fatale=False`**, con un messaggio che dice che non e' la rete: "si prosegue
+con i dati gia' presenti" su un `TypeError` e' una frase falsa, e il comando
+andrebbe avanti su una premessa sbagliata. `OSError` e' la radice di
+`socket.timeout`, `URLError` e `ConnectionError` stessa, quindi l'elenco e'
+largo quanto la rete e non di piu'; l'`HTTPError` di `_leggi_csv` arriva gia'
+come `ConnectionError`.
+
+`sezioni.divergenza()` resta **largo di proposito**: il report deve uscire
+comunque, e una sezione diagnostica mancante e' meglio di nessun report. Il
+prezzo era che un errore di programmazione li' dentro somigliava a un problema
+di dati; ora `log.exception` mette il traceback nel log e l'avviso del report
+nomina il tipo dell'eccezione, cosi' la diagnosi non richiede di indovinare.
+
+`tests/test_rounds.py::test_un_passo_di_rete_assorbe_solo_la_rete` prova
+entrambi i versi: tre errori di rete assorbiti, tre bug che risalgono.
+
+### B5 — Confine di fiducia sul CSV remoto — CHIUSO
 
 `ingest._leggi_csv()` (`ingest.py:103-138`) scarica via `urllib` con
 User-Agent falsificato, legge l'intero corpo in memoria e lo passa a
@@ -375,8 +393,22 @@ Cosa manca:
 C'e' un controllo delle colonne attese subito dopo, ed e' la difesa giusta;
 manca tutto quello che viene prima.
 
-**Da fare:** `resp.read(MAX_BYTES)`, verifica del content-type, e il controllo
-colonne com'e'.
+**Come e' stato chiuso.** Tre controlli prima che `read_csv` veda i byte, piu'
+il controllo colonne che c'era gia':
+
+  - **schema**: gia' verificato (il ramo locale intercetta tutto cio' che non
+    e' http/https). Conta perche' `urlopen` apre anche `file://`, quindi senza
+    quel ramo un percorso che arriva da configurazione verrebbe letto come URL;
+  - **dimensione**: `resp.read(MAX_BYTES_CSV + 1)` con tetto a 20 MB, tre
+    ordini di grandezza sopra il CSV piu' grosso atteso. Il `+ 1` serve a
+    distinguere "grande quanto il tetto" da "troncato al tetto";
+  - **content-type**: dev'essere testo. E' il controllo che mancava di piu',
+    perche' `latin-1` non fallisce **mai** sulla decodifica e una pagina di
+    errore HTML entrerebbe come dati validi.
+
+`tests/test_confine_rete.py` finge il server e verifica che una pagina HTML e
+una risposta oltre il tetto vengano fermate, che un CSV vero passi, e che un
+percorso locale non tocchi `urlopen`. `S310` e' uscito dal cricchetto.
 
 ### B6 — La guardia degli esperimenti copre meno di quanto sembri — MEDIA [verificato]
 

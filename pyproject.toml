@@ -124,7 +124,6 @@ ignore = [
     # Il gate di CI e' quindi verde e significativo: qualsiasi violazione
     # NUOVA, di qualsiasi altra regola, blocca la pipeline.
     # ------------------------------------------------------------------
-    "S310",    # urlopen senza controllo di schema          -> audit B5
     "SIM115",  # file senza context manager                 -> audit B8
     "S603",    # subprocess: verificato sicuro (forma a lista, sys.executable),
                # si toglie quando i due punti avranno un commento `# noqa`
