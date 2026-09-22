@@ -13,6 +13,38 @@ Tempi misurati sulla macchina di sviluppo (i7-13620H, 10 core) con Serie A,
 
 ---
 
+## 0. Come si invocano i comandi
+
+Dopo `pip install -e ".[dev]"` il comando `goalmodel` e' sulla PATH e funziona
+**da qualsiasi directory**, identico su Linux e su Windows:
+
+```bash
+goalmodel --help              # l'elenco dei comandi
+goalmodel <comando> --help    # le opzioni di uno
+```
+
+Ogni comando resta raggiungibile anche come modulo, che e' la forma da usare
+per gli esperimenti (non sono comandi di produzione e non stanno nel CLI):
+
+```bash
+python -m goalmodel.prediction.predict_round        # = goalmodel predict-round
+python -m goalmodel.experiments.predici_gbm         # solo cosi'
+```
+
+Ambiente, una volta sola:
+
+```bash
+pip install -r requirements.lock      # l'ambiente esatto, riproducibile
+pip install -e ".[dev]" --no-deps     # il pacchetto in modalita' sviluppo
+```
+
+**Installare dal lock e non da `pyproject.toml`**: il progetto verifica alcune
+uscite bit a bit, e una versione diversa di LightGBM o scipy fa fallire quei
+test senza che il codice sia cambiato.
+
+---
+
+
 ## 1. I due comandi della giornata
 
 L'unita' di lavoro e' la **giornata di campionato**, non la settimana. Ogni

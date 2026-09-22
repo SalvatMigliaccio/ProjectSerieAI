@@ -5,13 +5,44 @@ Contesto operativo per Claude Code.
 | documento | cosa contiene |
 |---|---|
 | `README.md` | cos'e' il progetto, installazione, architettura, contribuzione |
-| `Doc/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
-| `Doc/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, per priorita' |
+| `docs/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| `docs/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, con stato |
+| `docs/adr/` | decisioni di architettura, una per file |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
-| **`COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
+| **`docs/COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
 
-I comandi vivono solo in `COMANDI.md`. Quando ne cambia uno si aggiorna li',
-non qui: due elenchi divergono e viene sempre letto quello sbagliato.
+I comandi vivono solo in `docs/COMANDI.md`. Quando ne cambia uno si aggiorna
+li', non qui: due elenchi divergono e viene sempre letto quello sbagliato.
+
+## Dove sta il codice
+
+Il pacchetto e' **`goalmodel`**, installabile, sotto `src/goalmodel/`. Ogni
+livello puo' importare **solo quelli sotto di se'**:
+
+```
+config
+  ingest, normalize        acquisizione e unificazione delle fonti
+    features/              forma, mercato, contesto, giocatori
+      models/              M0..M6, dalla lambda alla matrice dei risultati
+        evaluation/        RPS, calibrazione, walk-forward, potenza
+          prediction/      previsione, registro, ciclo della giornata
+            reporting/     report HTML
+
+experiments/               importa tutto, non e' importato da nessuno
+```
+
+**Un import all'indietro e' una decisione di architettura, non una comodita'.**
+Ce n'e' gia' uno da sciogliere: `models/gbm.py` e `models/dixon_coles.py`
+importano `evaluation` **dentro le funzioni** di taratura, per evitare un ciclo.
+Si risolve spostando la taratura in `evaluation/`, non aggiungendone altri.
+
+I comandi passano dal CLI: `goalmodel <comando>`, che funziona da qualsiasi
+directory e allo stesso modo su Linux e Windows. `python -m goalmodel.<modulo>`
+resta valido. Un modulo eseguibile nuovo si registra in `src/goalmodel/cli.py`,
+una riga.
+
+Perche' un repository solo e cosa lo spezzerebbe:
+`docs/adr/0001-monolite-modulare.md`.
 
 ## Obiettivo
 
