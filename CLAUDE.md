@@ -1659,7 +1659,7 @@ Cosa ne segue, in pratica:
   la fonte di verita' diventa Postgres (`docs/adr/0002-postgres-fonte-di-verita.md`).
   Il `track_record/` no, e resta su file: la sua integrita' e' una proprieta'
   di processo, non di schema. **La precondizione e' chiudere il confine di
-  lettura**: oggi 13 moduli leggono parquet saltando `data.py`, e con quelli
+  lettura**: oggi 11 moduli di produzione leggono parquet saltando `data.py`, e con quelli
   in giro la migrazione si dimentica un file senza dare errore
 - Niente notebook nel codice di produzione: solo esplorazione in `notebooks/`
 - Log via `logging`, non `print`

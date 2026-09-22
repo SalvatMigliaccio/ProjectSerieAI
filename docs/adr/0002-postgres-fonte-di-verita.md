@@ -84,17 +84,21 @@ dal database invece che verificata a ogni lettura.
 ## La precondizione, ed e' l'unica cosa da fare adesso
 
 **Il confine di lettura e' costruito a meta'.** `data.py` esiste proprio per
-essere l'unico punto che tocca il disco, ma oggi **13 moduli leggono parquet
-per conto loro**:
+essere l'unico punto che tocca il disco, ma oggi **11 moduli di produzione
+leggono parquet per conto loro**:
 
 ```
-ingest.py (7)    players.py (3)   risultati.py     normalize.py
-context.py       registry.py      predict.py       sezioni.py
-power_analysis.py                 backend/api/store.py, standings.py
+ingest.py (7)      players.py (3)     registry.py       context.py
+normalize.py       risultati.py       predict.py        sezioni.py
+power_analysis.py  backend/api/store.py   backend/api/standings.py
 ```
 
-Finche' e' cosi', migrare significa modificare quindici file e **dimenticarne
-uno non da' errore** — da' un modulo che legge un parquet stantio mentre tutti
+I tre moduli di `experiments/` che leggono parquet NON contano: per progetto
+leggono tutto e non sono importati da nessuno. `ingest.py` e' il caso a parte —
+rilegge i grezzi che ha appena scritto — e va giudicato a se'.
+
+Finche' e' cosi', migrare significa modificare una dozzina di file e
+**dimenticarne uno non da' errore** — da' un modulo che legge un parquet stantio mentre tutti
 gli altri leggono il database. E' lo stesso modo di fallire che la regola DRY
 di `CLAUDE.md` gia' descrive per la chiave di join.
 
