@@ -23,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 
 from goalmodel import config  # noqa: E402
@@ -60,6 +61,7 @@ def test_fuso_sintetico() -> None:
     print("2. l'orario NON e' interpretato come UTC             ok")
 
 
+@pytest.mark.richiede_dati
 def test_contro_football_data(soglia: float = 0.98) -> None:
     """
     Le due fonti devono descrivere lo stesso istante.
@@ -127,6 +129,7 @@ def test_contro_football_data(soglia: float = 0.98) -> None:
           f"({len(residuo)} partite)")
 
 
+@pytest.mark.richiede_dati
 def test_ordine_previsione_fischio() -> None:
     """
     Sul registro reale: nessuna previsione valida puo' seguire il fischio.

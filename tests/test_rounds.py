@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 
 from goalmodel import config
@@ -128,6 +129,7 @@ def _log_finto(season: str, matchday: int, n: int = 10) -> pd.DataFrame:
     })[predict_mod.LOG_COLUMNS]
 
 
+@pytest.mark.richiede_dati
 def test_chiusura(tmp: Path) -> None:
     """Il file di giornata: previsione, risultato ed errore per partita."""
     log_path = tmp / "predictions_log.csv"
@@ -160,6 +162,7 @@ def test_chiusura(tmp: Path) -> None:
     print("  RPS delle quote registrate calcolato riga per riga      ok")
 
 
+@pytest.mark.richiede_dati
 def test_stato_su_dati_veri(tmp: Path) -> None:
     """
     La macchina a stati sul calendario vero, con un registro finto.

@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 
 from goalmodel import config  # noqa: E402
@@ -39,6 +40,24 @@ def _dati():
     train = played[played["date"] < cutoff]
     test = df[(df["season"] == "2324") & (df["matchday"] == 1)]
     return train, test
+
+
+pytestmark = pytest.mark.richiede_dati
+
+
+@pytest.fixture(scope="module")
+def _taglio():
+    return _dati()
+
+
+@pytest.fixture(scope="module")
+def train(_taglio):
+    return _taglio[0]
+
+
+@pytest.fixture(scope="module")
+def test(_taglio):
+    return _taglio[1]
 
 
 def test_colonne_dichiarate(train) -> None:
