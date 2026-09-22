@@ -108,6 +108,13 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
         return out
     sched["kickoff"] = kickoff(sched)
     sched["season"] = sched["season"].astype(str)
+    # Stesso motivo di `evaluate.attach_matchday`: la quadrupla del calendario
+    # non e' univoca (lo spareggio Spezia-Verona 2022/23), e qui `kickoff`
+    # decide se una previsione e' stata scritta prima del fischio. Tenere la
+    # riga sbagliata sposterebbe il calcio d'inizio di tre mesi, e la
+    # previsione risulterebbe valida quando non lo e'.
+    if "week" in sched.columns:
+        sched = sched.dropna(subset=["week"])
     sched = sched[KEYS + ["kickoff"]].drop_duplicates(subset=KEYS)
 
     out = out.merge(sched, on=KEYS, how="left")

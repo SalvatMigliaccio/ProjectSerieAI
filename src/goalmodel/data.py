@@ -23,10 +23,11 @@ legge da qui.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 
 import pandas as pd
 
-from . import config
+from . import config, schema
 
 log = logging.getLogger("data")
 
@@ -45,7 +46,27 @@ def _leggi(path, descrizione: str, rimedio: str,
     """
     if not path.exists():
         raise FileNotFoundError(f"{descrizione} assente ({path}). Lancia: {rimedio}")
-    return pd.read_parquet(path, columns=columns)
+    df = pd.read_parquet(path, columns=columns)
+
+    # IL CONTRATTO SI VERIFICA QUI, non dove il dato serve. E' l'unico punto
+    # che tutti attraversano, ed e' il piu' vicino al disco: un tipo sbagliato
+    # scoperto tre livelli piu' avanti si manifesta come NaN, non come errore.
+    # `columns=` chiede un sottoinsieme, e allora si verifica quel
+    # sottoinsieme: pretendere colonne che il chiamante non ha chiesto sarebbe
+    # un falso allarme.
+    contratto = schema.PER_NOME.get(descrizione)
+    if contratto is not None:
+        if columns is not None:
+            richieste = set(columns)
+            contratto = replace(
+                contratto,
+                obbligatorie=tuple(c for c in contratto.obbligatorie if c in richieste),
+                testuali=tuple(c for c in contratto.testuali if c in richieste),
+                temporali=tuple(c for c in contratto.temporali if c in richieste),
+                chiave=contratto.chiave if richieste >= set(contratto.chiave) else (),
+            )
+        contratto.verifica(df, rimedio)
+    return df
 
 
 def load_raw(nome: str) -> pd.DataFrame:

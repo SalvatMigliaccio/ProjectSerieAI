@@ -21,6 +21,7 @@ livello puo' importare **solo quelli sotto di se'**:
 
 ```
 config
+  schema, data             il contratto dei file e il loro unico punto di lettura
   ingest, normalize        acquisizione e unificazione delle fonti
     risultati              la catena di fonti per il risultato vero
     features/              forma, mercato, contesto, giocatori
@@ -97,6 +98,20 @@ partite del Napoli in Serie A.
 5. **Chiave di join**: `(league, season, home_team, away_team)`. Mai la data —
    in un campionato all'italiana la quadrupla e' univoca, e questo evita fusi
    orari e rinvii. La data resta come controllo di coerenza.
+
+   **Verificata, e con un'eccezione nota (22 settembre 2026).** Su
+   `matches_master` la quadrupla e' univoca: 4610 righe, zero duplicati, ora
+   controllato a ogni lettura da `schema.py`. Su `fbref_schedule` **non lo e'**:
+   Spezia-Hellas Verona 2022/23 compare due volte, la partita di campionato del
+   5 marzo (0-0, giornata 25) e lo **spareggio salvezza** dell'11 giugno (1-3).
+   Uno spareggio non e' "un campionato all'italiana", quindi la regola non lo
+   copriva e nessuno se n'era accorto.
+
+   Si riconosce perche' ha `week` nullo — non appartiene a nessuna giornata — e
+   tutti i consumatori lo escludono cosi'. Due di loro non lo facevano:
+   `evaluate.attach_matchday` e `backtest_log` si affidavano a
+   `drop_duplicates`, che tiene la prima riga **nell'ordine del parquet**.
+   Funzionavano per come il file era scritto, non per una decisione. Corretti.
 
 6. **Coerenza sulle quote**: chiusura o apertura, ma la stessa scelta nel
    backtest e in produzione.
@@ -255,6 +270,15 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   riconosciute** — un nome non mappato non darebbe errore, farebbe sparire la
   partita dalla previsione in silenzio
 - `src/goalmodel/config.py` — percorsi, leghe, stagioni, iperparametri
+- `src/goalmodel/schema.py` — il contratto dei file su disco, verificato da
+  `data.py` a ogni lettura. **Non** e' l'elenco delle 222 colonne: sono solo
+  quelle la cui assenza o il cui tipo sbagliato produce un errore SILENZIOSO —
+  chiavi, date, risultati. I tre modi in cui e' gia' successo: un tipo che
+  cambia (`season` intero contro stringa azzera il merge senza sollevare), una
+  colonna che sparisce (merge `how="left"` -> NaN -> LightGBM non protesta),
+  una chiave che si duplica (ogni merge senza `validate=` moltiplica righe e
+  le metriche restano plausibili). `tests/test_schema.py` verifica che ognuno
+  dei casi venga davvero fermato
 - `src/goalmodel/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
   (`scipy.optimize.linear_sum_assignment`), non fuzzy matching greedy. Risolve
   per esclusione i casi che difflib non trova, come Internazionale -> Inter.

@@ -87,6 +87,16 @@ def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
     mapping = load_name_map()
     sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), mapping))
     sched = sched[sched["league"].isin(config.LEAGUES)]
+    # LO SPAREGGIO VA TOLTO PRIMA, NON LASCIATO A `drop_duplicates`. Il
+    # calendario ha una quadrupla duplicata — Spezia-Hellas Verona 2022/23, la
+    # partita di campionato e lo spareggio salvezza — e `drop_duplicates`
+    # teneva la prima riga nell'ordine del parquet. Funzionava perche' quella
+    # prima riga e' la partita di campionato, il che e' un dettaglio di come
+    # il file e' stato scritto, non una decisione: se l'ordine cambiasse si
+    # terrebbe lo spareggio, che ha `week` nullo, e `astype(int)` piu' sotto
+    # fallirebbe su una giornata mancante. Lo spareggio non appartiene a
+    # nessuna giornata: e' quello il criterio. Vedi `schema.FBREF_SCHEDULE`.
+    sched = sched.dropna(subset=["week"])
     sched = sched[KEYS + ["week"]].drop_duplicates(subset=KEYS)
 
     out = df.merge(sched, on=KEYS, how="left", validate="one_to_one")
