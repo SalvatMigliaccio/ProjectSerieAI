@@ -125,7 +125,8 @@ def _media(variante: str) -> pd.DataFrame:
              for s in SEMI]
     base = pezzi[0]
     for p in pezzi[1:]:
-        assert p[KEYS].equals(base[KEYS]), "semi con righe diverse: non si mediano"
+        if not p[KEYS].equals(base[KEYS]):
+            raise ValueError("semi con righe diverse: non si mediano")
     media = media_log_lambda([p[PRED_COLS] for p in pezzi], base.index)
     out = base[KEYS + ["date", "matchday", "FTHG", "FTAG", "FTR"]].copy()
     out["model"] = f"media5 {variante}"

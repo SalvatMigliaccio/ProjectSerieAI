@@ -164,7 +164,9 @@ def test_leakage_deliberato_viene_visto() -> None:
 
     try:
         walk_forward(rotto, [Spia()], test_seasons=[stagioni[-1]], exclude_seasons=[])
-    except AssertionError as exc:
+    # ValueError e non AssertionError: la garanzia anti-leakage e' una regola
+    # non negoziabile, e `python -O` cancella gli assert.
+    except ValueError as exc:
         print(f"4. leakage deliberato intercettato: {str(exc)[:44]}...  ok")
         return
     raise AssertionError(

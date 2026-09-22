@@ -188,7 +188,8 @@ def riposo_e_congestione(long: pd.DataFrame) -> pd.DataFrame:
         date = out.loc[idx, "date"].to_numpy("datetime64[ns]")
         # Ordine garantito dal sort in to_long: qui si verifica, perche' se
         # saltasse searchsorted darebbe numeri plausibili e sbagliati.
-        assert (np.diff(date) >= np.timedelta64(0, "D")).all(), "date non ordinate"
+        if not (np.diff(date) >= np.timedelta64(0, "D")).all():
+            raise ValueError("date non ordinate")
 
         precedente = np.empty(len(date), dtype="datetime64[ns]")
         precedente[0] = np.datetime64("NaT", "ns")
@@ -316,15 +317,17 @@ def assert_no_leakage(out: pd.DataFrame, long: pd.DataFrame) -> None:
     corrente entrata nel proprio storico.
     """
     r = long["rest_days"].dropna()
-    assert (r > 0).all(), (
-        f"{int((r <= 0).sum())} righe con riposo <= 0 giorni: la partita "
-        f"corrente e' entrata nel proprio storico, oppure due partite della "
-        f"stessa squadra hanno la stessa data."
-    )
+    if not (r > 0).all():
+        raise ValueError(
+            f"{int((r <= 0).sum())} righe con riposo <= 0 giorni: la partita "
+            f"corrente e' entrata nel proprio storico, oppure due partite della "
+            f"stessa squadra hanno la stessa data."
+        )
     massimo = long.groupby("team")["matches_14d"].max().max()
-    assert massimo <= FINESTRA_CONGESTIONE, (
-        f"{massimo} partite in {FINESTRA_CONGESTIONE} giorni: impossibile"
-    )
+    if massimo > FINESTRA_CONGESTIONE:
+        raise ValueError(
+            f"{massimo} partite in {FINESTRA_CONGESTIONE} giorni: impossibile"
+        )
 
 
 def build(df: pd.DataFrame | None = None, save: bool = True,

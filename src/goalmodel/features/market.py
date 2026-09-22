@@ -347,6 +347,19 @@ def market_block(df: pd.DataFrame, books_1x2: list[str], books_ou: list[str], pr
     return out
 
 
+def _esigi(condizione: bool, messaggio: str) -> None:
+    """
+    Come un `assert`, ma sopravvive a `python -O`.
+
+    Non e' zucchero sintattico: questi controlli sono l'unica cosa che ferma
+    un de-vigging rotto, e `PYTHONOPTIMIZE=1` — che puo' arrivare
+    dall'ambiente senza che nessuno lo scriva — li cancellerebbe tutti
+    insieme, lasciando passare probabilita' che non sommano a uno.
+    """
+    if not condizione:
+        raise ValueError(messaggio)
+
+
 def validate(df: pd.DataFrame, prefix: str = "mkt_") -> None:
     """
     Controlli che devono valere per costruzione. Se saltano, il de-vigging e'
@@ -355,18 +368,21 @@ def validate(df: pd.DataFrame, prefix: str = "mkt_") -> None:
     trio = [f"{prefix}p_home", f"{prefix}p_draw", f"{prefix}p_away"]
     have = df[trio].notna().all(axis=1)
     s = df.loc[have, trio].sum(axis=1)
-    assert np.allclose(s, 1.0, atol=1e-9), f"le probabilita' 1X2 non sommano a 1: max scarto {abs(s - 1).max():.2e}"
+    _esigi(np.allclose(s, 1.0, atol=1e-9),
+           f"le probabilita' 1X2 non sommano a 1: max scarto {abs(s - 1).max():.2e}")
 
     pair = [f"{prefix}p_over25", f"{prefix}p_under25"]
     have_ou = df[pair].notna().all(axis=1)
     s_ou = df.loc[have_ou, pair].sum(axis=1)
-    assert np.allclose(s_ou, 1.0, atol=1e-9), "le probabilita' over/under non sommano a 1"
+    _esigi(np.allclose(s_ou, 1.0, atol=1e-9),
+           "le probabilita' over/under non sommano a 1")
 
     over = df[f"{prefix}overround"].dropna()
-    assert (over > 1.0).mean() > 0.99, "overround <= 1 su troppe righe: colonne quote sbagliate?"
+    _esigi((over > 1.0).mean() > 0.99,
+           "overround <= 1 su troppe righe: colonne quote sbagliate?")
 
     z = df[f"{prefix}shin_z"].dropna()
-    assert (z >= 0).all() and (z < 0.5).all(), "z di Shin fuori scala"
+    _esigi((z >= 0).all() and (z < 0.5).all(), "z di Shin fuori scala")
 
     # Firma del metodo: Shin carica il margine sugli esiti improbabili, quindi
     # rispetto al proporzionale alza il favorito e abbassa lo sfavorito.
@@ -376,8 +392,10 @@ def validate(df: pd.DataFrame, prefix: str = "mkt_") -> None:
     prop = df.loc[have, [c + "_prop" for c in trio]].to_numpy()
     r = np.arange(len(shin))
     fav, dog = shin.argmax(axis=1), shin.argmin(axis=1)
-    assert (shin[r, fav] - prop[r, fav] >= -1e-12).all(), "Shin non alza il favorito: formula sbagliata"
-    assert (shin[r, dog] - prop[r, dog] <= 1e-12).all(), "Shin non abbassa lo sfavorito: formula sbagliata"
+    _esigi((shin[r, fav] - prop[r, fav] >= -1e-12).all(),
+           "Shin non alza il favorito: formula sbagliata")
+    _esigi((shin[r, dog] - prop[r, dog] <= 1e-12).all(),
+           "Shin non abbassa lo sfavorito: formula sbagliata")
 
     log.info("controlli superati su %d righe con 1X2 e %d con over/under", have.sum(), have_ou.sum())
 

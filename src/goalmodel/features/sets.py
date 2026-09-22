@@ -83,7 +83,8 @@ _BASE_COLONNE = tuple(
 # Il numero si fissa a parte: se la comprensione sopra venisse "sistemata" e
 # producesse altro, il conteggio smette di tornare prima ancora del test.
 N_BASE = 52
-assert len(_BASE_COLONNE) == N_BASE, f"BASE ha {len(_BASE_COLONNE)} colonne, non {N_BASE}"
+if len(_BASE_COLONNE) != N_BASE:
+    raise ValueError(f"BASE ha {len(_BASE_COLONNE)} colonne, non {N_BASE}")
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +115,8 @@ _FORMA_VENUE_COLONNE = tuple(
     for stat in _STATISTICHE_FORMA
     for verso in ("for", "against")
 )
-assert len(_FORMA_VENUE_COLONNE) == 48
+if len(_FORMA_VENUE_COLONNE) != 48:
+    raise ValueError(f"FORMA_VENUE ha {len(_FORMA_VENUE_COLONNE)} colonne, non 48")
 
 SETS: dict[str, FeatureSet] = {
     "BASE": FeatureSet(

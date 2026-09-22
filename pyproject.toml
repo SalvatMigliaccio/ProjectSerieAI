@@ -91,8 +91,6 @@ select = [
 ]
 ignore = [
     "E501",    # la lunghezza riga la impone il formatter
-    "S101",    # assert: ce ne sono di legittimi nei _demo(); quelli di
-               # produzione sono un finding aperto (B3) e si tolgono li'
 
     # ------------------------------------------------------------------
     # CRICCHETTO. Ogni voce qui sotto e' un difetto REALE gia' diagnosticato
@@ -122,6 +120,13 @@ ignore = [
 # I test possono usare assert liberamente ed essere meno severi.
 "tests/*" = ["S", "E402"]
 "scripts/*" = ["T201"]
+# S101 (assert) e' attivo ovunque da quando B3 e' chiuso: `python -O` li
+# cancella, e un'invariante che sparisce con una variabile d'ambiente non e'
+# un'invariante. Le due eccezioni sono funzioni che NON girano in produzione e
+# il cui unico scopo e' verificare la matematica del modulo: li' l'assert e'
+# la forma giusta, perche' e' il corpo del controllo e non una difesa.
+"src/goalmodel/models/baseline.py" = ["S101"]      # _demo()
+"src/goalmodel/models/dixon_coles.py" = ["S101"]   # _check_gradient()
 
 [tool.ruff.lint.isort]
 known-first-party = ["goalmodel"]

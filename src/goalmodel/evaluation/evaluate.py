@@ -322,8 +322,10 @@ def walk_forward(
         ]
         # La garanzia anti-leakage, verificata a ogni singolo blocco invece che
         # una volta sola all'inizio: costa niente e non lascia scampo.
-        assert train["date"].max() < cutoff, f"leakage in {season} giornata {matchday}"
-        assert not train.index.intersection(block.index).size, "partita di test nel training"
+        if not train["date"].max() < cutoff:
+            raise ValueError(f"leakage in {season} giornata {matchday}")
+        if train.index.intersection(block.index).size:
+            raise ValueError("partita di test nel training")
 
         for model in models:
             pred = model.fit(train).predict(block)

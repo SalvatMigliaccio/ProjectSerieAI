@@ -298,10 +298,11 @@ def assert_no_post_match(future: pd.DataFrame) -> None:
     """
     presenti = [c for c in POST_MATCH_COLS if c in future.columns]
     sporche = {c: int(future[c].notna().sum()) for c in presenti if future[c].notna().any()}
-    assert not sporche, (
-        f"colonne post-partita valorizzate su righe future: {sporche}. "
-        "Il filtro sulle partite da predire ha un bug."
-    )
+    if sporche:
+        raise ValueError(
+            f"colonne post-partita valorizzate su righe future: {sporche}. "
+            "Il filtro sulle partite da predire ha un bug."
+        )
 
 
 def build_features(played: pd.DataFrame, fixtures: pd.DataFrame) -> pd.DataFrame:
@@ -319,11 +320,12 @@ def build_features(played: pd.DataFrame, fixtures: pd.DataFrame) -> pd.DataFrame
     # mobili. Succede se il filtro sulle date lascia passare una partita gia'
     # giocata, ed e' meglio fermarsi qui che a valle con un errore di merge.
     doppie = future.merge(played[KEYS].drop_duplicates(), on=KEYS, how="inner")
-    assert doppie.empty, (
-        f"{len(doppie)} partite da predire sono gia' nello storico: "
-        f"{doppie[['home_team', 'away_team']].head(5).to_dict('records')}. "
-        "Il filtro sulla data del calcio d'inizio non ha funzionato."
-    )
+    if not doppie.empty:
+        raise ValueError(
+            f"{len(doppie)} partite da predire sono gia' nello storico: "
+            f"{doppie[['home_team', 'away_team']].head(5).to_dict('records')}. "
+            "Il filtro sulla data del calcio d'inizio non ha funzionato."
+        )
 
     # Le righe future si marcano PRIMA di concatenare. Individuarle a
     # posteriori dalla posizione non funziona: subito dopo si ordina per data,
@@ -524,7 +526,8 @@ def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
     prima = sum(1 for _ in path.open(encoding="utf-8")) if path.exists() else 0
     rec.to_csv(path, mode="a", header=not path.exists(), index=False)
     dopo = sum(1 for _ in path.open(encoding="utf-8"))
-    assert dopo >= prima, f"il registro si e' accorciato: {prima} -> {dopo} righe"
+    if dopo < prima:
+        raise RuntimeError(f"il registro si e' accorciato: {prima} -> {dopo} righe")
     log.info("registrate %d previsioni in %s", len(rec), path.name)
     return len(rec), saltate
 
@@ -659,10 +662,11 @@ def run(
     # record costruito su questo log non varrebbe niente.
     if not preds.empty:
         ko = preds["kickoff"]
-        assert (ko > now).all(), (
-            f"previsione a {now} non precede il calcio d'inizio di "
-            f"{int((ko <= now).sum())} partite"
-        )
+        if not (ko > now).all():
+            raise ValueError(
+                f"previsione a {now} non precede il calcio d'inizio di "
+                f"{int((ko <= now).sum())} partite"
+            )
 
     # `quiet` serve a src/predict_round.py, che impagina da solo: senza,
     # la stessa giornata verrebbe stampata due volte in due formati diversi.

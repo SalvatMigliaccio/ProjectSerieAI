@@ -54,10 +54,10 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 | A8 check.py alla radice | **chiuso** | `scripts/ispeziona_dataset.py` |
 | **B2 parquet giocatori orfano** | **chiuso** | `features/registry.py`, un elenco solo |
 | **B1 sezione 3 del report morta** | **chiuso** | M4 si addestra su cio' che esiste al momento di predire |
+| **B3 assert come invariante** | **chiuso** | `raise` al posto di `assert`, `S101` attivo in CI |
 | licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
 | A4 report.py, 4 mestieri | aperto | prossima fase |
 | A5 doppio registro feature | aperto | dipende da A4 |
-| B3 assert come invariante | aperto | prossima |
 | B4-B12 | aperti | igiene, diff piccoli |
 | B13, B14 | aperti | trovati da ruff, vedi sotto |
 
@@ -275,7 +275,7 @@ LightGBM li tratta nativamente e non protesta.
 esplicitamente che il blocco e' fuori dal ciclo (e allora toglierlo da
 `load_dataset` di default).
 
-### B3 — Invarianti di produzione affidate ad `assert` — ALTA [verificato]
+### B3 — Invarianti di produzione affidate ad `assert` — CHIUSO
 
 `src/predict.py` usa `assert` per cinque controlli, fra cui i due che il
 progetto stesso chiama non negoziabili:
@@ -294,9 +294,27 @@ andarsene sarebbe il controllo sul fischio d'inizio — che, come documentato in
 Stesso schema in `features/market.py:355-378` (`validate()`), dove l'assert e'
 l'unica cosa che ferma un de-vigging rotto.
 
-**Da fare:** `if not cond: raise ValueError(...)` per tutto cio' che protegge
-il registro o il de-vigging. Gli assert nei `_demo()` vanno benissimo dove
-sono.
+**Come e' stato chiuso.** `if not cond: raise ValueError(...)` in tutti e
+cinque i punti di `predict.py`, nei sei di `market.validate()`, nei tre di
+`features/context.py` (riposo, congestione, ordinamento delle date), nei due
+di `evaluation/evaluate.py` che garantiscono l'assenza di leakage a ogni
+blocco del walk-forward, nei due di modulo di `features/sets.py` e nei due di
+`experiments/` che verificano che i semi si possano mediare. In `market.py`
+passano da `_esigi()`, che e' un `if/raise` con un nome: sei controlli di
+seguito nella stessa funzione sono l'unico posto dove ripetere la forma
+costava piu' che nominarla.
+
+**Il vincolo e' ora in CI, non nella disciplina.** `S101` e' uscito dalla
+lista del cricchetto in `pyproject.toml`: da adesso `ruff` rifiuta qualsiasi
+`assert` nel pacchetto. Le due eccezioni dichiarate sono `baseline._demo()` e
+`dixon_coles._check_gradient()`, funzioni che non girano in produzione e in
+cui l'assert **e'** il controllo, non una difesa attorno a qualcos'altro.
+
+**E che scattino davvero lo verifica un test.** `ruff` vede la forma, non il
+comportamento: `tests/test_invarianti_ottimizzate.py` lancia un sottoprocesso
+con `-O` e pretende che tre difese di tre moduli diversi sollevino ancora.
+Serve un processo separato perche' il flag si decide all'avvio. Con gli assert
+al loro posto lo stesso scenario passa in silenzio — provato.
 
 ### B4 — `except Exception` largo in due punti caldi — MEDIA [verificato]
 
