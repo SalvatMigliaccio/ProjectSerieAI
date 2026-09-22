@@ -57,10 +57,11 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config, data
-from ..features import registry
+from .. import config
+
+# Riesportati di proposito: mezzo progetto li chiede a questo modulo.
+from ..features.dataset import add_matchday, load_dataset  # noqa: F401
 from ..models.baseline import Model, default_models
-from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("evaluate")
@@ -71,70 +72,14 @@ PROB_COLS = ["p_home", "p_draw", "p_away"]
 
 
 # ---------------------------------------------------------------------------
-# Dati
+# Dati — assemblati altrove, riesportati qui
 # ---------------------------------------------------------------------------
-
-def add_matchday(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggancia la giornata ufficiale da fbref_schedule.
-
-    Non si prova a ricostruirla dalle date: e' stato tentato, con
-    assegnamento goloso in ordine cronologico, e coincide con quella ufficiale
-    solo nell'85% dei casi. Un singolo rinvio sfasa tutte le giornate
-    successive e genera blocchi che si accavallano nel tempo. La giornata e'
-    un dato, non una deduzione.
-    """
-    mapping = load_name_map()
-    sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), mapping))
-    sched = sched[sched["league"].isin(config.LEAGUES)]
-    # LO SPAREGGIO VA TOLTO PRIMA, NON LASCIATO A `drop_duplicates`. Il
-    # calendario ha una quadrupla duplicata — Spezia-Hellas Verona 2022/23, la
-    # partita di campionato e lo spareggio salvezza — e `drop_duplicates`
-    # teneva la prima riga nell'ordine del parquet. Funzionava perche' quella
-    # prima riga e' la partita di campionato, il che e' un dettaglio di come
-    # il file e' stato scritto, non una decisione: se l'ordine cambiasse si
-    # terrebbe lo spareggio, che ha `week` nullo, e `astype(int)` piu' sotto
-    # fallirebbe su una giornata mancante. Lo spareggio non appartiene a
-    # nessuna giornata: e' quello il criterio. Vedi `schema.FBREF_SCHEDULE`.
-    sched = sched.dropna(subset=["week"])
-    sched = sched[KEYS + ["week"]].drop_duplicates(subset=KEYS)
-
-    out = df.merge(sched, on=KEYS, how="left", validate="one_to_one")
-    missing = out["week"].isna().sum()
-    if missing:
-        raise ValueError(
-            f"{missing} partite senza giornata: manca una voce in "
-            f"{config.TEAM_NAME_MAP.name}? Lancia goalmodel normalize --report"
-        )
-    out = out.rename(columns={"week": "matchday"})
-    out["matchday"] = out["matchday"].astype(int)
-    return out
-
-
-def load_dataset() -> pd.DataFrame:
-    """
-    Risultati, giornata e TUTTI i blocchi di feature disponibili, in un frame.
-
-    L'elenco dei blocchi non sta piu' qui: sta in `features/registry.py`, ed e'
-    lo STESSO che `rounds.ricostruisci` usa per ricostruirli. Erano due elenchi
-    diversi, e la differenza — `players` presente qui e assente di la' — faceva
-    invecchiare quel blocco a ogni giornata senza che niente lo segnalasse
-    (audit B2).
-
-    I parametri `with_form` e `with_context` sono spariti: nessuno li passava,
-    e il registro li rende inutili, perche' un blocco entra se e solo se il suo
-    parquet esiste — che e' esattamente cio' per cui `with_context` esisteva.
-    """
-    matches = data.load_master()
-    base = matches[KEYS + ["date", "FTHG", "FTAG", "FTR"]].copy()
-    df = registry.unisci(base, KEYS)
-
-    df = add_matchday(df)
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values(["date", "home_team"]).reset_index(drop=True)
-    log.info("dataset: %d righe, stagioni %s-%s", len(df), df["season"].min(), df["season"].max())
-    return df
-
+#
+# `add_matchday` e `load_dataset` stanno in `features/dataset.py`: assemblare
+# il dataset non e' valutare, e tenerli qui costringeva `models/` e
+# `features/sets.py` a importare `evaluation` dentro le funzioni per evitare
+# un ciclo. I nomi restano importabili da qui perche' mezzo progetto li
+# chiede a questo modulo.
 
 # ---------------------------------------------------------------------------
 # Metriche

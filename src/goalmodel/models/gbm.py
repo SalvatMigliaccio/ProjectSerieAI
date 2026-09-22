@@ -645,7 +645,7 @@ def main() -> None:
     ap.add_argument("--variants", default=",".join(VARIANTS), help="varianti da tarare")
     args = ap.parse_args()
 
-    from ..evaluation.evaluate import load_dataset
+    from ..features.dataset import load_dataset
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 50)
 

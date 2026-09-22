@@ -346,7 +346,7 @@ def main() -> None:
         _check_gradient()
         return
     if args.tune:
-        from ..evaluation.evaluate import load_dataset
+        from ..features.dataset import load_dataset
         print(tune_halflife(load_dataset()).to_string(index=False))
         return
     ap.print_help()
