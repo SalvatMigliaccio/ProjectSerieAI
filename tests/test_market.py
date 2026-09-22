@@ -63,11 +63,11 @@ def test_somma_e_dominio() -> None:
 
 def test_contro_risolutore_indipendente() -> None:
     quote = _quote_plausibili(200, seed=1)
-    ps, z = devig_shin(quote)
+    ps, _z = devig_shin(quote)
 
     err = 0.0
     for i in range(len(quote)):
-        rif, z_rif = _shin_riferimento(quote[i])
+        rif, _z_rif = _shin_riferimento(quote[i])
         err = max(err, np.abs(rif - ps[i]).max())
     print(f"2. contro brentq scalare: scarto max {err:.2e}          ok")
     assert err < 1e-12, f"la bisezione vettoriale diverge dal riferimento: {err:.2e}"

@@ -70,7 +70,7 @@ def _finto(n_stagioni: int = 3, squadre: int = 8) -> pd.DataFrame:
         stagione = f"{20+s}{21+s}"
         inizio = pd.Timestamp(f"20{20+s}-09-01")
         giornata = 0
-        for i in range(squadre - 1):
+        for _ in range(squadre - 1):
             giornata += 1
             data = inizio + pd.Timedelta(weeks=giornata)
             for j in range(squadre // 2):

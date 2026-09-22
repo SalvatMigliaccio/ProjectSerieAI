@@ -38,6 +38,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import subprocess
 import sys
@@ -83,31 +84,47 @@ def esegui(variante: str, seme: int) -> None:
 
 
 def lancia(paralleli: int) -> None:
+    """
+    Uno scheduler a finestra: al massimo `paralleli` walk-forward insieme.
+
+    I FILE DI LOG STANNO IN UN `ExitStack` (audit B8). Un handle qui non puo'
+    stare in un `with`, perche' deve restare aperto finche' il sottoprocesso
+    ci scrive dentro, cioe' oltre il blocco che lo apre. Chiuderlo a mano
+    quando il processo finisce funziona nel caso normale e non nell'unico che
+    conta: se qualcosa solleva a meta' ciclo, gli handle ancora aperti
+    restano tali. Lo stack li chiude comunque, in qualsiasi modo si esca.
+    """
     coda = [(v, s) for v in VARIANTI for s in SEMI if not file_uscita(v, s).exists()]
     log.info("da eseguire: %d su %d, fino a %d in parallelo",
              len(coda), len(VARIANTI) * len(SEMI), paralleli)
     attivi = []
     t0 = time.time()
-    while coda or attivi:
-        while coda and len(attivi) < paralleli:
-            v, s = coda.pop(0)
-            fh = open(experiments.percorso(f"log_bloccoB_{v}_s{s}.txt"), "w",
-                      encoding="utf-8")
-            p = subprocess.Popen(
-                [sys.executable, "-m", "goalmodel.experiments.blocco_b_robustezza",
-                 "--variante", v, "--seed", str(s)],
-                stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT,
-            )
-            attivi.append((p, v, s, fh))
-        time.sleep(15)
-        for voce in list(attivi):
-            p, v, s, fh = voce
-            if p.poll() is None:
-                continue
-            fh.close()
-            attivi.remove(voce)
-            esito = "ok" if p.returncode == 0 and file_uscita(v, s).exists() else "FALLITO"
-            print(f"[{(time.time()-t0)/60:5.1f} min] {v} s{s}: {esito}", flush=True)
+    with contextlib.ExitStack() as stack:
+        while coda or attivi:
+            while coda and len(attivi) < paralleli:
+                v, s = coda.pop(0)
+                fh = stack.enter_context(
+                    experiments.percorso(f"log_bloccoB_{v}_s{s}.txt")
+                    .open("w", encoding="utf-8"))
+                # Forma a lista e `sys.executable`: nessuna shell, nessun
+                # argomento che venga da fuori. Vedi CLAUDE.md, regola 4.
+                p = subprocess.Popen(  # noqa: S603
+                    [sys.executable, "-m", "goalmodel.experiments.blocco_b_robustezza",
+                     "--variante", v, "--seed", str(s)],
+                    stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT,
+                )
+                attivi.append((p, v, s, fh))
+            time.sleep(15)
+            for voce in list(attivi):
+                p, v, s, fh = voce
+                if p.poll() is None:
+                    continue
+                # Chiuso subito comunque: lo stack e' la rete, non il piano.
+                fh.close()
+                attivi.remove(voce)
+                esito = ("ok" if p.returncode == 0 and file_uscita(v, s).exists()
+                         else "FALLITO")
+                print(f"[{(time.time()-t0)/60:5.1f} min] {v} s{s}: {esito}", flush=True)
     print("LANCIO CONCLUSO", flush=True)
 
 

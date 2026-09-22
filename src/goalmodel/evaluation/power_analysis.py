@@ -460,7 +460,7 @@ def main() -> None:
     print("\n=== I SOTTOINSIEMI DEL PIANO ===")
     print("Quote dichiarate a priori, da sostituire con quelle vere quando il")
     print("blocco esiste. Serie A, cluster per giornata:\n")
-    perimetro, nome_cluster, cluster_stagione, k_pieno = SCENARI[0]
+    perimetro, nome_cluster, _, _ = SCENARI[0]
     print(f"  {'sottoinsieme':<38} {'quota':>6} {'partite':>8} {'MDE':>9} {'vede?':>6}")
     for nome, q in SOTTOINSIEMI.items():
         riga = scenari(stat, q, atteso, args.stagioni).iloc[0]

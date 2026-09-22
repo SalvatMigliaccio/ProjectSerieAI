@@ -410,7 +410,7 @@ il controllo colonne che c'era gia':
 una risposta oltre il tetto vengano fermate, che un CSV vero passi, e che un
 percorso locale non tocchi `urlopen`. `S310` e' uscito dal cricchetto.
 
-### B6 — La guardia degli esperimenti copre meno di quanto sembri — MEDIA [verificato]
+### B6 — La guardia degli esperimenti copre meno di quanto sembri — CHIUSO
 
 `experiments.proteggi_produzione()` sostituisce `DataFrame.to_parquet` e
 `DataFrame.to_csv`. Non copre: `to_feather`, `to_pickle`, `to_hdf`,
@@ -422,8 +422,14 @@ L'idea e' giusta e il docstring e' onesto sul perche' esiste. Il rischio e'
 che si legga come "gli esperimenti non possono scrivere in produzione",
 mentre e' "non possono scrivere in produzione **con due metodi pandas**".
 
-**Da fare:** o estendere l'elenco, o dichiarare nel docstring esattamente cosa
-copre. La seconda costa una riga.
+**Come e' stato chiuso: dichiarando, non estendendo.** Il docstring ora
+elenca per nome cio' che la guardia NON copre, e dice perche' l'elenco non e'
+stato allungato: la guardia esiste per un caso preciso e osservato — qualcuno
+copia una riga da `evaluate.py` dentro un esperimento e sovrascrive un parquet
+di produzione — e quella riga usa `to_parquet` o `to_csv`. Inseguire ogni modo
+di scrivere un file darebbe una protezione piu' larga e **piu' credibile di
+quanto sia**, e il danno di una guardia parziale non e' cio' che lascia
+passare: e' che smette di far pensare.
 
 ### B7 — `_esc()` incompleta e non applicata ovunque — CHIUSO
 
@@ -449,13 +455,23 @@ calcolati in loco. Escaparli romperebbe la pagina. Gli avvisi della
 diagnostica, che invece possono contenere nomi di colonna e di squadra,
 passavano gia' da `_esc`.
 
-### B8 — File handle senza context manager — MEDIA [verificato]
+### B8 — File handle senza context manager — CHIUSO
 
 `experiments/blocco_b_robustezza.py:94` e `experiments/forma_venue.py:158`
 aprono file di log con `fh = open(...)` e li chiudono a mano in un ciclo
 successivo. Un'eccezione fra apertura e chiusura li lascia aperti; con 15 run
 in parallelo e' poca cosa, ma e' la classe di errore che i context manager
 esistono per eliminare.
+
+**Come e' stato chiuso: `contextlib.ExitStack`.** Un `with` semplice non
+poteva funzionare — l'handle deve restare aperto finche' il sottoprocesso ci
+scrive, cioe' oltre il blocco che lo apre. Lo stack copre l'intero scheduler e
+chiude tutto comunque si esca; la chiusura eager quando il processo finisce
+resta dov'era, perche' lo stack e' la rete, non il piano.
+
+`SIM115` e `PTH123` sono usciti dal cricchetto (i due `open()` sono diventati
+`Path.open()`), e con loro `S603`: i due `subprocess.Popen` hanno ora il
+`noqa` con il motivo scritto accanto, forma a lista e `sys.executable`.
 
 ### B9 — `gbm.tune()`: variabile morta e conteggio fuorviante — BASSA [verificato]
 

@@ -27,7 +27,7 @@ def synthetic() -> pd.DataFrame:
     rows = []
     day = datetime(2023, 8, 20)
     for season in SEASONS:
-        for i, home in enumerate(TEAMS):
+        for home in TEAMS:
             for away in TEAMS:
                 if home == away:
                     continue

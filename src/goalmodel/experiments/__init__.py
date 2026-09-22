@@ -55,6 +55,23 @@ def proteggi_produzione() -> None:
     Da questo momento il processo non puo' scrivere in produzione.
 
     Idempotente. Si chiama in testa a ogni script sperimentale.
+
+    COSA COPRE, ESATTAMENTE (audit B6). Due metodi di pandas:
+    `DataFrame.to_parquet` e `DataFrame.to_csv`. Nient'altro.
+
+    NON copre: `to_feather`, `to_pickle`, `to_hdf`, `to_excel`, `np.save`,
+    `Path.write_text`, `Path.write_bytes`, `open(..., "w")`,
+    `pyarrow.parquet.write_table`, `shutil.copy` — e quest'ultima la usa
+    proprio `predict.append_log` per il backup del registro.
+
+    **Perche' l'elenco sta scritto qui invece di essere allungato.** Questa
+    guardia esiste per un caso preciso e osservato: qualcuno copia una riga da
+    `evaluate.py` dentro un esperimento e sovrascrive un parquet di
+    produzione. Quella riga usa `to_parquet` o `to_csv`, e per quel caso la
+    rete c'e'. Inseguire ogni modo di scrivere un file darebbe una protezione
+    piu' larga e, soprattutto, **piu' credibile di quanto sia** — mentre il
+    danno vero di una guardia parziale non e' cio' che lascia passare, e' che
+    smette di far pensare. Leggere questa lista deve costare quanto fidarsi.
     """
     global _protetto
     if _protetto:

@@ -49,6 +49,7 @@ Uso:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import subprocess
 import sys
@@ -151,18 +152,30 @@ def esegui(seme: int) -> None:
 
 
 def lancia() -> None:
-    """Un processo per seme, tutti insieme: LightGBM qui usa un thread solo."""
+    """
+    Un processo per seme, tutti insieme: LightGBM qui usa un thread solo.
+
+    Gli handle di log stanno in un `ExitStack` (audit B8): devono restare
+    aperti finche' i sottoprocessi ci scrivono, quindi non possono stare in un
+    `with` loro, ma un'eccezione fra l'avvio e la `wait` non deve lasciarli
+    aperti.
+    """
     coda = [s for s in SEMI if not all(file_uscita(v, s).exists() for v in VARIANTI)]
-    processi = []
-    for s in coda:
-        fh = open(experiments.percorso(f"log_sede_s{s}.txt"), "w", encoding="utf-8")
-        processi.append((s, fh, subprocess.Popen(
-            [sys.executable, "-m", "goalmodel.experiments.forma_venue", "--seed", str(s)],
-            stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT)))
-    for s, fh, p in processi:
-        p.wait()
-        fh.close()
-        print(f"seme {s}: {'ok' if p.returncode == 0 else 'FALLITO'}", flush=True)
+    with contextlib.ExitStack() as stack:
+        processi = []
+        for s in coda:
+            fh = stack.enter_context(
+                experiments.percorso(f"log_sede_s{s}.txt").open("w", encoding="utf-8"))
+            # Forma a lista e `sys.executable`: nessuna shell, nessun
+            # argomento che venga da fuori. Vedi CLAUDE.md, regola 4.
+            processi.append((s, fh, subprocess.Popen(  # noqa: S603
+                [sys.executable, "-m", "goalmodel.experiments.forma_venue",
+                 "--seed", str(s)],
+                stdout=fh, stderr=subprocess.STDOUT, cwd=config.ROOT)))
+        for s, fh, p in processi:
+            p.wait()
+            fh.close()
+            print(f"seme {s}: {'ok' if p.returncode == 0 else 'FALLITO'}", flush=True)
 
 
 def _media(variante: str) -> pd.DataFrame:
