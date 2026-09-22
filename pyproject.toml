@@ -37,9 +37,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Solo per lo stage `missing`, che guida un browser vero su WhoScored.
-# Fuori dalle dipendenze base: il modello T-24h gira senza.
-scraping = ["selenium>=4.49,<5"]
+# NIENTE EXTRA `scraping`. Sembrava servisse per lo stage `missing`, che guida
+# un browser vero su WhoScored, ma il lock dice che `soccerdata` dipende gia'
+# da `seleniumbase`, che a sua volta tira `selenium`: l'extra sarebbe stato un
+# no-op che faceva credere il contrario. Selenium arriva comunque.
 dev = [
     "pytest>=9.0,<10",
     "pytest-cov>=6.0",
@@ -92,6 +93,29 @@ ignore = [
     "E501",    # la lunghezza riga la impone il formatter
     "S101",    # assert: ce ne sono di legittimi nei _demo(); quelli di
                # produzione sono un finding aperto (B3) e si tolgono li'
+
+    # ------------------------------------------------------------------
+    # CRICCHETTO. Ogni voce qui sotto e' un difetto REALE gia' diagnosticato
+    # in docs/AUDIT_TECNICO.md, non una regola che non ci piace. Si toglie
+    # una riga per volta quando si chiude la voce corrispondente, e la lista
+    # puo' solo accorciarsi: aggiungerne una richiede di scrivere prima
+    # perche', e quel perche' finisce nell'audit.
+    #
+    # Il gate di CI e' quindi verde e significativo: qualsiasi violazione
+    # NUOVA, di qualsiasi altra regola, blocca la pipeline.
+    # ------------------------------------------------------------------
+    "S310",    # urlopen senza controllo di schema          -> audit B5
+    "SIM115",  # file senza context manager                 -> audit B8
+    "F841",    # variabili calcolate e mai usate            -> audit B9
+    "B905",    # zip() senza strict: tronca in silenzio     -> audit B13
+    "S603",    # subprocess: verificato sicuro (forma a lista, sys.executable),
+               # si toglie quando i due punti avranno un commento `# noqa`
+    "RUF005",  # concatenazione di liste: solo stile
+    "RUF059",  # variabili spacchettate e non usate
+    "RUF007",  # zip al posto di pairwise
+    "B007",    # variabile di ciclo non usata
+    "SIM108",  # if/else al posto dell'espressione ternaria
+    "PTH123",  # open() al posto di Path.open()
 ]
 
 [tool.ruff.lint.per-file-ignores]
