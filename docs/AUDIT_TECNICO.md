@@ -53,10 +53,10 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 | A7 accesso ai dati sparso | **chiuso** | `data.py` + `features/registry.py` |
 | A8 check.py alla radice | **chiuso** | `scripts/ispeziona_dataset.py` |
 | **B2 parquet giocatori orfano** | **chiuso** | `features/registry.py`, un elenco solo |
+| **B1 sezione 3 del report morta** | **chiuso** | M4 si addestra su cio' che esiste al momento di predire |
 | licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
 | A4 report.py, 4 mestieri | aperto | prossima fase |
 | A5 doppio registro feature | aperto | dipende da A4 |
-| B1 sezione 3 del report morta | aperto | **prossima**, ora sbloccata da B2 |
 | B3 assert come invariante | aperto | prossima |
 | B4-B12 | aperti | igiene, diff piccoli |
 | B13, B14 | aperti | trovati da ruff, vedi sotto |
@@ -213,7 +213,7 @@ accanto a `ingest.py`, dove sembra un entry point.
 
 ## B. Comportamento e correttezza
 
-### B1 — La sezione 3 del report sparisce quando esiste il blocco giocatori — ALTA [verificato]
+### B1 — La sezione 3 del report sparisce quando esiste il blocco giocatori — CHIUSO
 
 Percorso completo:
 
@@ -235,6 +235,25 @@ genera il report vede una sezione in meno e nessuna spiegazione ovvia.
 
 Non e' silenzioso-sbagliato — il guard-rail funziona — ma e' una funzionalita'
 persa per accoppiamento implicito.
+
+**Come e' stato chiuso.** Non allineando i due elenchi — non si possono
+allineare: le assenze di una partita che non si e' ancora giocata non
+esistono, e mai esisteranno al momento in cui la si predice. Il modello della
+sezione si addestra ora sulle sole colonne presenti **anche** nelle partite in
+arrivo (`escludi` calcolato dalla differenza fra i due frame). Le altre
+restano fuori da entrambi i lati, quindi l'insieme di feature e' lo stesso per
+costruzione e il guard-rail non ha piu' niente da intercettare.
+
+**Perche' non l'opposto.** L'alternativa era far costruire a
+`predict.build_features()` anche il blocco giocatori: per una riga futura
+uscirebbe tutta NaN, e LightGBM manderebbe ogni partita in arrivo sul ramo dei
+mancanti proprio sulla feature piu' importante del blocco
+(`home_quota_minuti_assenti`, prima su 61). Sezione prodotta, previsione
+distorta, nessun errore: peggio della sezione mancante.
+
+`tests/test_divergenza.py` costruisce lo squilibrio a mano — una colonna nello
+storico e non nelle partite in arrivo — e fallisce se qualcuno rimette il
+modello a scegliere le feature dal solo dataset.
 
 ### B2 — `features_players.parquet` non viene mai ricostruito — ALTA [verificato]
 

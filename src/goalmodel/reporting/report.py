@@ -306,6 +306,11 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
     assoluti sui tre esiti: un numero solo, in punti di probabilita', che dice
     quanta massa andrebbe spostata per passare da una previsione all'altra.
 
+    SU COSA E' ADDESTRATO. Solo sulle colonne che esistono anche per le
+    partite in arrivo: un blocco che si costruisce per lo storico ma non per
+    una partita da giocare — oggi le assenze — resta fuori da entrambi i lati.
+    Il perche' e' nel commento sopra la costruzione del modello.
+
     IL MODELLO PUO' DEGENERARE IN SILENZIO. Se le feature di forma arrivano
     tutte nulle, LightGBM si ferma a un albero e restituisce la stessa
     previsione per ogni partita: nessun errore, nessuna eccezione, e uno
@@ -316,7 +321,7 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
         return pd.DataFrame()
 
     from ..evaluation.evaluate import load_dataset
-    from ..models.gbm import PoissonGBM
+    from ..models import gbm
 
     try:
         df = load_dataset()
@@ -335,14 +340,33 @@ def divergenza(preds: pd.DataFrame, diag: Diagnostica) -> pd.DataFrame:
                     f"sezione divergenza saltata")
         return pd.DataFrame()
 
-    modello = PoissonGBM(use_market=False, **config.GBM_PARAMS_NO_MARKET)
+    # M4 SI ADDESTRA SOLO SU CIO' CHE ESISTERA' AL MOMENTO DI PREDIRE.
+    # Le due parti nascono da percorsi diversi e non possono coincidere:
+    # `load_dataset` unisce i parquet di TUTTI i blocchi, mentre
+    # `predict.build_features` ricostruisce in memoria solo quelli calcolabili
+    # per una partita non ancora giocata. Le assenze del turno in arrivo non
+    # sono ancora state scaricate, quindi il blocco giocatori c'e' di qua e
+    # non di la'.
+    #
+    # Addestrare sull'insieme grande e predire su quello piccolo non e'
+    # un'alternativa: LightGBM manderebbe ogni riga futura sul ramo dei
+    # mancanti proprio sulla feature piu' importante di quel blocco
+    # (`home_quota_minuti_assenti`, prima su 61), e la previsione sarebbe
+    # distorta senza sollevare niente. Prima si preferiva saltare la sezione,
+    # che e' il difetto B1: una funzionalita' persa per un elenco di colonne
+    # che nessuno aveva deciso.
+    assenti = tuple(c for c in gbm.form_features(train) if c not in preds.columns)
+    if assenti:
+        log.info("divergenza: %d colonne assenti dalle partite in arrivo, fuori "
+                 "dal modello (es. %s)", len(assenti), list(assenti[:3]))
+
+    modello = gbm.PoissonGBM(
+        use_market=False,
+        escludi=tuple(gbm.FUORI_DAL_MODELLO) + assenti,
+        **config.GBM_PARAMS_NO_MARKET,
+    )
     try:
         modello.fit(train)
-        mancanti = [c for c in modello.features_ if c not in preds.columns]
-        if mancanti:
-            diag.avvisa(f"{len(mancanti)} feature di M4 assenti dalle partite in "
-                        f"arrivo (es. {mancanti[:3]}): sezione divergenza saltata")
-            return pd.DataFrame()
         alt = modello.predict(preds)
     except Exception as exc:  # il report deve uscire comunque
         diag.avvisa(f"M4 non ha prodotto previsioni ({exc}): sezione divergenza saltata")
