@@ -126,8 +126,6 @@ def differenze_appaiate(annidata: bool = True) -> tuple[np.ndarray, np.ndarray, 
     Si ripiega sulla coppia contro il mercato solo se non esiste ancora
     nessun walk-forward di blocco, dicendolo.
     """
-    keys = ["season", "matchday", "home_team", "away_team"]
-
     if annidata:
         for path in sorted(config.PROCESSED.glob("walk_forward_blocco_*.parquet")):
             wide = _rps_per_modello(path)

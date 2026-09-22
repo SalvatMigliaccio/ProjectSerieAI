@@ -103,7 +103,7 @@ def test_no_leakage(df: pd.DataFrame, wide: pd.DataFrame) -> None:
         col = "home_np_xg_for_ewm" if r.venue == "home" else "away_np_xg_for_ewm"
         got.append(m[col].iloc[0])
 
-    for i, (exp, act) in enumerate(zip(manual, got)):
+    for i, (exp, act) in enumerate(zip(manual, got, strict=True)):
         if exp is None:
             assert pd.isna(act), f"riga {i}: attesa NaN, ottenuto {act}"
         else:

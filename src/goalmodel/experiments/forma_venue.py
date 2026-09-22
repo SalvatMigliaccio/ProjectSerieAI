@@ -145,7 +145,7 @@ def esegui(seme: int) -> None:
     df = dataset()
     modelli = [M5Set(sets, seed=seme, etichetta=v) for v, sets in VARIANTI.items()]
     preds = walk_forward(df, modelli, test_seasons=config.VALIDATION_SEASONS)
-    for v, m in zip(VARIANTI, modelli):
+    for v, m in zip(VARIANTI, modelli, strict=True):
         preds[preds["model"] == m.name][COLONNE].to_parquet(file_uscita(v, seme), index=False)
     log.info("seme %d scritto", seme)
 

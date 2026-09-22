@@ -16,6 +16,8 @@ Uso:
 
 from __future__ import annotations
 
+import itertools
+
 import numpy as np
 import pandas as pd
 
@@ -46,8 +48,8 @@ class Spia(Model):
             "train_max": self._train["date"].max() if len(self._train) else pd.NaT,
             "n_train": len(self._train),
             "chiavi_train": set(zip(self._train["season"], self._train["home_team"],
-                                    self._train["away_team"])),
-            "chiavi_test": set(zip(test["season"], test["home_team"], test["away_team"])),
+                                    self._train["away_team"], strict=True)),
+            "chiavi_test": set(zip(test["season"], test["home_team"], test["away_team"], strict=True)),
         })
         out = pd.DataFrame(np.nan, index=test.index, columns=PRED_COLS)
         out["p_home"], out["p_draw"], out["p_away"] = 1 / 3, 1 / 3, 1 / 3
@@ -119,7 +121,9 @@ def test_il_training_cresce() -> None:
     spia = Spia()
     walk_forward(df, [spia], test_seasons=[stagioni[-1]], exclude_seasons=[])
     n = [b["n_train"] for b in spia.visto]
-    assert all(a <= b for a, b in zip(n, n[1:])), \
+    # `pairwise` e non `zip(n, n[1:])`: quella e' l'unica forma in cui le due
+    # sequenze devono avere lunghezza diversa, e `strict=True` la romperebbe.
+    assert all(a <= b for a, b in itertools.pairwise(n)), \
         f"il training non e' monotono crescente: {n}"
     print(f"2. training da {n[0]} a {n[-1]} righe, monotono          ok")
 

@@ -215,7 +215,7 @@ def assign_names(
     rows, cols = linear_sum_assignment(-scores)
 
     result = []
-    assigned = dict(zip(rows.tolist(), cols.tolist()))
+    assigned = dict(zip(rows.tolist(), cols.tolist(), strict=True))
     for i, name in enumerate(unmatched):
         j = assigned.get(i)
         if j is None:

@@ -394,7 +394,7 @@ class PoissonGLM(Model):
         n_t = len(self.teams_)
         pos = {t: i for i, t in enumerate(self.teams_)}
         x = np.zeros((len(attack), 2 * n_t + 1))
-        for r, (a, d) in enumerate(zip(attack, defence)):
+        for r, (a, d) in enumerate(zip(attack, defence, strict=True)):
             if a in pos:
                 x[r, pos[a]] = 1.0
             if d in pos:

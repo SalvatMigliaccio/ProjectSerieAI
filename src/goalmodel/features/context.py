@@ -276,7 +276,7 @@ def carica_derby() -> pd.DataFrame | None:
         log.warning("intensita' non riconosciute in %s: %s (trattate come 'rivalry')",
                     path.name, sorted(ignote))
 
-    coppie = [tuple(sorted((a, b))) for a, b in zip(d["home_team"], d["away_team"])]
+    coppie = [tuple(sorted((a, b))) for a, b in zip(d["home_team"], d["away_team"], strict=True)]
     d = d.assign(coppia=coppie).drop_duplicates(subset="coppia")
     log.info("derby caricati: %d coppie (%s)", len(d),
              ", ".join(f"{k} {v}" for k, v in d["intensity"].value_counts().items()))
@@ -287,9 +287,9 @@ def aggiungi_derby(out: pd.DataFrame, derby: pd.DataFrame | None) -> pd.DataFram
     """Due colonne sole: se e' un derby, e quanto sentito."""
     if derby is None:
         return out
-    mappa = dict(zip(derby["coppia"], derby["intensity"]))
+    mappa = dict(zip(derby["coppia"], derby["intensity"], strict=True))
     coppie = [tuple(sorted((a, b)))
-              for a, b in zip(out["home_team"], out["away_team"])]
+              for a, b in zip(out["home_team"], out["away_team"], strict=True)]
     intensita = [mappa.get(c) for c in coppie]
 
     out["is_derby"] = [int(i is not None) for i in intensita]

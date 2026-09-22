@@ -393,7 +393,7 @@ mentre e' "non possono scrivere in produzione **con due metodi pandas**".
 **Da fare:** o estendere l'elenco, o dichiarare nel docstring esattamente cosa
 copre. La seconda costa una riga.
 
-### B7 — `_esc()` incompleta e non applicata ovunque — MEDIA [verificato]
+### B7 — `_esc()` incompleta e non applicata ovunque — CHIUSO
 
 `report.py:105` escapa `&`, `<`, `>`; non escapa `"` ne' `'`. Le
 interpolazioni in attributo non ci passano mai, quindi oggi non c'e' un
@@ -406,8 +406,16 @@ Il report e' un file locale aperto col doppio clic, quindi l'impatto e' basso.
 Resta una funzione di escaping incompleta usata a macchia di leopardo, che e'
 la premessa standard di una XSS il giorno in cui il report viene servito.
 
-**Da fare:** usare `html.escape(s, quote=True)` della stdlib, e applicarla a
-tutte le interpolazioni di valori.
+**Come e' stato chiuso.** `_esc` e' `html.escape(s, quote=True)`, e le due
+interpolazioni che non ci passavano — `{squadra}` e `{book}` — ora ci passano.
+`{book}` era l'unica alimentata da dati di terzi: viene da `odds_source`, che
+deriva dai nomi di colonna di un CSV scaricato.
+
+Il resto delle interpolazioni nude e' stato riguardato una per una: sono
+frammenti HTML costruiti dal modulo stesso (celle, grafici SVG) e interi
+calcolati in loco. Escaparli romperebbe la pagina. Gli avvisi della
+diagnostica, che invece possono contenere nomi di colonna e di squadra,
+passavano gia' da `_esc`.
 
 ### B8 — File handle senza context manager — MEDIA [verificato]
 
@@ -461,7 +469,7 @@ volte con un ciclo Python. Il file oggi pesa 3 KB: e' irrilevante, e
 riscriverlo ora sarebbe ottimizzazione prematura. Annotato perche' la
 struttura e' append-only per sempre e quel file non verra' mai potato.
 
-### B13 — `zip()` senza `strict`: tronca in silenzio — MEDIA [verificato]
+### B13 — `zip()` senza `strict`: tronca in silenzio — CHIUSO
 
 Diciannove occorrenze, trovate da `ruff` (regola `B905`) e non dall'ispezione
 a mano. `zip(a, b)` senza `strict=True` si ferma alla sequenza piu' corta
@@ -477,10 +485,17 @@ E' esattamente la classe di difetto che il progetto teme di piu': non solleva,
 produce numeri plausibili. Che nessuna delle diciannove sia oggi sbagliata non
 toglie che nessuna sia protetta.
 
-**Da fare:** `strict=True` ovunque le due sequenze debbano avere la stessa
-lunghezza per costruzione, che e' il caso in tutti e diciannove.
+**Come e' stato chiuso.** `strict=True` su tutte e diciannove, e `B905`
+tolto dal cricchetto: da adesso un `zip` senza `strict` non passa la CI.
 
-### B14 — Un controllo che non controlla, dentro la rete di sicurezza — MEDIA [verificato]
+**Una delle diciannove non doveva averlo, e si e' vista subito.**
+`zip(n, n[1:])` in `tests/test_leakage.py` e' l'idioma a coppie, dove la
+seconda sequenza e' piu' corta di proposito: `strict=True` la faceva
+fallire al primo lancio. Sostituita con `itertools.pairwise`, che e' la forma
+giusta e dice da sola cosa intende. Le altre diciotto erano tutte, come
+previsto, sequenze di pari lunghezza per costruzione.
+
+### B14 — Un controllo che non controlla, dentro la rete di sicurezza — CHIUSO
 
 `tests/test_production_unchanged.py`, in `verifica()`:
 
@@ -506,8 +521,20 @@ Altre due `F841` (`keys` in `evaluation/power_analysis.py`, `q` in
 `features/players.py`) vanno guardate con la stessa domanda: era un controllo
 mai collegato, o solo un residuo?
 
-**Da fare:** decidere, per ciascuna, se collegare il controllo o cancellare la
-riga. Non lasciarle come sono.
+**Come e' stato chiuso.** Decise una per una, come chiedeva la voce.
+
+`mancanti` era un controllo vero, e ora e' il passo **2b** di `verifica()`.
+Il motivo per cui serve e' preciso: `_uguali` mette NaN e NaN d'accordo,
+quindi un de-vigging che smette di produrre un valore dove il riferimento
+ce l'aveva **passa i confronti sotto come identico**. Non cambia i numeri,
+li fa sparire, ed e' l'unico buco della rete che gli altri sei passi non
+coprono. Verificato che scatta: annullando due `mkt_lambda_home` il passo 2b
+fallisce e `verifica()` torna 1.
+
+`keys` in `power_analysis.py` e `q` in `players.py` erano residui — il codice
+sotto usa altre variabili — e sono stati cancellati.
+
+`F841` e' uscito dal cricchetto.
 
 ---
 

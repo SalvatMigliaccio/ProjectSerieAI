@@ -346,7 +346,7 @@ class MarketAnchoredGBM(PoissonGBM):
 
         x = df[self.features_]
         self.best_iters_ = []
-        for side, (col, goals) in enumerate(zip(MKT_LAMBDA, ("FTHG", "FTAG"))):
+        for side, (col, goals) in enumerate(zip(MKT_LAMBDA, ("FTHG", "FTAG"), strict=True)):
             init = np.log(df[col].to_numpy(dtype=float))
             model = self._fit_one(x, df[goals].to_numpy(dtype=float), n_head, init=init)
             if side == 0:
@@ -365,7 +365,7 @@ class MarketAnchoredGBM(PoissonGBM):
             return out
 
         lam = {}
-        for col, model in zip(MKT_LAMBDA, (self.model_home_, self.model_away_)):
+        for col, model in zip(MKT_LAMBDA, (self.model_home_, self.model_away_), strict=True):
             # predict() restituisce exp(somma degli alberi) e NON include
             # l'init_score: va riaggiunto a mano in scala logaritmica.
             # Verificato: predict(X) == exp(predict(X, raw_score=True)).
@@ -424,7 +424,7 @@ class LogBlend(Model):
             return out
 
         lam = []
-        for gbm_col, mkt_col in zip(("lambda_home", "lambda_away"), MKT_LAMBDA):
+        for gbm_col, mkt_col in zip(("lambda_home", "lambda_away"), MKT_LAMBDA, strict=True):
             g = np.log(inner.loc[ok, gbm_col].to_numpy(dtype=float))
             m = np.log(test.loc[ok, mkt_col].to_numpy(dtype=float))
             lam.append(np.exp(self.weight * g + (1 - self.weight) * m))
@@ -447,7 +447,7 @@ def sample_configs(n: int, seed: int = 0, space: dict[str, list] | None = None) 
     full = list(itertools.product(*(space[k] for k in keys)))
     rng = np.random.default_rng(seed)
     idx = rng.choice(len(full), size=min(n, len(full)), replace=False)
-    return [dict(zip(keys, full[i])) for i in idx]
+    return [dict(zip(keys, full[i], strict=True)) for i in idx]
 
 
 def on_boundary(cfg: dict, space: dict[str, list] | None = None) -> list[str]:

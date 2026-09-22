@@ -39,7 +39,7 @@ def calendario() -> pd.DataFrame:
     giorni = [1, 4, 8, 15, 30]
     avversari = ["Roma", "Lazio", "Inter", "Milan", "Juventus"]
     righe = []
-    for g, avv in zip(giorni, avversari):
+    for g, avv in zip(giorni, avversari, strict=True):
         righe.append({
             "league": "ITA-Serie A", "season": "2526",
             "home_team": "Napoli", "away_team": avv,
@@ -63,7 +63,7 @@ def test_riposo() -> None:
     atteso = [np.nan, 3.0, 4.0, 7.0, 15.0]
     ottenuto = nap["home_rest_days"].tolist()
     assert pd.isna(ottenuto[0]), f"la prima partita non puo' avere riposo: {ottenuto[0]}"
-    for i, (a, o) in enumerate(zip(atteso[1:], ottenuto[1:]), start=1):
+    for i, (a, o) in enumerate(zip(atteso[1:], ottenuto[1:], strict=True), start=1):
         assert abs(a - o) < 1e-9, f"partita {i}: atteso {a} giorni, ottenuto {o}"
     print(f"  riposo: {ottenuto[1:]} giorni, come contato a mano   ok")
 

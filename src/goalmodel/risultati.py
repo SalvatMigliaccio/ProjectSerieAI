@@ -55,7 +55,7 @@ FBREF = "fbref"
 def _esito(casa: pd.Series, fuori: pd.Series) -> pd.Series:
     """H, D, A dai gol: la stessa codifica di FTR in football-data."""
     return pd.Series(
-        ["H" if c > f else "A" if c < f else "D" for c, f in zip(casa, fuori)],
+        ["H" if c > f else "A" if c < f else "D" for c, f in zip(casa, fuori, strict=True)],
         index=casa.index,
     )
 

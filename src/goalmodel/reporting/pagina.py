@@ -15,6 +15,7 @@ SVG si apre anche fra dieci anni, senza rete.
 
 from __future__ import annotations
 
+import html
 import logging
 
 import numpy as np
@@ -52,7 +53,19 @@ def quando(ko) -> str:
 
 
 def _esc(s) -> str:
-    return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    """
+    Escaping HTML per OGNI valore interpolato, virgolette comprese.
+
+    PERCHE' LA STDLIB E NON TRE `replace` (audit B7). La versione fatta in
+    casa copriva `&`, `<` e `>` e non le virgolette, quindi un valore in
+    attributo poteva chiudere l'attributo. Oggi nessuna interpolazione sta in
+    un attributo e il report e' un file locale aperto col doppio clic: non
+    c'era un percorso sfruttabile. Ma una funzione di escaping incompleta
+    applicata a macchia di leopardo e' la premessa standard di una XSS il
+    giorno in cui il report smette di essere un file locale — e da quando
+    esiste `backend/api/` quel giorno e' molto meno ipotetico.
+    """
+    return html.escape(str(s), quote=True)
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +290,7 @@ def _html_target(preds: pd.DataFrame) -> str:
             f"{_esc(r['away_team'])}</h3><div class='card'><div class='due'>"
             f"<div><dl class='kv'>"
             f"<dt>quando</dt><dd>{_esc(quando(r.get('kickoff')))}</dd>"
-            f"<dt>dove</dt><dd>{squadra} in "
+            f"<dt>dove</dt><dd>{_esc(squadra)} in "
             f"{'casa' if r['home_team'] == squadra else 'trasferta'}</dd>"
             f"<dt>vittoria {_esc(r['home_team'])}</dt><dd>{r['p_home']:.1%}</dd>"
             f"<dt>pareggio</dt><dd>{r['p_draw']:.1%}</dd>"
@@ -398,7 +411,7 @@ def _html_con_quota(preds: pd.DataFrame,
             f"<td class='l'><strong>{_esc(r['mercato'])}</strong></td>"
             f"<td>{r['probabilita']:.1%}</td>"
             f"<td class='q'>{r['quota_equa']:.2f}</td>"
-            f"<td>{book}</td></tr>"
+            f"<td>{_esc(book)}</td></tr>"
         )
     return (
         f"<h3>Selezioni con quota almeno {minima:.2f}</h3><div class='card'>"

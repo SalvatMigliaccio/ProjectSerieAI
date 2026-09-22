@@ -379,7 +379,7 @@ def build(df: pd.DataFrame | None = None, save: bool = True,
 
     # Solo le partite davvero interrogate: dove lo scraping non e' arrivato la
     # quota deve restare NaN, non zero.
-    coperte = set(zip(assenze["season"], assenze["home_team"], assenze["away_team"]))
+    coperte = set(zip(assenze["season"], assenze["home_team"], assenze["away_team"], strict=True))
 
     out = base.copy()
     colonne_q = ["quota_minuti_assenti", "quota_ga_assente", "n_assenti"]
@@ -393,7 +393,7 @@ def build(df: pd.DataFrame | None = None, save: bool = True,
         ).rename(columns={c: f"{lato}_{c}" for c in colonne_q})
 
     dentro = [(s, h, a) in coperte
-              for s, h, a in zip(out["season"], out["home_team"], out["away_team"])]
+              for s, h, a in zip(out["season"], out["home_team"], out["away_team"], strict=True)]
     fuori = ~np.array(dentro)
     for c in FEATURES_PLAYERS:
         if c in out.columns:
@@ -426,7 +426,6 @@ def main() -> None:
     print("\n=== DISTRIBUZIONE (solo partite coperte) ===")
     print(out[colonne].describe().T.round(3).to_string())
 
-    q = out["home_quota_ga_assente"]
     coperte = out.dropna(subset=["home_quota_ga_assente"])
     if not coperte.empty:
         massimo = coperte[["home_quota_ga_assente", "away_quota_ga_assente"]].max(axis=1)

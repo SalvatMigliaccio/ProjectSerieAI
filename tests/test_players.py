@@ -102,7 +102,7 @@ def test_nomi_fra_fonti() -> None:
                                            "Ciro Immobile"]))
     b = players.normalizza_nome(pd.Series(["Rafael Leao", "Franco Vazquez",
                                            "Ciro  Immobile "]))
-    assert list(a) == list(b), list(zip(a, b))
+    assert list(a) == list(b), list(zip(a, b, strict=True))
     print("  accenti e spazi normalizzati fra le due fonti        ok")
 
 

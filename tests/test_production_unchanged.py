@@ -167,7 +167,6 @@ def verifica(master: pd.DataFrame) -> int:
     chiavi = rif[KEYS]
     corrente = assembla(master, calcola(master), chiavi)
 
-    mancanti = corrente["mkt_lambda_home"].isna() & rif["mkt_lambda_home"].notna()
     presenti = chiavi.merge(master.assign(season=master["season"].astype(str))[KEYS],
                             on=KEYS, how="inner")
     if len(presenti) < len(chiavi):
@@ -187,6 +186,22 @@ def verifica(master: pd.DataFrame) -> int:
               "corretto lo storico.\n   Verifica e poi rigenera con --rigenera.")
         return 1
     print(f"2. quote di ingresso identiche ({len(quote)} colonne)   ok")
+
+    # UN LAMBDA SPARITO NON E' UN LAMBDA DIVERSO, e i confronti sotto non lo
+    # vedrebbero: `_uguali` mette NaN e NaN d'accordo, quindi un de-vigging
+    # che smette di produrre un valore dove il riferimento ce l'aveva passa
+    # come "identico". E' una regressione che non cambia i numeri, li fa
+    # scomparire. Il controllo era scritto e lasciato scollegato (audit B14).
+    mancanti = corrente["mkt_lambda_home"].isna() & rif["mkt_lambda_home"].notna()
+    if mancanti.any():
+        persi = chiavi[mancanti.to_numpy()]
+        print("2b. lambda di mercato non piu' calcolati       FALLITO")
+        print(f"   {int(mancanti.sum())} partite hanno perso mkt_lambda_home, "
+              f"es. {persi.head(3).to_dict('records')}")
+        print("   Le quote di ingresso sono identiche (passo 2), quindi e' il "
+              "de-vigging che ha smesso di produrre un valore.")
+        return 1
+    print("2b. nessun lambda di mercato sparito           ok")
 
     esito = 0
     gruppi = [
