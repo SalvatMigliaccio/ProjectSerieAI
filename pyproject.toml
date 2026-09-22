@@ -17,7 +17,9 @@ version = "0.1.0"
 description = "Modello probabilistico sui gol nel calcio, con il mercato come riferimento misurato"
 readme = "README.md"
 requires-python = ">=3.12"
-license = "MIT"
+# NESSUNA LICENZA DICHIARATA finche' non c'e' un file LICENSE: dichiarare
+# "MIT" senza il testo della licenza e' peggio che non dichiarare niente.
+# Da decidere dal proprietario del repository (vedi docs/AUDIT_TECNICO.md).
 authors = [{ name = "andrew21111" }]
 keywords = ["football", "poisson", "dixon-coles", "forecasting", "betting-markets"]
 
