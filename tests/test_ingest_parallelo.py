@@ -101,6 +101,39 @@ def test_host_diversi_in_parallelo() -> None:
     print("2. host diversi: esecuzione sovrapposta              ok")
 
 
+def test_host_libero_non_aspetta_un_worker() -> None:
+    """
+    Tre stage su due host: quello con l'host libero deve partire SUBITO.
+
+    E' il caso che ha gia' sbagliato una volta. Con `max_workers` pari al
+    numero di host, il secondo stage dello stesso host si prende un worker e
+    ci resta BLOCCATO sul semaforo, e il terzo — il cui host e' libero —
+    aspetta in coda che si liberi un posto. Un worker fermo occupa comunque
+    il suo posto nel pool.
+
+    Nel caso reale significava far partire le quindici ore di WhoScored dopo
+    le nove di FBref invece che insieme: ventiquattro ore al posto di quindici.
+    """
+    spia = Spia()
+    orig = _prepara(
+        {"fb1": spia.stage("fb1", 0.30),
+         "fb2": spia.stage("fb2", 0.05),
+         "ws": spia.stage("ws", 0.05)},
+        {"fb1": "fbref", "fb2": "fbref", "ws": "whoscored"},
+    )
+    try:
+        ingest.esegui(["fb1", "fb2", "ws"], parallelo=True)
+    finally:
+        _ripristina(orig)
+
+    assert spia.sovrapposti("fb1", "ws"), (
+        "lo stage su host libero ha aspettato: un worker bloccato su un "
+        "semaforo sta occupando il suo posto nel pool"
+    )
+    assert not spia.sovrapposti("fb1", "fb2"), "due stage FBref si sono sovrapposti"
+    print("3. host libero: parte subito, non aspetta un worker   ok")
+
+
 def test_no_parallel_resta_seriale() -> None:
     """Con --no-parallel niente si sovrappone, qualunque sia l'host."""
     spia = Spia()
@@ -114,7 +147,7 @@ def test_no_parallel_resta_seriale() -> None:
         _ripristina(orig)
 
     assert not spia.sovrapposti("a", "b"), "--no-parallel ha comunque parallelizzato"
-    print("3. --no-parallel: esecuzione seriale                 ok")
+    print("4. --no-parallel: esecuzione seriale                 ok")
 
 
 def test_uno_stage_rotto_non_ferma_gli_altri() -> None:
@@ -136,7 +169,7 @@ def test_uno_stage_rotto_non_ferma_gli_altri() -> None:
     assert isinstance(esiti["rotto"], ConnectionError)
     assert esiti["sano"] is None
     assert "sano" in spia.intervalli, "lo stage sano non e' stato eseguito"
-    print("4. uno stage fallito, gli altri proseguono           ok")
+    print("5. uno stage fallito, gli altri proseguono           ok")
 
 
 def test_ogni_stage_ha_un_host_dichiarato() -> None:
@@ -150,12 +183,13 @@ def test_ogni_stage_ha_un_host_dichiarato() -> None:
 
     ignoti = sorted(set(ingest.HOST_DI_STAGE.values()) - set(ingest.LIMITE_PER_HOST))
     assert not ignoti, f"host senza limite dichiarato in LIMITE_PER_HOST: {ignoti}"
-    print("5. ogni stage ha host e limite dichiarati            ok")
+    print("6. ogni stage ha host e limite dichiarati            ok")
 
 
 def main() -> None:
     test_stesso_host_mai_in_parallelo()
     test_host_diversi_in_parallelo()
+    test_host_libero_non_aspetta_un_worker()
     test_no_parallel_resta_seriale()
     test_uno_stage_rotto_non_ferma_gli_altri()
     test_ogni_stage_ha_un_host_dichiarato()

@@ -754,9 +754,18 @@ def esegui(stages: list[str], parallelo: bool = True,
     il GIL e' rilasciato. Dei processi costerebbero memoria e serializzazione
     dei DataFrame senza guadagnare niente.
 
-    Il numero di worker non e' un parametro: e' il numero di host distinti fra
-    gli stage richiesti. Di piu' non servirebbe — i semafori li terrebbero
-    fermi — e di meno lascerebbe un host inattivo.
+    IL NUMERO DI WORKER E' len(stages), NON il numero di host. Sembra
+    sprecato — tanto i semafori ne lasciano passare uno per host — ed e'
+    invece l'unica scelta corretta: un worker BLOCCATO su un semaforo occupa
+    comunque il suo posto nel pool. Con tre stage su due host e due soli
+    worker, il secondo stage di FBref si prende un worker e ci resta fermo,
+    e lo stage di WhoScored — il cui host e' libero — aspetta in coda che
+    si liberi un posto.
+
+    Non e' teorico: con `--stage cups player_stats missing` avrebbe fatto
+    partire le quindici ore di WhoScored DOPO le nove di FBref invece che
+    insieme, cioe' ventiquattro ore invece di quindici. I thread fermi su un
+    semaforo non costano niente; un host lasciato inattivo costa ore.
     """
     semafori = {h: threading.Semaphore(n) for h, n in LIMITE_PER_HOST.items()}
     for nome in stages:  # uno stage su un host ignoto resta comunque serializzato
@@ -774,7 +783,7 @@ def esegui(stages: list[str], parallelo: bool = True,
              len(stages), len(host), ", ".join(sorted(host)))
 
     esiti: dict[str, Exception | None] = {}
-    with ThreadPoolExecutor(max_workers=len(host), thread_name_prefix="stage") as pool:
+    with ThreadPoolExecutor(max_workers=len(stages), thread_name_prefix="stage") as pool:
         futuri = [pool.submit(_esegui_uno, n, fixtures_file, semafori) for n in stages]
         for fut in barra(as_completed(futuri), "stage", totale=len(futuri)):
             nome, exc = fut.result()
