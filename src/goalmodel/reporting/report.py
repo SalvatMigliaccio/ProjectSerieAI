@@ -395,8 +395,8 @@ class TrackRecord:
 
 def carica_track_record(diag: Diagnostica) -> TrackRecord | None:
     """Registro + risultati veri, con l'RPS di ogni singola partita."""
-    from ..prediction import backtest_log as bl
     from ..evaluation.evaluate import _onehot, accuracy, calibration_table, outcome_index, rps
+    from ..prediction import backtest_log as bl
 
     # Il percorso si legge da `predict_mod` al momento della chiamata, non dal
     # default di `load_log`, che viene fissato all'import: e' l'unico modo di
@@ -1162,7 +1162,7 @@ def _html_stato(esito: predict_mod.Esito, diag: Diagnostica, falliti: list[str],
         avvisi.insert(0, "stage di rete falliti, si e' proseguito con i dati gia' "
                          "presenti: " + ", ".join(falliti))
     blocco_avvisi = (
-        f"<div class='card warn'><strong>Avvisi</strong><ul>"
+        "<div class='card warn'><strong>Avvisi</strong><ul>"
         + "".join(f"<li>{_esc(a)}</li>" for a in avvisi)
         + "</ul></div>"
     ) if avvisi else "<p class='sub'>Nessun avviso: il ciclo e' filato liscio.</p>"

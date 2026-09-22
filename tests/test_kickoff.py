@@ -18,19 +18,17 @@ Uso:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
 import pytest
 
-
-from goalmodel import config  # noqa: E402
-from goalmodel.normalize import (  # noqa: E402
-    apply_name_map, load_name_map, load_raw, normalize_season,
+from goalmodel import config
+from goalmodel.normalize import (
+    apply_name_map,
+    load_name_map,
+    load_raw,
+    normalize_season,
 )
-from goalmodel.prediction.predict import kickoff  # noqa: E402
+from goalmodel.prediction.predict import kickoff
 
 KEYS = ["league", "season", "home_team", "away_team"]
 

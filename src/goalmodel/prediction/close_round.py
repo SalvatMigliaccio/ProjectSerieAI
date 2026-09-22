@@ -46,10 +46,10 @@ import numpy as np
 import pandas as pd
 
 from .. import config
-from . import predict as predict_mod
 from ..reporting import report as report_mod
-from . import rounds
 from ..reporting.report import quando
+from . import predict as predict_mod
+from . import rounds
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("close_round")
@@ -83,8 +83,8 @@ def costruisci_giornata(season: str, matchday: int,
     errori, e un file di giornata che non li mostra racconta una storia piu'
     pulita di quella vera.
     """
-    from . import backtest_log as bl
     from ..evaluation.evaluate import brier, log_loss, outcome_index, rps
+    from . import backtest_log as bl
 
     preds = bl.load_log(path=predict_mod.PREDICTIONS_LOG)
     preds = preds[(preds["season"].astype(str) == str(season))

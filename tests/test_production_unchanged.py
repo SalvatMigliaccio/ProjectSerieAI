@@ -45,10 +45,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-
-from goalmodel import config  # noqa: E402
-from goalmodel.features import market  # noqa: E402
-from goalmodel.models.baseline import PRED_COLS, MarketOnly, all_markets  # noqa: E402
+from goalmodel import config
+from goalmodel.features import market
+from goalmodel.models.baseline import PRED_COLS, MarketOnly, all_markets
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "m1_riferimento.parquet"
 KEYS = ["league", "season", "home_team", "away_team"]
@@ -181,7 +180,7 @@ def verifica(master: pd.DataFrame) -> int:
     quote = [c for c in colonne_quote(master) if c in rif.columns]
     cambiate = [c for c in quote if not _uguali(rif[c], corrente[c])]
     if cambiate:
-        print(f"2. quote di ingresso identiche                 FALLITO")
+        print("2. quote di ingresso identiche                 FALLITO")
         print(f"   colonne cambiate: {cambiate}")
         print("   Sono cambiati i DATI, non il codice: football-data ha "
               "corretto lo storico.\n   Verifica e poi rigenera con --rigenera.")

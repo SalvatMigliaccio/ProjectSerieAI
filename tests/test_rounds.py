@@ -15,7 +15,6 @@ Niente tocca il registro o l'archivio veri: si sostituiscono
     python -m tests.test_rounds
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
@@ -23,12 +22,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-
-from goalmodel import config
-from goalmodel.prediction import close_round
+from goalmodel.models.baseline import predictions_from_lambdas
+from goalmodel.prediction import close_round, rounds
 from goalmodel.prediction import predict as predict_mod
-from goalmodel.prediction import rounds  # noqa: E402
-from goalmodel.models.baseline import predictions_from_lambdas  # noqa: E402
 
 rng = np.random.default_rng(3)
 

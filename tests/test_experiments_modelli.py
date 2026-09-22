@@ -15,19 +15,15 @@ sbagliato.
     python -m tests.test_experiments_modelli
 """
 
-import sys
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytest
 
-
-from goalmodel import config  # noqa: E402
-from goalmodel.evaluation.evaluate import load_dataset  # noqa: E402
-from goalmodel.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda  # noqa: E402
-from goalmodel.features import sets  # noqa: E402
-from goalmodel.models.baseline import PRED_COLS  # noqa: E402
+from goalmodel import config
+from goalmodel.evaluation.evaluate import load_dataset
+from goalmodel.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda
+from goalmodel.features import sets
+from goalmodel.models.baseline import PRED_COLS
 
 SEMI = (0, 1, 2)
 

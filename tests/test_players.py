@@ -12,15 +12,12 @@ Qui si conta a mano su una rosa di tre giocatori.
     python -m tests.test_players
 """
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-
-from goalmodel.features import players  # noqa: E402
+from goalmodel.features import players
 
 
 def rosa() -> pd.DataFrame:

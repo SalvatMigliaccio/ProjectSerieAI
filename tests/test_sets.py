@@ -10,16 +10,14 @@ colonne diverse da quelle dichiarate.
     python -m tests.test_sets
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
 import pandas as pd
 import pytest
 
-
-from goalmodel import config  # noqa: E402
-from goalmodel.features import sets  # noqa: E402
+from goalmodel import config
+from goalmodel.features import sets
 
 # BASE per esteso, copiato a mano e non importato: se qualcuno modifica la
 # definizione in `sets.py` — anche con buone intenzioni — questo elenco non

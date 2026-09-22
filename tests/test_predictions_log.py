@@ -15,15 +15,13 @@ Uso:
 
 from __future__ import annotations
 
-import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-
-from goalmodel.prediction.predict import LOG_COLUMNS, already_logged, append_log  # noqa: E402
+from goalmodel.prediction.predict import LOG_COLUMNS, already_logged, append_log
 
 MODELLO = "M1 market-only (lambda)"
 ALTRO = "M7 sperimentale"

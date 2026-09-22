@@ -8,15 +8,13 @@ contro l'errore che rovina silenziosamente questo tipo di progetti.
     python -m tests.test_form
 """
 
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 
-from goalmodel.features import form  # noqa: E402
+from goalmodel.features import form
 
 rng = np.random.default_rng(7)
 

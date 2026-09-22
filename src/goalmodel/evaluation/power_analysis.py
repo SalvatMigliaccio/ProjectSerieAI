@@ -59,8 +59,8 @@ import pandas as pd
 from scipy import stats
 
 from .. import config
-from .evaluate import PROB_COLS, outcome_index, rps
 from ..models.baseline import predictions_from_lambdas
+from .evaluate import PROB_COLS, outcome_index, rps
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("power")

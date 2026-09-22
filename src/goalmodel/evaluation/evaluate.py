@@ -199,7 +199,7 @@ def metrics(p: np.ndarray, y: np.ndarray) -> dict[str, float]:
         "log_loss": float(log_loss(p, y).mean()),
         "Brier": float(brier(p, y).mean()),
         "accuratezza": float(accuracy(p, y).mean()),
-        "n": int(len(y)),
+        "n": len(y),
     }
 
 

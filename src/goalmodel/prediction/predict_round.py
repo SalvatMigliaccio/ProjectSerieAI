@@ -45,10 +45,10 @@ import numpy as np
 import pandas as pd
 
 from .. import config
-from . import predict as predict_mod
 from ..reporting import report as report_mod
-from . import rounds
 from ..reporting.report import quando, selezioni
+from . import predict as predict_mod
+from . import rounds
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("predict_round")

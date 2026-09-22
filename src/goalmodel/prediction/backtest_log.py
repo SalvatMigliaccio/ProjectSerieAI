@@ -33,7 +33,6 @@ from __future__ import annotations
 import argparse
 import logging
 
-import numpy as np
 import pandas as pd
 
 from .. import config
@@ -93,8 +92,8 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
     metriche invece che cancellate: il registro resta append-only e l'errore
     resta visibile.
     """
-    from .predict import kickoff
     from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
+    from .predict import kickoff
 
     out = preds.copy()
     out["post_kickoff"] = False
@@ -249,7 +248,7 @@ def report(by_season: bool = False, show_pending: bool = False, path=PREDICTIONS
 
     print("\n=== METRICHE SULLE SOLE PREVISIONI FUORI CAMPIONE ===")
     print(tab.round(4).to_string(index=False))
-    print(f"\nriferimento in valutazione (test set 2324-2526): RPS 0.1881")
+    print("\nriferimento in valutazione (test set 2324-2526): RPS 0.1881")
     print("Uno scarto persistente da quel valore non e' un modello che sbaglia:")
     print("e' la pipeline di produzione che si comporta diversamente dal backtest.")
 

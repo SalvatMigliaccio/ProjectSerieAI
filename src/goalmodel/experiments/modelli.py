@@ -60,7 +60,7 @@ class M5Set(MarketAnchoredGBM):
         nome = etichetta or "+".join(self.sets)
         self.suffisso = f" [{nome}] s{seed}"
 
-    def fit(self, train: pd.DataFrame) -> "M5Set":
+    def fit(self, train: pd.DataFrame) -> M5Set:
         dichiarate = set(sets_mod.colonne(self.sets))
         estranee = [c for c in self.togli if c not in dichiarate]
         if estranee:
@@ -93,7 +93,7 @@ class M5Colonne(MarketAnchoredGBM):
         self.colonne = tuple(colonne)
         self.suffisso = f" [{etichetta}] s{seed}"
 
-    def fit(self, train: pd.DataFrame) -> "M5Colonne":
+    def fit(self, train: pd.DataFrame) -> M5Colonne:
         assenti = [c for c in self.colonne if c not in train.columns]
         if assenti:
             raise KeyError(f"colonne dichiarate assenti dal training: {assenti[:5]}")
@@ -140,7 +140,7 @@ class M5MediaSemi(Model):
     def name(self) -> str:
         return self._name
 
-    def fit(self, train: pd.DataFrame) -> "M5MediaSemi":
+    def fit(self, train: pd.DataFrame) -> M5MediaSemi:
         for m in self.modelli:
             m.fit(train)
         return self

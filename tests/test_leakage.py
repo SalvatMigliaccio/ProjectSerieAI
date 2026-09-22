@@ -16,16 +16,11 @@ Uso:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
-
-from goalmodel import config  # noqa: E402
-from goalmodel.evaluation.evaluate import walk_forward  # noqa: E402
-from goalmodel.models.baseline import Model, PRED_COLS  # noqa: E402
+from goalmodel.evaluation.evaluate import walk_forward
+from goalmodel.models.baseline import PRED_COLS, Model
 
 
 class Spia(Model):
@@ -41,7 +36,7 @@ class Spia(Model):
     def __init__(self) -> None:
         self.visto: list[dict] = []
 
-    def fit(self, train: pd.DataFrame) -> "Spia":
+    def fit(self, train: pd.DataFrame) -> Spia:
         self._train = train
         return self
 

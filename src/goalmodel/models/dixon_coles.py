@@ -181,7 +181,7 @@ class DixonColes(Model):
     def name(self) -> str:
         return f"M3 Dixon-Coles hl={self.halflife_days:g}g"
 
-    def fit(self, train: pd.DataFrame) -> "DixonColes":
+    def fit(self, train: pd.DataFrame) -> DixonColes:
         df = train.dropna(subset=["FTHG", "FTAG"])
         if df.empty:
             self.params_ = None
@@ -276,7 +276,7 @@ def tune_halflife(
     half-life, il risultato riportato sarebbe il massimo di cinque tentativi e
     non una stima onesta.
     """
-    from ..evaluation.evaluate import outcome_index, rps, walk_forward, PROB_COLS
+    from ..evaluation.evaluate import PROB_COLS, outcome_index, rps, walk_forward
 
     grid = grid or config.DC_HALFLIFE_GRID
     validation_seasons = validation_seasons or config.VALIDATION_SEASONS

@@ -237,7 +237,7 @@ class Model:
 
     name = "modello"
 
-    def fit(self, train: pd.DataFrame) -> "Model":
+    def fit(self, train: pd.DataFrame) -> Model:
         return self
 
     def predict(self, test: pd.DataFrame) -> pd.DataFrame:
@@ -281,7 +281,7 @@ class BaseRate(Model):
         self.rates = np.array([np.nan, np.nan, np.nan])
         self.p_over = np.nan
 
-    def fit(self, train: pd.DataFrame) -> "BaseRate":
+    def fit(self, train: pd.DataFrame) -> BaseRate:
         ftr = train["FTR"].dropna()
         self.rates = np.array([(ftr == c).mean() for c in ("H", "D", "A")])
         tot = (train["FTHG"] + train["FTAG"]).dropna()
@@ -402,7 +402,7 @@ class PoissonGLM(Model):
         x[:, -1] = is_home
         return x
 
-    def fit(self, train: pd.DataFrame) -> "PoissonGLM":
+    def fit(self, train: pd.DataFrame) -> PoissonGLM:
         df = train.dropna(subset=["FTHG", "FTAG"]).sort_values("date")
         if self.window:
             df = df.tail(self.window)

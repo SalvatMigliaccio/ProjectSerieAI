@@ -46,9 +46,9 @@ import logging
 import pandas as pd
 
 from .. import config, experiments
-from ..prediction import predict as predict_mod
 from ..evaluation.evaluate import load_dataset
 from ..models.baseline import fair_odds, predictions_from_lambdas
+from ..prediction import predict as predict_mod
 from .modelli import M5MediaSemi
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")

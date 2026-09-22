@@ -8,14 +8,12 @@ senza dover scaricare nulla.
 
 import argparse
 import itertools
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from goalmodel import config  # noqa: E402
+from goalmodel import config
 
 rng = np.random.default_rng(42)
 

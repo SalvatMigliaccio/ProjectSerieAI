@@ -45,7 +45,7 @@ def tmp(tmp_path: Path) -> Path:
 # pytest impone il nome `config` per questo parametro, che qui coprirebbe il
 # modulo `goalmodel.config` importato sopra. Il percorso del dataset e' gia'
 # risolto in DATASET, quindi dentro l'hook il modulo non serve.
-def pytest_collection_modifyitems(config, items: list[pytest.Item]) -> None:  # noqa: ARG001
+def pytest_collection_modifyitems(config, items: list[pytest.Item]) -> None:
     """Salta i test che chiedono data/ quando data/ non c'e'."""
     if dati_presenti():
         return

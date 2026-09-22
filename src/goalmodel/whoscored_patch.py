@@ -127,9 +127,9 @@ def _patch_banner() -> None:
     """
     import time
 
+    import soccerdata.whoscored as ws
     from selenium.common.exceptions import NoSuchElementException
     from selenium.webdriver.common.by import By
-    import soccerdata.whoscored as ws
 
     def _handle_banner(self) -> None:
         time.sleep(2)

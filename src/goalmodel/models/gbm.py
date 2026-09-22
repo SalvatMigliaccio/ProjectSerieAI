@@ -316,7 +316,7 @@ class PoissonGBM(Model):
             return final.fit(x, y)
         return final.fit(x, y, init_score=init)
 
-    def fit(self, train: pd.DataFrame) -> "PoissonGBM":
+    def fit(self, train: pd.DataFrame) -> PoissonGBM:
         df = train.dropna(subset=["FTHG", "FTAG"]).sort_values("date")
         self.features_ = form_features(df, self.escludi)
         if self.use_market:
@@ -387,7 +387,7 @@ class MarketAnchoredGBM(PoissonGBM):
     def name(self) -> str:
         return f"M5 GBM ancorato al mercato{self.suffisso}"
 
-    def fit(self, train: pd.DataFrame) -> "MarketAnchoredGBM":
+    def fit(self, train: pd.DataFrame) -> MarketAnchoredGBM:
         df = train.dropna(subset=["FTHG", "FTAG", *MKT_LAMBDA]).sort_values("date")
         self.features_ = form_features(df, self.escludi)
 
@@ -461,7 +461,7 @@ class LogBlend(Model):
     def name(self) -> str:
         return f"M6 miscela log w={self.weight:.2f}"
 
-    def fit(self, train: pd.DataFrame) -> "LogBlend":
+    def fit(self, train: pd.DataFrame) -> LogBlend:
         self.inner.fit(train)
         return self
 
