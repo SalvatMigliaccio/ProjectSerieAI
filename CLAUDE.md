@@ -1329,6 +1329,26 @@ archivia in `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione,
 risultato ed errore di ogni singola partita. Poi rifa' il riepilogo cumulativo
 in `track_record/rounds/riepilogo.csv` e rigenera il report.
 
+**I risultati arrivano da una catena di fonti** (`src/risultati.py`, dal 21
+settembre 2026): football-data per primo, poi Understat, poi FBref. Il motivo
+e' stato misurato: football-data aggiorna il file della stagione un paio di
+volte a settimana, e il lunedi' sera della giornata 5 non aveva ancora nessuno
+dei dieci risultati, mentre Understat — scaricato dallo stesso comando alla
+stessa ora — li aveva tutti. Il ripiego scatta **subito**, appena la fonte
+principale manca (scelta esplicita). Il file di giornata registra la
+provenienza in `fonte_risultato`.
+
+Quanto ci si puo' fidare: su 4600 partite in entrambe le fonti, football-data e
+Understat coincidono nel **99.98%**. L'unica differenza e' Sassuolo-Pescara
+2016/17 — 2-1 in campo, 0-3 a tavolino — perche' football-data registra il
+risultato **ufficiale** e Understat quello del campo. Per questo
+`close_round` chiama `riconcilia()` all'avvio: se una giornata chiusa con un
+risultato di ripiego diverge da quello ufficiale pubblicato dopo, lo
+**avvisa**, ma non riscrive l'archivio. La catena tocca solo i risultati:
+`matches_master`, il dataset del modello, resta costruito da football-data.
+Verificato con `tests/test_risultati.py` e con l'impronta di produzione
+invariata.
+
 **Una giornata incompleta non si chiude.** Se anche una sola partita non ha il
 risultato — posticipo, rinvio — la giornata resta aperta e si riprova al lancio
 successivo. Vale anche con `--round` esplicito: chiuderla significherebbe

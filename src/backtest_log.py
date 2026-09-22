@@ -132,8 +132,12 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
 
 def attach_results(preds: pd.DataFrame) -> pd.DataFrame:
     """Aggancia i risultati veri. Chiave la quadrupla, mai la data."""
-    truth = pd.read_parquet(config.INTERIM / "matches_master.parquet")
-    truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR"]].drop_duplicates(subset=KEYS)
+    # I risultati arrivano dalla catena di fonti (football-data, poi Understat,
+    # poi FBref), con la provenienza in `fonte_risultato`: vedi src/risultati.py.
+    from .risultati import risultati
+    truth = risultati()
+    truth = truth[KEYS + ["date", "FTHG", "FTAG", "FTR", "fonte_risultato"]]
+    truth = truth.drop_duplicates(subset=KEYS)
     truth["season"] = truth["season"].astype(str)
 
     if "post_kickoff" not in preds.columns:
