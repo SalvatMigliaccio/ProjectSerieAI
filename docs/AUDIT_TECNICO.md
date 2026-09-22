@@ -49,17 +49,43 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 | A1 ingest alla radice | **chiuso** | `src/goalmodel/ingest.py` + `cli.py` |
 | A2 packaging e pinning | **chiuso** | `pyproject.toml`, `requirements.lock` |
 | A3 KEYS duplicata | **chiuso** | `config.JOIN_KEYS`, una sola definizione |
+| A4 report.py, 4 mestieri | **chiuso** | `sezioni.py` calcola, `pagina.py` impagina, `report.py` orchestra |
+| A5 doppio registro feature | **chiuso** | `gbm.FUORI_DAL_MODELLO = sets.fuori_dal_modello()` |
 | A6 CI, lint, runner test | **chiuso** | `.github/workflows/ci.yml`, ruff, pytest |
 | A7 accesso ai dati sparso | **chiuso** | `data.py` + `features/registry.py` |
 | A8 check.py alla radice | **chiuso** | `scripts/ispeziona_dataset.py` |
-| **B2 parquet giocatori orfano** | **chiuso** | `features/registry.py`, un elenco solo |
-| **B1 sezione 3 del report morta** | **chiuso** | M4 si addestra su cio' che esiste al momento di predire |
-| **B3 assert come invariante** | **chiuso** | `raise` al posto di `assert`, `S101` attivo in CI |
-| **A4 report.py, 4 mestieri** | **chiuso** | `sezioni.py` calcola, `pagina.py` impagina, `report.py` orchestra |
-| **A5 doppio registro feature** | **chiuso** | `gbm.FUORI_DAL_MODELLO = sets.fuori_dal_modello()` |
+| B1 sezione 3 del report morta | **chiuso** | M4 si addestra su cio' che esistera' al momento di predire |
+| B2 parquet giocatori orfano | **chiuso** | `features/registry.py`, un elenco solo |
+| B3 assert come invariante | **chiuso** | `raise` al posto di `assert`, `S101` attivo in CI |
+| B4 `except Exception` largo | **chiuso** | `rounds.ERRORI_DI_RETE`; nel report largo ma con traceback |
+| B5 confine di fiducia sul CSV | **chiuso** | tetto, content-type, `tests/test_confine_rete.py` |
+| B6 guardia esperimenti parziale | **chiuso** | dichiarata, non estesa: il docstring elenca cosa non copre |
+| B7 `_esc()` incompleta | **chiuso** | `html.escape(s, quote=True)` su tutte le interpolazioni |
+| B8 file handle senza context manager | **chiuso** | `contextlib.ExitStack` |
+| B9 conteggio fuorviante in `tune()` | **chiuso** | `len(jobs)` |
+| B10 quote riga per riga, muto | **chiuso** | ciclo sui book, avviso quando una colonna manca |
+| B11 `ewma_by_team` per riga | **accettato** | 0.87 s su 4610 righe, una volta per giornata |
+| B12 registro riletto per intero | **accettato** | ~380 righe l'anno, ~40 KB in dieci stagioni |
+| B13 `zip()` senza `strict` | **chiuso** | `strict=True` su 18, `pairwise` sulla 19a |
+| B14 controllo mai collegato | **chiuso** | passo 2b di `verifica()`, verificato che scatta |
 | licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
-| B4-B12 | aperti | igiene, diff piccoli |
-| B13, B14 | aperti | trovati da ruff, vedi sotto |
+| contratto dei file implicito | **chiuso** | `schema.py`, verificato da `data.py` a ogni lettura |
+
+**Tutte le voci diagnosticate sono chiuse o accettate con una misura
+accanto.** Il cricchetto di `ruff` in `pyproject.toml`, che nasceva per
+tenerle sotto controllo una per una, e' sceso da dodici voci a due, entrambe
+di solo stile (`RUF005`, `SIM108`): `S101`, `S310`, `S603`, `F841`, `B905`,
+`SIM115`, `PTH123`, `RUF007`, `RUF059` e `B007` sono tutte attive in CI.
+
+**Due cose trovate mentre si chiudevano, non in diagnosi**, ed e' il motivo
+per cui vale la pena scrivere i test invece di fidarsi della lettura:
+
+- **la Conference League non era mai stata scaricata** (vedi la nota su
+  `ingest_cups`), e il numero 4140 era finito in `CLAUDE.md` come se le coppe
+  fossero tre;
+- **la quadrupla di `fbref_schedule` non e' univoca**: Spezia-Hellas Verona
+  2022/23 e' insieme una partita di campionato e uno spareggio salvezza, e due
+  consumatori se la cavavano solo grazie all'ordine delle righe nel parquet.
 
 ### Come e' stato chiuso B2, e perche' non puo' tornare
 
