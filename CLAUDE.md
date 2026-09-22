@@ -1655,7 +1655,12 @@ Cosa ne segue, in pratica:
 - Ogni modulo eseguibile con un `argparse`, raggiungibile sia come
   `python -m goalmodel.<percorso>` sia come sottocomando di `goalmodel`
   (registrarlo in `src/goalmodel/cli.py`, una riga)
-- Parquet per tutti i dati intermedi
+- Parquet per tutti i dati intermedi — **ma ha una scadenza nota**: in fase 2
+  la fonte di verita' diventa Postgres (`docs/adr/0002-postgres-fonte-di-verita.md`).
+  Il `track_record/` no, e resta su file: la sua integrita' e' una proprieta'
+  di processo, non di schema. **La precondizione e' chiudere il confine di
+  lettura**: oggi 13 moduli leggono parquet saltando `data.py`, e con quelli
+  in giro la migrazione si dimentica un file senza dare errore
 - Niente notebook nel codice di produzione: solo esplorazione in `notebooks/`
 - Log via `logging`, non `print`
 
