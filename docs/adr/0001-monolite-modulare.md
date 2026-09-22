@@ -1,6 +1,6 @@
 # ADR 0001 — Un solo repository, a monolite modulare
 
-- **Stato**: accettata
+- **Stato**: accettata, **da rivedere** (vedi "Aggiornamento" in fondo)
 - **Data**: 22 settembre 2026
 - **Contesto**: audit tecnico (`docs/AUDIT_TECNICO.md`), 46 file Python, 13.906 righe
 - **Decide**: se spezzare il progetto in piu' repository adesso
@@ -93,3 +93,64 @@ rete. Finche' `matches_master` e' "quelle colonne li'", nessuno split e' sicuro.
 - **Monorepo con un `pyproject` per livello** (workspace): tutto il costo dello
   split senza il beneficio della separazione, finche' i livelli si rilasciano
   insieme. Da riconsiderare solo insieme allo split vero.
+
+---
+
+## Aggiornamento — 22 settembre 2026
+
+**Questa decisione e' stata presa senza sapere che esistevano gia' un'API e un
+frontend.** Vivevano sul branch `API_Frontend`, scritto sul vecchio layout
+`src/` piatto, e sono stati portati sul pacchetto lo stesso giorno. Due delle
+tre ragioni per non spezzare **non valgono piu'**, e uno dei quattro segnali
+che riaprono la decisione **e' gia' scattato**. Non si decide niente qui: si
+mette per iscritto che chi legge questa ADR al momento della scelta non deve
+fidarsi del testo sopra.
+
+### Cosa e' cambiato, punto per punto
+
+| era scritto | oggi |
+|---|---|
+| "il contratto fra i pezzi e' implicito, non c'e' uno schema versionato ne' una validazione" | **falso.** `src/goalmodel/schema.py` dichiara il contratto dei file e `data.py` lo verifica a **ogni lettura**: colonne obbligatorie, tipi che romperebbero un merge in silenzio, chiave univoca e non nulla |
+| "oggi: due sviluppatori, nessuna API, nessun utente, nessun servizio in esecuzione" | **falso.** `backend/api/` e' un servizio FastAPI in sola lettura con sette endpoint, `frontend/` una dashboard React, e `web/openapi.json` e' il contratto **versionato** fra i due |
+| "il costo di rimandare e' basso: con i livelli separati e nessun import all'indietro, estrarre un livello e' `git filter-repo` piu' un `pyproject`" | **piu' vero di prima.** Gli import all'indietro erano due, entrambi nascosti dentro funzioni; oggi non ce n'e' nessuno |
+
+### Il prerequisito non negoziabile e' soddisfatto
+
+L'ADR diceva: *"lo schema dei parquet dev'essere versionato e validato al
+confine prima che quel confine diventi la rete. Finche' `matches_master` e'
+'quelle colonne li'', nessuno split e' sicuro."*
+
+Lo schema c'e' ed e' verificato al confine. **Con un limite dichiarato**: copre
+le colonne la cui assenza o il cui tipo sbagliato produrrebbe un errore
+silenzioso — chiavi, date, risultati — non tutte le 222. Per un confine di
+processo basta; per un confine di rete fra repository con rilasci
+indipendenti, il giorno in cui si spezza va deciso se allargarlo alle colonne
+di feature, che oggi hanno il loro registro in `features/sets.py` e nessuna
+validazione di tipo.
+
+### Il segnale che e' scattato
+
+> "compare un secondo consumatore del core (una API web, un secondo campionato
+> con un suo ciclo)" -> estrarre `features` + `models` + `evaluation` come libreria
+
+E' esattamente quello che e' successo. Va letto con una precisazione che conta:
+`backend/` **non consuma il core**, consuma i suoi output — legge
+`track_record/` e `data/`, non addestra e non importa mai un modello
+(`tests/test_api.py` lo verifica in un sottoprocesso). Il consumatore vero del
+core resta uno solo. Il segnale e' scattato a meta'.
+
+### Cosa resta vero
+
+La ragione piu' forte per non spezzare **subito** non era nessuna delle tre:
+era l'ordine. Prima i confini, poi la distanza. I confini adesso ci sono —
+livelli senza import all'indietro, uno schema verificato, due pacchetti
+installabili distinti (`goalmodel` e `backend`), un contratto HTTP versionato.
+
+Il candidato naturale per il primo distacco **non e' piu' un livello del
+core**: e' `frontend/`, che e' l'unico pezzo con un altro linguaggio, un'altra
+toolchain e un altro ciclo di rilascio, e che parla con il resto solo via HTTP
+e solo in GET. Estrarlo non tocca nessun import Python.
+
+**La decisione si riprende quando si affronta il frontend, non prima**, e a
+quel punto va riscritta come ADR 0002 invece che emendata ancora.
+
