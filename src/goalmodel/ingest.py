@@ -2,37 +2,59 @@
 Ingestion multi-fonte per il dataset Serie A.
 
 Scarica i dati grezzi da tutte le fonti e li salva in Parquet dentro data/raw/.
-Ogni stage e' indipendente e ri-eseguibile: soccerdata mantiene una cache locale
-persistente (~/soccerdata/data/), quindi rilanciare uno stage gia' completato
-non ri-scarica nulla.
+Ogni stage e' indipendente e ri-eseguibile: soccerdata mantiene una cache
+locale persistente (~/soccerdata/data/), quindi rilanciare uno stage gia'
+completato non ri-scarica nulla.
 
-Uso:
-    goalmodel ingest --stage matches      # veloce, ~10 secondi
-    goalmodel ingest --stage understat    # veloce, ~2 minuti
-    goalmodel ingest --stage elo          # veloce, ~1 minuto
-    goalmodel ingest --stage schedule     # medio, ~5 minuti
-    goalmodel ingest --stage lineups      # LENTO, ore
-    goalmodel ingest --stage missing      # LENTO, richiede browser
+    goalmodel ingest --stage matches      # veloce,  ~10 secondi
+    goalmodel ingest --stage understat    # veloce,  ~2 minuti
+    goalmodel ingest --stage elo          # veloce,  ~1 minuto
+    goalmodel ingest --stage schedule     # medio,   ~5 minuti
+    goalmodel ingest --stage lineups      # LENTO,   ore
+    goalmodel ingest --stage missing      # LENTO,   richiede un browser
     goalmodel ingest --stage all
+    goalmodel ingest --stage all --no-parallel
 
-ATTENZIONE ai tempi: FBref applica rate limiting e soccerdata lo rispetta
-introducendo un ritardo tra le richieste. Gli stage 'lineups' e 'player_stats'
-fanno una richiesta per partita: con ~380 partite/stagione x 10 stagioni sono
-~3800 richieste. Lancialo di notte, una stagione alla volta. La cache rende
-l'operazione incrementale, quindi puoi interromperlo e riprenderlo.
+PARALLELISMO: FRA GLI HOST, MAI DENTRO UNO
+Con `--stage all` gli stage che contattano server DIVERSI girano insieme;
+quelli sullo stesso server restano in fila. Non e' una cautela generica, e'
+aritmetica: soccerdata dorme `rate_limit` secondi dopo ogni richiesta, nel
+thread chiamante, e quel valore vale 7 secondi per FBref e 5 per WhoScored.
+Due istanze FBref in due thread dormono in parallelo e raddoppiano le
+richieste al secondo viste dal server — cioe' aggirano il limite invece di
+rispettarlo. `--no-parallel` torna all'esecuzione in sequenza.
+
+Quanto si guadagna, onestamente: sui tre stage di avvio (matches, understat,
+schedule) la somma diventa il massimo, ~7 minuti scendono a ~5. Sugli stage
+pesanti NON si guadagna niente, perche' sono tutti su FBref e restano in fila
+fra loro. Le ore stanno nel limite di frequenza, e quello non si tocca.
+
+ATTENZIONE AI TEMPI: gli stage 'lineups' e 'player_stats' fanno una richiesta
+per partita. Su 4580 partite sono 4580 x 7 secondi, cioe' quasi nove ore di
+sola attesa. Lanciali di notte. La cache rende l'operazione incrementale,
+quindi si puo' interrompere e riprendere.
 
 WhoScored (stage 'missing') usa Selenium e richiede un browser installato.
-Se non ti serve subito, saltalo: il modello T-24h puo' partire senza.
+Se non serve subito, si salta: il modello T-24h parte senza.
 """
 
 import argparse
 import logging
+import sys
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
 import soccerdata as sd
 
 from . import config
+
+try:  # la barra e' un di piu': senza tqdm tutto funziona identico
+    from tqdm import tqdm as _TQDM
+except ImportError:  # pragma: no cover
+    _TQDM = None
 
 # ---------------------------------------------------------------------------
 # Configurazione
@@ -319,10 +341,13 @@ def registra_coppe() -> list[str]:
     """
     from soccerdata._config import LEAGUE_DICT
 
-    for chiave, nome in config.FBREF_CUPS.items():
-        LEAGUE_DICT.setdefault(chiave, {
-            "FBref": nome, "season_start": "Aug", "season_end": "May",
-        })
+    # LEAGUE_DICT e' globale in soccerdata e con gli stage in parallelo
+    # `cups` e `missing` possono mutarlo insieme.
+    with _LOCK_LEGHE:
+        for chiave, nome in config.FBREF_CUPS.items():
+            LEAGUE_DICT.setdefault(chiave, {
+                "FBref": nome, "season_start": "Aug", "season_end": "May",
+            })
     return list(config.FBREF_CUPS)
 
 
@@ -341,7 +366,7 @@ def ingest_cups() -> pd.DataFrame:
     """
     coppe = registra_coppe()
     pezzi = []
-    for coppa in coppe:
+    for coppa in barra(coppe, "coppe"):
         try:
             fb = sd.FBref(leagues=[coppa], seasons=SEASONS)
             df = fb.read_schedule().reset_index()
@@ -373,7 +398,8 @@ def ingest_team_stats() -> None:
     dell'avversario, utile per costruire la coppia (prodotto, subito).
     """
     fb = sd.FBref(leagues=LEAGUE, seasons=SEASONS)
-    for stat_type in ["shooting", "possession", "passing", "defense"]:
+    tipi = ["shooting", "possession", "passing", "defense"]
+    for stat_type in barra(tipi, "team stats"):
         try:
             df = fb.read_team_match_stats(stat_type=stat_type)
             save(df, f"fbref_team_{stat_type}")
@@ -426,7 +452,7 @@ def ingest_player_stats(seasons: list[str] | None = None) -> pd.DataFrame:
     if fatte:
         log.info("stagioni gia' scaricate: %s", sorted(fatte))
 
-    for stagione in seasons:
+    for stagione in barra(seasons, "stagioni"):
         if str(stagione) in fatte:
             continue
         try:
@@ -474,11 +500,12 @@ def applica_locale_whoscored() -> None:
 
     from . import whoscored_patch
 
-    for chiave, nome in config.WHOSCORED_LEAGUE_OVERRIDE.items():
-        if chiave in LEAGUE_DICT:
-            LEAGUE_DICT[chiave]["WhoScored"] = nome
-            log.info("WhoScored: '%s' -> '%s'", chiave, nome)
-    whoscored_patch.applica()
+    with _LOCK_LEGHE:
+        for chiave, nome in config.WHOSCORED_LEAGUE_OVERRIDE.items():
+            if chiave in LEAGUE_DICT:
+                LEAGUE_DICT[chiave]["WhoScored"] = nome
+                log.info("WhoScored: '%s' -> '%s'", chiave, nome)
+        whoscored_patch.applica()
 
 
 def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
@@ -516,7 +543,7 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
     if fatte:
         log.info("gia' scaricate %d partite: le salto", len(fatte))
 
-    for stagione in seasons:
+    for stagione in barra(seasons, "stagioni"):
         try:
             ws = sd.WhoScored(leagues=LEAGUE, seasons=[stagione], headless=True)
             sched = ws.read_schedule().reset_index()
@@ -581,7 +608,7 @@ def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataF
     frames = []
     consecutive_failures = 0
 
-    for team in teams:
+    for team in barra(teams, "squadre"):
         try:
             hist = elo.read_team_history(team).reset_index()
             hist["team"] = team
@@ -612,6 +639,150 @@ def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataF
 
 
 # ---------------------------------------------------------------------------
+# Esecuzione degli stage: cosa si puo' parallelizzare, e cosa no
+# ---------------------------------------------------------------------------
+#
+# IL COLLO DI BOTTIGLIA NON E' QUESTA MACCHINA. Misurato su soccerdata 1.9.1:
+# dopo OGNI richiesta la libreria esegue `time.sleep(self.rate_limit)` nel
+# thread chiamante, e il valore dipende dalla fonte:
+#
+#     FBref          7 s     una richiesta per partita negli stage pesanti
+#     WhoScored      5 s     piu' il caricamento della pagina in Selenium
+#     Understat      0 s
+#     ClubElo        0 s
+#     football-data  0 s
+#
+# Quindi `player_stats` su 4580 partite costa 4580 x 7 s ~= 8.9 ORE, e sono
+# quasi tutte `sleep`. Con venti core e quindici giga liberi, CPU e RAM non
+# c'entrano niente.
+#
+# PERCHE' NON SI PARALLELIZZA DENTRO UN HOST. Quel `sleep` e' PER ISTANZA e
+# PER THREAD: due istanze FBref in due thread dormono in parallelo e
+# raddoppiano la frequenza delle richieste viste dal server. Non e' un
+# aumento di velocita', e' aggirare il limite — e FBref blocca per molto meno.
+# Lo stesso vale per WhoScored, dove per giunta ogni worker vuole un browser
+# suo (~400 MB) e la pagina serve un captcha quando si insiste (e' gia'
+# scritto in `ingest_missing`: una stagione per volta, con pausa).
+#
+# COSA SI PARALLELIZZA DAVVERO: gli host fra loro. football-data, Understat,
+# FBref, ClubElo e WhoScored sono server diversi; farli lavorare insieme non
+# aumenta il carico di nessuno di loro. Ogni host resta servito da un flusso
+# di richieste seriale, esattamente come prima.
+#
+# QUANTO SI GUADAGNA, ONESTAMENTE. Sui tre stage di avvio (matches, understat,
+# schedule) si passa dalla somma al massimo: ~7 minuti diventano ~5. Sugli
+# stage pesanti non si guadagna NIENTE, perche' sono tutti su FBref e restano
+# in fila fra loro. Chi cerca le ore deve guardare la cache, non i thread.
+
+# Stage -> host contattato. Due stage sullo stesso host non girano mai insieme.
+HOST_DI_STAGE: dict[str, str] = {
+    "matches": "football-data",
+    "fixtures": "football-data",
+    "understat": "understat",
+    "shots": "understat",
+    "schedule": "fbref",
+    "cups": "fbref",
+    "team_stats": "fbref",
+    "lineups": "fbref",
+    "player_stats": "fbref",
+    "missing": "whoscored",
+    "elo": "clubelo",
+}
+
+# Richieste concorrenti ammesse per host. Sono tutte a 1 di proposito: il
+# parallelismo sta FRA gli host, non dentro. La mappa esiste comunque esplicita
+# perche' e' il posto dove si discute un eventuale cambiamento, e perche' un
+# numero scritto si nota, mentre un limite implicito no.
+LIMITE_PER_HOST: dict[str, int] = {
+    "football-data": 1,
+    "understat": 1,
+    "fbref": 1,
+    "whoscored": 1,
+    "clubelo": 1,
+}
+
+# `registra_coppe` e `applica_locale_whoscored` mutano LEAGUE_DICT, che e'
+# globale in soccerdata. Con gli stage in parallelo possono capitare insieme.
+_LOCK_LEGHE = threading.Lock()
+
+
+def barra(iterabile, descrizione: str, totale: int | None = None):
+    """
+    Barra di avanzamento, se tqdm c'e' e siamo su un terminale.
+
+    Non e' una dipendenza dura: senza tqdm, o in un log su file, o in CI,
+    l'iterabile torna quello che era. Una barra scritta in un file di log
+    produce migliaia di righe di controllo e rende il log illeggibile.
+    """
+    if not _TQDM or not sys.stderr.isatty():
+        return iterabile
+    return _TQDM(iterabile, desc=descrizione, total=totale,
+                 unit="", leave=False, dynamic_ncols=True)
+
+
+def _esegui_uno(nome: str, fixtures_file: str | None,
+                semafori: dict[str, threading.Semaphore]) -> tuple[str, Exception | None]:
+    """Uno stage, tenendo occupato il suo host per tutta la durata."""
+    sem = semafori[HOST_DI_STAGE.get(nome, nome)]
+    with sem:
+        log.info("=== stage: %s (host %s) ===", nome, HOST_DI_STAGE.get(nome, "?"))
+        inizio = time.monotonic()
+        try:
+            if nome == "fixtures":
+                ingest_fixtures(fixtures_file)
+            else:
+                STAGES[nome]()
+            log.info("=== stage '%s' fatto in %.1f min ===",
+                     nome, (time.monotonic() - inizio) / 60)
+            return nome, None
+        except Exception as exc:
+            log.error("stage '%s' fallito dopo %.1f min: %s",
+                      nome, (time.monotonic() - inizio) / 60, exc)
+            return nome, exc
+
+
+def esegui(stages: list[str], parallelo: bool = True,
+           fixtures_file: str | None = None) -> dict[str, Exception | None]:
+    """
+    Esegue gli stage richiesti, restituendo l'esito di ciascuno.
+
+    In sequenza (`parallelo=False`) l'ordine e' quello ricevuto, che e' quello
+    di `ORDER`: prima i veloci, cosi' si ha subito qualcosa con cui lavorare.
+
+    In parallelo si usano THREAD e non processi: questi stage passano il tempo
+    ad aspettare la rete e a dormire dentro `time.sleep`, e in entrambi i casi
+    il GIL e' rilasciato. Dei processi costerebbero memoria e serializzazione
+    dei DataFrame senza guadagnare niente.
+
+    Il numero di worker non e' un parametro: e' il numero di host distinti fra
+    gli stage richiesti. Di piu' non servirebbe — i semafori li terrebbero
+    fermi — e di meno lascerebbe un host inattivo.
+    """
+    semafori = {h: threading.Semaphore(n) for h, n in LIMITE_PER_HOST.items()}
+    for nome in stages:  # uno stage su un host ignoto resta comunque serializzato
+        semafori.setdefault(HOST_DI_STAGE.get(nome, nome), threading.Semaphore(1))
+
+    if not parallelo or len(stages) == 1:
+        esiti = {}
+        for nome in barra(stages, "stage"):
+            _, exc = _esegui_uno(nome, fixtures_file, semafori)
+            esiti[nome] = exc
+        return esiti
+
+    host = {HOST_DI_STAGE.get(n, n) for n in stages}
+    log.info("parallelo: %d stage su %d host distinti (%s)",
+             len(stages), len(host), ", ".join(sorted(host)))
+
+    esiti: dict[str, Exception | None] = {}
+    with ThreadPoolExecutor(max_workers=len(host), thread_name_prefix="stage") as pool:
+        futuri = [pool.submit(_esegui_uno, n, fixtures_file, semafori) for n in stages]
+        for fut in barra(as_completed(futuri), "stage", totale=len(futuri)):
+            nome, exc = fut.result()
+            esiti[nome] = exc
+    return esiti
+
+
+# ---------------------------------------------------------------------------
 
 STAGES = {
     "matches": ingest_matches,
@@ -634,7 +805,10 @@ ORDER = ["matches", "understat", "fixtures", "schedule", "cups", "elo",
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     parser.add_argument(
         "--stage",
         choices=list(STAGES) + ["all"],
@@ -647,20 +821,27 @@ def main() -> None:
              "dalla rete. Utile quando il sito e' giu' o per riprodurre uno "
              "snapshot gia' scaricato.",
     )
+    parser.add_argument(
+        "--parallel", dest="parallelo", action=argparse.BooleanOptionalAction,
+        default=True,
+        help="esegue insieme gli stage che contattano host DIVERSI "
+             "(--no-parallel per la vecchia esecuzione in sequenza). Dentro "
+             "un host resta sempre seriale: il limite di frequenza di FBref e "
+             "WhoScored e' li' per essere rispettato, non aggirato.")
     args = parser.parse_args()
 
     stages = ORDER if args.stage == "all" else [args.stage]
-    for name in stages:
-        log.info("=== stage: %s ===", name)
-        try:
-            if name == "fixtures":
-                ingest_fixtures(args.fixtures_file)
-            else:
-                STAGES[name]()
-        except Exception as exc:
-            log.error("stage '%s' fallito: %s", name, exc)
-            if args.stage != "all":
-                raise
+    esiti = esegui(stages, parallelo=args.parallelo,
+                   fixtures_file=args.fixtures_file)
+
+    falliti = {n: e for n, e in esiti.items() if e is not None}
+    if falliti:
+        log.error("stage falliti: %s", ", ".join(sorted(falliti)))
+        # Con un solo stage richiesto l'errore e' IL risultato e va propagato;
+        # con 'all' no, altrimenti una fonte giu' butterebbe via il lavoro
+        # gia' fatto dalle altre.
+        if args.stage != "all":
+            raise next(iter(falliti.values()))
 
 
 if __name__ == "__main__":

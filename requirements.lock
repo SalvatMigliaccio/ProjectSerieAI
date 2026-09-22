@@ -306,7 +306,9 @@ tabcompleter==1.4.1
 threadpoolctl==3.7.0
     # via scikit-learn
 tqdm==4.70.1
-    # via soccerdata
+    # via
+    #   goalmodel (pyproject.toml)
+    #   soccerdata
 trio==0.34.0
     # via
     #   selenium

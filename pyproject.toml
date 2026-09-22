@@ -33,6 +33,7 @@ dependencies = [
     "joblib>=1.6,<2",
     "matplotlib>=3.11,<4",
     "soccerdata>=1.9.1,<2",
+    "tqdm>=4.67,<5",
 ]
 
 [project.optional-dependencies]
