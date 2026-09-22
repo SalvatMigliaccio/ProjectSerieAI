@@ -241,6 +241,16 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   (`injured`, `suspended`, `injured doubtful`) perche' viene da un attributo;
   `status` e' tradotto (`Indisponibile`, `In dubbio`). **Usare `reason`**, che
   e' strutturale, non `status`, che cambia con la lingua del sito.
+- **LO STAGE `missing` SALVA ANCHE IL CALENDARIO, e prima non lo faceva.**
+  `features/players.py` traduce il `game_id` di WhoScored nella quadrupla
+  leggendo `data/raw/whoscored/schedule_<stagione>.parquet`. Quei file non li
+  scriveva nessuno: `ingest_missing` leggeva il calendario, ne ricavava gli id
+  e lo buttava. Il blocco giocatori risultava costruibile solo finche' quei
+  parquet erano avanzati da una versione precedente del codice — e `data/` non
+  e' versionata, quindi dopo una pulizia **nessuna quantita' di scraping
+  bastava**: `carica_assenze` falliva su una cartella inesistente.
+  Corretto il 22 settembre 2026, con un test che lega il produttore alle
+  quattro colonne che il consumatore legge.
 - **Costo misurato di WhoScored: ~11.6 secondi per partita**, una richiesta
   Selenium ciascuna, piu' ~110 secondi per il calendario di ogni stagione.
   Su 4940 partite fanno **circa 15 ore**. La cache e' persistente e il lavoro

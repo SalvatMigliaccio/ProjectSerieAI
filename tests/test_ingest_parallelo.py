@@ -313,3 +313,73 @@ def test_un_giro_parziale_non_cancella_le_coppe_gia_prese() -> None:
         f"questo giro, ma c'era: un giro parziale non deve cancellarla."
     )
     print("8. coppe: un giro parziale non cancella lo storico   ok")
+
+
+def test_missing_salva_il_calendario_che_serve_ai_giocatori() -> None:
+    """
+    Lo stage `missing` deve produrre ANCHE il modo di agganciare cio' che
+    scarica.
+
+    PERCHE' ESISTE. `features/players.py` traduce il `game_id` di WhoScored
+    nella quadrupla leggendo `data/raw/whoscored/schedule_*.parquet`: il nome
+    della partita non basta, perche' contiene trattini anche dentro i nomi
+    squadra ("Inter Milan-AC Milan") e il parsing si romperebbe in silenzio.
+
+    Quei file non li scriveva nessuno. Lo stage leggeva il calendario, lo
+    teneva in memoria per ricavarne gli id e lo buttava; `carica_assenze`
+    falliva su una cartella inesistente. Il blocco giocatori risultava
+    costruibile solo finche' quei parquet erano avanzati da una versione
+    precedente del codice — e `data/` non e' versionata, quindi in un clone
+    pulito, o dopo una pulizia, ore di scraping non sarebbero bastate.
+    """
+    import time as _time
+
+    import pandas as pd
+
+    from goalmodel import ingest
+
+    # Le quattro colonne che `players.carica_assenze` legge da questi file.
+    RICHIESTE = ["season", "game_id", "home_team", "away_team"]
+
+    class WhoScoredFinto:
+        def __init__(self, leagues, seasons, headless=True):
+            self.stagione = seasons[0]
+
+        def read_schedule(self):
+            return pd.DataFrame({
+                "season": [self.stagione] * 2,
+                "game_id": [111, 222],
+                "home_team": ["Inter Milan", "AC Milan"],
+                "away_team": ["AC Milan", "Inter Milan"],
+            }).set_index("season")      # come soccerdata: la chiave e' nell'indice
+
+        def read_missing_players(self, match_id):
+            return pd.DataFrame({"game_id": match_id, "team": ["Inter Milan"] * len(match_id),
+                                 "player": ["Tizio"] * len(match_id),
+                                 "reason": ["injured"] * len(match_id)})
+
+    orig = (ingest.sd.WhoScored, ingest.SEASONS, ingest.RAW,
+            ingest.applica_locale_whoscored, _time.sleep)
+    ingest.sd.WhoScored = WhoScoredFinto
+    ingest.SEASONS = ["2324"]
+    ingest.applica_locale_whoscored = lambda: None
+    _time.sleep = lambda _s: None
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            ingest.RAW = Path(tmp)
+            ingest.ingest_missing()
+
+            atteso = Path(tmp) / "whoscored" / "schedule_2324.parquet"
+            assert atteso.exists(), (
+                "lo stage non ha salvato il calendario: senza, il game_id non "
+                "si traduce nella quadrupla e il blocco giocatori non si "
+                "costruisce, per quante ore si scarichi"
+            )
+            cal = pd.read_parquet(atteso)
+            mancanti = [c for c in RICHIESTE if c not in cal.columns]
+            assert not mancanti, f"al calendario salvato mancano {mancanti}"
+    finally:
+        (ingest.sd.WhoScored, ingest.SEASONS, ingest.RAW,
+         ingest.applica_locale_whoscored, _time.sleep) = orig
+
+    print("9. missing: salva il calendario che serve ai giocatori   ok")

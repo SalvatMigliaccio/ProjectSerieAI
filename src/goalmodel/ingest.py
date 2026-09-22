@@ -658,6 +658,22 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
                         stagione, type(exc).__name__)
             continue
 
+        # IL CALENDARIO SI SALVA SEMPRE, ANCHE QUANDO NON C'E' NIENTE DA
+        # SCARICARE. `features/players.py` ne ha bisogno per tradurre il
+        # `game_id` di WhoScored nella quadrupla del progetto: il nome della
+        # partita non basta, perche' contiene trattini anche dentro i nomi
+        # squadra ("Inter Milan-AC Milan") e il parsing si romperebbe senza
+        # dare errore.
+        #
+        # Prima questo frame restava in memoria e veniva buttato: lo stage
+        # produceva gli assenti e non il modo di agganciarli, quindi
+        # `carica_assenze` falliva su una cartella che nessuno scriveva. Il
+        # blocco giocatori era costruibile solo se quei file erano avanzati da
+        # una versione precedente del codice — e `data/` non e' versionata.
+        cartella = RAW / "whoscored"
+        cartella.mkdir(parents=True, exist_ok=True)
+        sched.to_parquet(cartella / f"schedule_{stagione}.parquet", index=False)
+
         ids = [i for i in sched["game_id"].dropna().astype(int) if i not in fatte]
         if not ids:
             continue
