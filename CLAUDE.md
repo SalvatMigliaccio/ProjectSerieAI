@@ -4,7 +4,9 @@ Contesto operativo per Claude Code.
 
 | documento | cosa contiene |
 |---|---|
-| `PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| `README.md` | cos'e' il progetto, installazione, architettura, contribuzione |
+| `Doc/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| `Doc/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, per priorita' |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
 | **`COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
 
@@ -1414,6 +1416,121 @@ mettere il codice in un file.
 - Parquet per tutti i dati intermedi
 - Niente notebook nel codice di produzione: solo esplorazione in `notebooks/`
 - Log via `logging`, non `print`
+
+## Principi di progettazione — DRY e SOLID
+
+Non sono decorazione: qui hanno conseguenze specifiche, ed e' quello che va
+ricordato. La diagnosi completa dello stato attuale sta in
+`Doc/AUDIT_TECNICO.md`.
+
+### DRY — un fatto, un posto solo
+
+- **Una costante condivisa sta in `src/config.py`**, non ricopiata. La chiave
+  di join e' la regola non negoziabile n.5: se e' scritta in quattordici file,
+  allargare ai Big 5 significa modificarne quattordici e **dimenticarne uno non
+  da' errore** — da' un merge che perde righe in silenzio. Stessa cosa per
+  soglie, half-life, stagioni, percorsi.
+- **Un percorso di file si legge da un punto solo.** `read_parquet` sparso per
+  i moduli significa che ognuno ripete percorso, gestione dell'assenza e
+  conversione delle date, e che cambiare formato tocca sei punti.
+- **Copiare una riga da `evaluate.py` dentro un esperimento e' il modo tipico
+  in cui la produzione viene corrotta.** E' successo abbastanza da meritare una
+  guardia a runtime (`experiments.proteggi_produzione()`). Se serve la stessa
+  logica in due posti, si estrae una funzione.
+- **Eccezione dichiarata: la specifica congelata si RICOPIA di proposito.**
+  `features/sets.py` scrive BASE per esteso invece di importarlo da `form.py`,
+  perche' un set congelato non deve cambiare quando cambia il modulo che lo
+  produce. Duplicare un *valore storico* e' giusto; duplicare una *regola
+  viva* no.
+
+### SOLID — dove morde in questo progetto
+
+- **S (responsabilita' singola).** Un modulo che calcola non impagina. Se un
+  modulo di presentazione addestra un modello, un errore di modellazione si
+  manifesta come sezione mancante nel report, e si cerca nel posto sbagliato.
+- **O (aperto/chiuso).** **Questa e' la regola di isolamento della produzione,
+  scritta in forma di principio**: un esperimento non modifica `models/gbm.py`
+  ne' `predict.py`, li **sottoclassa** (`M5Set`, `M5MediaSemi`). Modificare la
+  classe madre cambierebbe anche il report, che e' produzione, senza che
+  nessuno lo decida.
+- **L (sostituzione).** Ogni modello rispetta `fit(train)` / `predict(test)` e
+  restituisce `PRED_COLS` sempre. `walk_forward` non deve sapere chi sta
+  valutando: se un modello ha bisogno di un trattamento speciale
+  nell'harness, il modello e' sbagliato, non l'harness.
+- **I (interfacce ristrette).** L'interfaccia dei modelli e' due metodi. Non
+  aggiungerne un terzo per comodita' di un modello solo.
+- **D (dipendenza dalle astrazioni).** Un modulo di `src/` non importa uno
+  script della cartella di lavoro: la dipendenza deve andare verso il
+  pacchetto, mai verso l'ambiente in cui il comando e' stato lanciato.
+
+### Regola di taglio
+
+Prima di aggiungere un'astrazione: **serve adesso o servira'?** Con ~3400
+righe di training e un solo campionato, un'interfaccia con una sola
+implementazione e una configurazione per un valore che non cambia mai sono
+costo senza ricavo. La stessa disciplina che vale per le feature — un blocco
+non misurato non entra — vale per il codice.
+
+## Sicurezza — regole di codice
+
+Il progetto non ha utenti ne' superficie di rete in ingresso, quindi la
+sicurezza qui e' soprattutto **integrita' dei dati e del registro**. Le regole
+sotto sono quelle che mordono davvero.
+
+1. **Nessun segreto nel repository.** Niente chiavi, token, credenziali,
+   nemmeno in un commento o in un file di esempio. Se un giorno servira'
+   un'API a pagamento: variabile d'ambiente, e il nome della variabile
+   documentato in `COMANDI.md`.
+
+2. **Un `assert` non e' un controllo di sicurezza.** `python -O` li cancella
+   tutti. Tutto cio' che protegge il registro, il de-vigging o l'ordine
+   previsione/fischio d'inizio deve essere `if not cond: raise ValueError(...)`.
+   Gli assert vanno bene nei `_demo()` e nei test, dove il codice non gira mai
+   ottimizzato.
+
+3. **Ogni dato che arriva dalla rete e' ostile finche' non e' verificato.**
+   Un CSV scaricato va accettato solo dopo: tetto alla dimensione della
+   risposta, controllo del content-type, e verifica delle colonne attese.
+   `encoding="latin-1"` non fallisce **mai** sulla decodifica: una pagina di
+   errore HTML entra come dati validi, e senza il controllo colonne finisce in
+   parquet.
+
+4. **Mai `shell=True`, mai `eval`, mai `exec`, mai `pickle` su dati esterni.**
+   `subprocess` solo nella forma a lista, con `sys.executable`. Oggi il
+   progetto e' pulito su tutti e cinque i punti: va tenuto cosi'.
+
+5. **Escaping con la libreria standard.** In HTML si usa
+   `html.escape(s, quote=True)`, su **tutte** le interpolazioni di valori, non
+   solo su quelle che sembrano rischiose. Una funzione di escaping fatta in
+   casa e applicata a macchia di leopardo e' la premessa standard di una XSS il
+   giorno in cui il report smette di essere un file locale.
+
+6. **Le eccezioni si catturano strette.** `except Exception` in un passo di
+   rete traveste un `TypeError` del proprio codice da sito irraggiungibile, e
+   il comando prosegue "con i dati gia' presenti" su una premessa falsa.
+   Catturare `(ConnectionError, HTTPError, TimeoutError, OSError)`.
+
+7. **File e processi con context manager.** `with open(...)`, sempre. Un file
+   di log aperto a mano in un ciclo di esperimenti resta aperto alla prima
+   eccezione.
+
+8. **Il registro delle previsioni e' append-only, e non e' negoziabile.** Non
+   si riscrive, non si aggiorna una riga vecchia, non si toglie una previsione
+   sbagliata. Una copia `.bak` prima di ogni scrittura e un controllo che il
+   file non si sia accorciato. E' l'unico dato del progetto che non si
+   rigenera.
+
+9. **Una guardia parziale va dichiarata parziale.**
+   `experiments.proteggi_produzione()` copre `to_parquet` e `to_csv`, non
+   `to_pickle`, `open()`, `shutil.copy` o `pyarrow`. Va detto nel docstring:
+   una protezione sopravvalutata e' peggio di nessuna protezione, perche'
+   smette di far pensare.
+
+10. **Le dipendenze si fissano a versione esatta.** Non e' burocrazia: il
+    progetto verifica `test_production_unchanged` **bit a bit**, e un
+    aggiornamento silenzioso di LightGBM o scipy fa fallire quel test senza che
+    il codice sia cambiato — rendendo indistinguibile una regressione vera da
+    un aggiornamento di libreria.
 
 ## Cosa manca dall'utente
 
