@@ -346,17 +346,51 @@ def ingest_understat() -> pd.DataFrame:
     return team_stats
 
 
-def ingest_understat_shots() -> pd.DataFrame:
+def ingest_understat_shots(seasons: list[str] | None = None) -> pd.DataFrame:
     """
-    Eventi tiro con coordinate e xG per singolo tiro. Opzionale in fase 1,
-    ma abilita metriche piu' fini (xG non-rigore, qualita' media del tiro,
-    xG concesso da situazione di gioco vs palla inattiva).
-    Piu' lento: una richiesta per partita.
+    Eventi tiro con coordinate e xG per singolo tiro.
+
+    A cosa serve: e' l'unica fonte di **xG per giocatore** che il progetto
+    abbia. Le statistiche giocatore-partita di FBref per la Serie A non hanno
+    colonne attese (verificato su 60325 righe), quindi il blocco giocatori pesa
+    le assenze con gol+assist — molto piu' rumoroso, e un attaccante che non ha
+    ancora segnato pesa zero. Qui l'xG c'e', con il tiratore e il passatore.
+
+    UNA STAGIONE PER VOLTA, SALVANDO OGNI VOLTA. Una richiesta per partita, su
+    4940 partite: chiedere tutte e tredici le stagioni in una chiamata sola
+    significa che un errore all'ultima butta via tutto il lavoro, e che una
+    stagione che Understat non serve si porta via anche le altre. E' lo stesso
+    difetto che `ingest_cups` aveva sulle coppe — la Conference League non
+    scaricata per anni — e che `ingest_player_stats` gia' evita.
+
+    Riprendibile: al rilancio salta le stagioni gia' nel file.
     """
-    us = sd.Understat(leagues=LEAGUE, seasons=SEASONS)
-    shots = us.read_shot_events()
-    save(shots, "understat_shots")
-    return shots
+    seasons = seasons or SEASONS
+    dst = RAW / "understat_shots.parquet"
+    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    fatte = set(pezzi[0]["season"].astype(str)) if pezzi else set()
+    if fatte:
+        log.info("stagioni gia' scaricate: %s", sorted(fatte))
+
+    for stagione in barra(seasons, "stagioni"):
+        if str(stagione) in fatte:
+            continue
+        try:
+            us = sd.Understat(leagues=LEAGUE, seasons=[stagione])
+            df = us.read_shot_events().reset_index()
+            for c in df.columns:
+                if df[c].dtype == object:
+                    df[c] = df[c].astype("string")
+            pezzi.append(df)
+            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+            log.info("%s: %d tiri", stagione, len(df))
+        except Exception as exc:
+            log.warning("%s: %s — proseguo con la prossima stagione",
+                        stagione, type(exc).__name__)
+
+    out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
+    log.info("%-22s %6d righe -> %s", "understat_shots", len(out), dst)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -889,6 +923,9 @@ def esegui(stages: list[str], parallelo: bool = True,
     insieme, cioe' ventiquattro ore invece di quindici. I thread fermi su un
     semaforo non costano niente; un host lasciato inattivo costa ore.
     """
+    if not stages:
+        raise ValueError("nessuno stage da eseguire: la lista e' vuota")
+
     semafori = {h: threading.Semaphore(n) for h, n in LIMITE_PER_HOST.items()}
     for nome in stages:  # uno stage su un host ignoto resta comunque serializzato
         semafori.setdefault(HOST_DI_STAGE.get(nome, nome), threading.Semaphore(1))
@@ -931,8 +968,25 @@ STAGES = {
 
 # Ordine consigliato: prima i veloci, cosi' hai subito qualcosa con cui
 # lavorare mentre i lenti girano in background.
-ORDER = ["matches", "understat", "fixtures", "schedule", "cups", "elo",
-         "team_stats", "lineups", "player_stats", "missing"]
+# L'ordine consigliato: prima i veloci, cosi' si ha subito qualcosa con cui
+# lavorare. Serve anche a riordinare cio' che l'utente chiede, quindi
+# `--stage schedule matches` non inverte la priorita' solo per come e' scritto.
+#
+# DEVE CONTENERE TUTTI GLI STAGE. `shots` non c'era, e l'effetto non era un
+# ordine strano: era che `goalmodel ingest --stage shots` **non partiva**.
+# argparse lo accettava (e' in STAGES), poi il filtro su ORDER lo buttava via,
+# e `esegui([])` moriva con "max_workers must be greater than 0" — un messaggio
+# che non nomina lo stage, non nomina ORDER e manda a cercare nel posto
+# sbagliato. Il controllo qui sotto rende impossibile ripetere la dimenticanza.
+ORDER = ["matches", "understat", "shots", "fixtures", "schedule", "cups",
+         "elo", "team_stats", "lineups", "player_stats", "missing"]
+
+if set(ORDER) != set(STAGES):
+    raise ValueError(
+        f"ORDER e STAGES non coincidono: solo in STAGES {sorted(set(STAGES) - set(ORDER))}, "
+        f"solo in ORDER {sorted(set(ORDER) - set(STAGES))}. "
+        f"Uno stage assente da ORDER e' invocabile ma non eseguibile."
+    )
 
 
 def main() -> None:

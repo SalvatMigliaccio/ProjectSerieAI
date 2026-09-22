@@ -23,6 +23,8 @@ import threading
 import time
 from pathlib import Path
 
+import pytest
+
 from goalmodel import ingest
 
 
@@ -383,3 +385,34 @@ def test_missing_salva_il_calendario_che_serve_ai_giocatori() -> None:
          ingest.applica_locale_whoscored, _time.sleep) = orig
 
     print("9. missing: salva il calendario che serve ai giocatori   ok")
+
+
+def test_ogni_stage_invocabile_e_anche_eseguibile() -> None:
+    """
+    Uno stage che si puo' chiedere dalla riga di comando deve partire.
+
+    E' GIA' SUCCESSO, ED ERA INVISIBILE. `shots` stava in STAGES ma non in
+    ORDER: argparse lo accettava come scelta valida, poi
+    `[s for s in ORDER if s in chiesti]` lo buttava via, e `esegui([])` moriva
+    con "max_workers must be greater than 0" — un messaggio che non nomina lo
+    stage, non nomina ORDER, e manda a cercare il problema nei thread invece
+    che in una lista.
+
+    Il modulo ora rifiuta di importarsi se i due insiemi divergono; questo test
+    lo verifica dall'esterno, perche' la guardia potrebbe essere tolta.
+    """
+    from goalmodel import ingest
+
+    assert set(ingest.ORDER) == set(ingest.STAGES), (
+        f"solo in STAGES: {sorted(set(ingest.STAGES) - set(ingest.ORDER))}, "
+        f"solo in ORDER: {sorted(set(ingest.ORDER) - set(ingest.STAGES))}"
+    )
+    # E ognuno deve avere un host dichiarato, o finirebbe su un semaforo suo
+    # senza che nessuno l'abbia deciso.
+    senza_host = [s for s in ingest.STAGES if s not in ingest.HOST_DI_STAGE]
+    assert not senza_host, f"stage senza host dichiarato: {senza_host}"
+
+    with pytest.raises(ValueError, match="nessuno stage"):
+        ingest.esegui([])
+
+    print("10. ogni stage invocabile e' anche eseguibile          ok")
