@@ -55,8 +55,8 @@ com'era quando e' stata fatta, e i riferimenti a `src/rounds.py` o
 | **B2 parquet giocatori orfano** | **chiuso** | `features/registry.py`, un elenco solo |
 | **B1 sezione 3 del report morta** | **chiuso** | M4 si addestra su cio' che esiste al momento di predire |
 | **B3 assert come invariante** | **chiuso** | `raise` al posto di `assert`, `S101` attivo in CI |
+| **A4 report.py, 4 mestieri** | **chiuso** | `sezioni.py` calcola, `pagina.py` impagina, `report.py` orchestra |
 | licenza assente | **chiuso** | `LICENSE`, AGPL-3.0-or-later |
-| A4 report.py, 4 mestieri | aperto | prossima fase |
 | A5 doppio registro feature | aperto | dipende da A4 |
 | B4-B12 | aperti | igiene, diff piccoli |
 | B13, B14 | aperti | trovati da ruff, vedi sotto |
@@ -144,7 +144,7 @@ da' errore, da' un merge che perde righe in silenzio.
 **Da fare:** `config.JOIN_KEYS`, importata ovunque. `close_round.py:57` gia' fa
 la cosa giusta (`KEYS = rounds.KEYS`).
 
-### A4 — `report.py` fa quattro mestieri in 1309 righe — MEDIA [giudizio]
+### A4 — `report.py` fa quattro mestieri in 1309 righe — CHIUSO
 
 Contiene: calcolo delle selezioni, addestramento di M4, lettura del track
 record, analisi di potenza, generazione SVG a mano, generazione HTML, e il CSS
@@ -154,8 +154,23 @@ Conseguenza concreta: `report.divergenza()` **addestra un modello** dentro il
 modulo di presentazione. Un errore di feature li' dentro si manifesta come
 "sezione mancante nel report", non come errore di modellazione.
 
-**Da fare:** separare `report_data.py` (tutto cio' che restituisce DataFrame)
-da `report_html.py` (tutto cio' che restituisce stringhe).
+**Come e' stato chiuso.** Tre file al posto di uno, divisi esattamente su
+quel taglio:
+
+| file | righe | cosa fa |
+|---|---|---|
+| `reporting/sezioni.py` | 513 | calcola: selezioni, cambiamenti, divergenza, track record, fabbisogno. Restituisce DataFrame |
+| `reporting/pagina.py` | 756 | impagina: CSS, SVG, tabelle, la pagina intera. Restituisce stringhe |
+| `reporting/report.py` | 155 | regia: chiama le sezioni, le fa impaginare, scrive i due file |
+
+La dipendenza va in una direzione sola — `report` -> `pagina` -> `sezioni` —
+e la regola e' verificabile a occhio: una funzione che restituisce una stringa
+con dentro un tag sta nel file sbagliato, una che legge un file o addestra un
+modello pure.
+
+`quando`, `selezioni`, `SCRITTO`, `DRY_RUN` e `RIGENERATO` restano importabili
+da `report.py`: `predict_round` e `close_round` li chiedono a quel modulo e non
+c'era ragione di toccare due file di produzione per un rinominamento.
 
 ### A5 — Due registri di feature in parallelo — MEDIA [verificato]
 

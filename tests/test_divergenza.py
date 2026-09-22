@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 
 from goalmodel.evaluation import evaluate
-from goalmodel.reporting import report
+from goalmodel.reporting import sezioni
 
 rng = np.random.default_rng(7)
 
@@ -71,8 +71,8 @@ def test_colonna_in_piu_nel_dataset() -> None:
     vero = evaluate.load_dataset
     try:
         evaluate.load_dataset = lambda *a, **k: storico
-        diag = report.Diagnostica()
-        tab = report.divergenza(preds, diag)
+        diag = sezioni.Diagnostica()
+        tab = sezioni.divergenza(preds, diag)
     finally:
         evaluate.load_dataset = vero
 

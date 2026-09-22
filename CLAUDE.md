@@ -311,7 +311,13 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   gioca in Europa dalla classifica dell'anno prima; usare l'orario di calcio
   d'inizio come indizio) sono peggio del buco — la prima e' una funzione dei
   risultati passati, cioe' proprio cio' che il piano esclude
-- `src/goalmodel/reporting/report.py` — il report settimanale in HTML statico: CSS dentro il file,
+- `src/goalmodel/reporting/` — tre file, non uno: `sezioni.py` calcola e
+  restituisce DataFrame, `pagina.py` impagina e restituisce stringhe,
+  `report.py` fa solo da regia e scrive i due file. La separazione e' la
+  chiusura di A4: finche' stavano insieme, `divergenza()` addestrava un
+  modello dentro il modulo di presentazione e un errore di feature si
+  manifestava come sezione mancante.
+  Il report settimanale in HTML statico: CSS dentro il file,
   grafici in SVG generato a mano, nessun CDN e nessun framework. Cinque
   sezioni: giornata in arrivo, cosa e' cambiato rispetto all'ultima previsione
   di quelle squadre, divergenza fra M4-senza-mercato e M1 (**diagnostica, non

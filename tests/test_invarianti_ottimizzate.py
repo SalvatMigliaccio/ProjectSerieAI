@@ -69,7 +69,7 @@ sys.exit(0 if len(esiti) == 3 else 1)
 
 
 def test_invarianti_sopravvivono_a_O() -> None:
-    esito = subprocess.run(  # noqa: S603 - forma a lista, sys.executable
+    esito = subprocess.run(  # forma a lista, sys.executable: nessuna shell
         [sys.executable, "-O", "-c", CONTROLLI],
         capture_output=True, text=True, check=False,
     )
