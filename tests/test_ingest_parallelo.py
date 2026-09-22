@@ -18,8 +18,10 @@ quando sono entrati e usciti.
 
 from __future__ import annotations
 
+import tempfile
 import threading
 import time
+from pathlib import Path
 
 from goalmodel import ingest
 
@@ -233,21 +235,81 @@ def test_coppa_sopravvive_a_una_stagione_mancante() -> None:
             return pd.DataFrame({"game": [f"g{self.stagione}"]})
 
     orig_fb, orig_seasons = ingest.sd.FBref, ingest.SEASONS
-    orig_registra = ingest.registra_coppe
+    orig_registra, orig_raw = ingest.registra_coppe, ingest.RAW
     orig_save = pd.DataFrame.to_parquet
     ingest.sd.FBref = FBrefFinto
     ingest.SEASONS = ["1415", "1516", "2122", "2223", "2324"]
     ingest.registra_coppe = lambda: ["UEFA-Conference League"]
-    pd.DataFrame.to_parquet = lambda self, *a, **k: None
-    try:
-        out = ingest.ingest_cups()
-    finally:
-        ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
-        ingest.registra_coppe = orig_registra
-        pd.DataFrame.to_parquet = orig_save
+    # RAW dirottata: senza, `ingest_cups` leggerebbe il file vero per capire
+    # cosa aveva gia', e il test dipenderebbe dai dati sul disco.
+    with tempfile.TemporaryDirectory() as tmp:
+        ingest.RAW = Path(tmp)
+        pd.DataFrame.to_parquet = lambda self, *a, **k: None
+        try:
+            out = ingest.ingest_cups()
+        finally:
+            ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
+            ingest.registra_coppe, ingest.RAW = orig_registra, orig_raw
+            pd.DataFrame.to_parquet = orig_save
 
     assert len(out) == len(VIVE), (
         f"{len(out)} stagioni raccolte invece di {len(VIVE)}: una stagione "
         f"mancante si e' portata via anche quelle che c'erano"
     )
     print("7. coppe: una stagione assente non ne uccide altre   ok")
+
+
+def test_un_giro_parziale_non_cancella_le_coppe_gia_prese() -> None:
+    """
+    Se una stagione non arriva, quella gia' nel file resta — audit del
+    22 settembre 2026.
+
+    E' GIA' SUCCESSO, LO STESSO GIORNO IN CUI LA CONFERENCE E' ARRIVATA.
+    Lo stage scriveva `to_parquet` con il solo risultato del giro corrente:
+    quel giro ha finalmente preso la Conference League (837 partite) e nello
+    stesso momento ha perso la Champions 2026/27 per un CAPTCHA di FBref. Il
+    file restava perfettamente plausibile — 4833 righe, tre coppe — e la
+    perdita si vedeva solo contandole una per una.
+    """
+    import pandas as pd
+
+    from goalmodel import ingest
+
+    PRESE_ORA = {"2122", "2223"}
+
+    class FBrefACaptcha:
+        def __init__(self, leagues, seasons):
+            self.stagione = seasons[0]
+
+        def read_schedule(self):
+            if self.stagione not in PRESE_ORA:
+                raise TimeoutError("CAPTCHA")     # non "non esisteva"
+            return pd.DataFrame({"game": [f"g{self.stagione}"],
+                                 "league": ["UEFA-Conference League"],
+                                 "season": [self.stagione]})
+
+    orig_fb, orig_seasons = ingest.sd.FBref, ingest.SEASONS
+    orig_registra, orig_raw = ingest.registra_coppe, ingest.RAW
+    ingest.sd.FBref = FBrefACaptcha
+    ingest.SEASONS = ["2122", "2223", "2324"]
+    ingest.registra_coppe = lambda: ["UEFA-Conference League"]
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            ingest.RAW = Path(tmp)
+            # Il file "di ieri": ha anche la 2324, che oggi non arrivera'.
+            gia = pd.DataFrame({"game": ["g2122", "g2223", "g2324"],
+                                "league": ["UEFA-Conference League"] * 3,
+                                "season": ["2122", "2223", "2324"]})
+            gia.to_parquet(Path(tmp) / "fbref_cups_schedule.parquet", index=False)
+
+            out = ingest.ingest_cups()
+    finally:
+        ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
+        ingest.registra_coppe, ingest.RAW = orig_registra, orig_raw
+
+    stagioni = set(out["season"].astype(str))
+    assert stagioni == {"2122", "2223", "2324"}, (
+        f"stagioni nel file: {sorted(stagioni)}. La 2324 non e' arrivata in "
+        f"questo giro, ma c'era: un giro parziale non deve cancellarla."
+    )
+    print("8. coppe: un giro parziale non cancella lo storico   ok")

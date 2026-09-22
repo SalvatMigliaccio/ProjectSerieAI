@@ -422,7 +422,16 @@ def ingest_cups() -> pd.DataFrame:
     stagione. Cambia solo dove si mette il `try`.
     """
     coppe = registra_coppe()
+    dst = RAW / "fbref_cups_schedule.parquet"
+    # Quello che il file ha gia': serve a distinguere "questa coppa non
+    # esisteva" da "questo giro non l'ha presa", e a non buttare la seconda.
+    precedente = pd.read_parquet(dst) if dst.exists() else None
+    avute_prima = (set(zip(precedente["league"], precedente["season"].astype(str),
+                           strict=True))
+                   if precedente is not None else set())
+
     pezzi = []
+    prese = set()
     for coppa in barra(coppe, "coppe"):
         righe_coppa = 0
         stagioni_ok = 0
@@ -431,15 +440,21 @@ def ingest_cups() -> pd.DataFrame:
                 fb = sd.FBref(leagues=[coppa], seasons=[stagione])
                 df = fb.read_schedule().reset_index()
             except Exception as exc:
-                # Una stagione in cui la competizione non esisteva ancora e'
-                # NORMALE (la Conference prima del 2021/22): si annota a
-                # livello debug e si va avanti.
-                log.debug("%s %s non disponibile: %s", coppa, stagione,
-                          type(exc).__name__)
+                # DUE CASI CHE SEMBRANO UNO. Una stagione in cui la
+                # competizione non esisteva ancora e' normale (la Conference
+                # prima del 2021/22) e sta a livello debug. Una stagione che
+                # il file AVEVA e ora non arriva e' un'altra cosa — un
+                # CAPTCHA, un timeout — e va detta forte, perche' senza
+                # questo messaggio la perdita si vede solo contando le righe.
+                livello = log.warning if (coppa, stagione) in avute_prima else log.debug
+                livello("%s %s non scaricata (%s)%s", coppa, stagione,
+                        type(exc).__name__,
+                        ": c'era gia' nel file, la tengo" if (coppa, stagione) in avute_prima else "")
                 continue
             if df.empty:
                 continue
             pezzi.append(df.assign(competition=coppa))
+            prese.add((coppa, stagione))
             righe_coppa += len(df)
             stagioni_ok += 1
         if righe_coppa:
@@ -451,8 +466,26 @@ def ingest_cups() -> pd.DataFrame:
     if not pezzi:
         raise RuntimeError("nessuna coppa scaricata")
     out = pd.concat(pezzi, ignore_index=True)
+
+    # UN GIRO PARZIALE NON DEGRADA IL FILE. Scrivere solo cio' che si e'
+    # appena scaricato significa che un CAPTCHA su una stagione la cancella
+    # dallo storico, e il file resta plausibile: e' successo il 22 settembre
+    # 2026, quando questo stage ha finalmente preso la Conference League (837
+    # partite) e nello stesso giro ha perso la Champions 2026/27 per un
+    # CAPTCHA. Le (coppa, stagione) che c'erano e non sono tornate si
+    # riportano dal file vecchio.
+    if precedente is not None:
+        mancanti = avute_prima - prese
+        if mancanti:
+            chiavi = list(zip(precedente["league"], precedente["season"].astype(str),
+                              strict=True))
+            recuperate = precedente[[c in mancanti for c in chiavi]]
+            out = pd.concat([out, recuperate], ignore_index=True)
+            log.warning("riportate dal file precedente %d partite di %d "
+                        "(coppa, stagione) che questo giro non ha preso: %s",
+                        len(recuperate), len(mancanti), sorted(mancanti)[:5])
+
     RAW.mkdir(parents=True, exist_ok=True)
-    dst = RAW / "fbref_cups_schedule.parquet"
     out.to_parquet(dst, index=False)
     log.info("%-22s %6d righe, %2d colonne -> %s",
              "fbref_cups_schedule", len(out), out.shape[1], dst)
