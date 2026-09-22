@@ -251,8 +251,8 @@ def verifica(df: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     argparse.ArgumentParser(description="Stato dei set di feature").parse_args()
-    from .dataset import load_dataset
     from ..models.gbm import form_features
+    from .dataset import load_dataset
 
     df = load_dataset()
     pd.set_option("display.width", 160)

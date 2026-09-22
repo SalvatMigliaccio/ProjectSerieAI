@@ -41,14 +41,12 @@ Uso:
 
 from __future__ import annotations
 
-import argparse
 import logging
 
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-from .. import config
 from .baseline import Model, predictions_from_lambdas, valid_rho_floor
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
@@ -264,35 +262,6 @@ class DixonColes(Model):
 
 # ---------------------------------------------------------------------------
 
-def tune_halflife(
-    df: pd.DataFrame,
-    grid: list[float] | None = None,
-    validation_seasons: list[str] | None = None,
-) -> pd.DataFrame:
-    """
-    Tara la half-life sulla VALIDAZIONE, con lo stesso walk-forward del test.
-
-    Il test set non viene mai toccato: se lo si usasse per scegliere fra cinque
-    half-life, il risultato riportato sarebbe il massimo di cinque tentativi e
-    non una stima onesta.
-    """
-    from ..evaluation.evaluate import PROB_COLS, outcome_index, rps, walk_forward
-
-    grid = grid or config.DC_HALFLIFE_GRID
-    validation_seasons = validation_seasons or config.VALIDATION_SEASONS
-
-    rows = []
-    for hl in grid:
-        preds = walk_forward(df, [DixonColes(halflife_days=hl)], test_seasons=validation_seasons)
-        ok = preds.dropna(subset=PROB_COLS)
-        score = rps(ok[PROB_COLS].to_numpy(dtype=float), outcome_index(ok["FTR"])).mean()
-        rows.append({"half_life_giorni": hl, "RPS_validazione": float(score), "n": len(ok)})
-        log.info("half-life %3g giorni -> RPS validazione %.6f", hl, score)
-
-    tab = pd.DataFrame(rows).sort_values("RPS_validazione").reset_index(drop=True)
-    log.info("scelta: half-life %g giorni", tab.loc[0, "half_life_giorni"])
-    return tab
-
 
 def _check_gradient() -> None:
     """Il gradiente analitico contro la differenza finita. Se sbaglia qui, il
@@ -336,21 +305,7 @@ def _check_gradient() -> None:
     log.info("controlli su Dixon-Coles superati")
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Dixon-Coles con decadimento temporale")
-    ap.add_argument("--check", action="store_true", help="verifica il gradiente analitico")
-    ap.add_argument("--tune", action="store_true", help="tara la half-life sulla validazione")
-    args = ap.parse_args()
-
-    if args.check:
-        _check_gradient()
-        return
-    if args.tune:
-        from ..features.dataset import load_dataset
-        print(tune_halflife(load_dataset()).to_string(index=False))
-        return
-    ap.print_help()
-
-
-if __name__ == "__main__":
-    main()
+# Nessun `main()` qui: la taratura e la diagnostica stanno in
+# `evaluation/taratura.py`, perche' misurare un modello non e' il mestiere del
+# modello. I comandi restano `goalmodel gbm ...` e `goalmodel dixon-coles ...`:
+# li registra `cli.py`, che ora punta li'.

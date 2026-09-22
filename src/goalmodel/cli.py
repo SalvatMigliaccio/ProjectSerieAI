@@ -23,8 +23,14 @@ from __future__ import annotations
 import importlib
 import sys
 
-# comando -> (modulo, descrizione). L'ordine e' quello del ciclo di lavoro,
-# non alfabetico: e' come si legge l'aiuto.
+# comando -> (bersaglio, descrizione). Il bersaglio e' un modulo, e allora si
+# chiama il suo `main()`, oppure "modulo:funzione" quando in un modulo solo ce
+# ne sono due. Serve alla taratura: `gbm` e `dixon-coles` stanno entrambi in
+# `evaluation/taratura.py`, perche' tarare e' misurare e la misura non e' il
+# mestiere del modello.
+#
+# L'ordine e' quello del ciclo di lavoro, non alfabetico: e' come si legge
+# l'aiuto.
 COMANDI: dict[str, tuple[str, str]] = {
     "ingest":        ("goalmodel.ingest", "scarica i dati grezzi dalle fonti"),
     "normalize":     ("goalmodel.normalize", "nomi squadra e join -> matches_master"),
@@ -36,8 +42,10 @@ COMANDI: dict[str, tuple[str, str]] = {
     "evaluate":      ("goalmodel.evaluation.evaluate", "walk-forward, RPS, confronti appaiati"),
     "power":         ("goalmodel.evaluation.power_analysis", "effetto minimo rilevabile"),
     "baseline":      ("goalmodel.models.baseline", "controlli sulla matrice dei risultati"),
-    "dixon-coles":   ("goalmodel.models.dixon_coles", "M3: taratura e controlli"),
-    "gbm":           ("goalmodel.models.gbm", "M4/M5/M6: taratura, importanza"),
+    "dixon-coles":   ("goalmodel.evaluation.taratura:main_dixon_coles",
+                      "M3: taratura e controlli"),
+    "gbm":           ("goalmodel.evaluation.taratura:main_gbm",
+                      "M4/M5/M6: taratura, importanza"),
     "predict":       ("goalmodel.prediction.predict", "previsione singola (uso avanzato)"),
     "predict-round": ("goalmodel.prediction.predict_round", "giornata: da aperta a predetta"),
     "close-round":   ("goalmodel.prediction.close_round", "giornata: da giocata a chiusa"),
@@ -80,12 +88,14 @@ def main(argv: list[str] | None = None) -> int:
         print(_aiuto(), file=sys.stderr)
         return 2
 
-    modulo, _ = COMANDI[comando]
+    bersaglio, _ = COMANDI[comando]
+    modulo, _, funzione = bersaglio.partition(":")
     # Il modulo delegato legge sys.argv con il suo argparse: gli si passa una
     # riga di comando che sembra la sua, cosi' i messaggi di errore e di aiuto
     # nominano `goalmodel <comando>` e non il percorso del modulo.
     sys.argv = [f"goalmodel {comando}", *resto]
-    return importlib.import_module(modulo).main() or 0
+    entry = getattr(importlib.import_module(modulo), funzione or "main")
+    return entry() or 0
 
 
 if __name__ == "__main__":

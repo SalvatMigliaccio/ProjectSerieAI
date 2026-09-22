@@ -24,9 +24,9 @@ config
   schema, data             il contratto dei file e il loro unico punto di lettura
   ingest, normalize        acquisizione e unificazione delle fonti
     risultati              la catena di fonti per il risultato vero
-    features/              forma, mercato, contesto, giocatori
+    features/              forma, mercato, contesto, giocatori, dataset
       models/              M0..M6, dalla lambda alla matrice dei risultati
-        evaluation/        RPS, calibrazione, walk-forward, potenza
+        evaluation/        RPS, calibrazione, walk-forward, potenza, taratura
           prediction/      previsione, registro, ciclo della giornata
             reporting/     sezioni (calcolo) -> pagina (HTML) -> report (regia)
 
@@ -47,9 +47,24 @@ proprio. Chi lavora al modello non deve installare un web server per lanciare
 un walk-forward.
 
 **Un import all'indietro e' una decisione di architettura, non una comodita'.**
-Ce n'e' gia' uno da sciogliere: `models/gbm.py` e `models/dixon_coles.py`
-importano `evaluation` **dentro le funzioni** di taratura, per evitare un ciclo.
-Si risolve spostando la taratura in `evaluation/`, non aggiungendone altri.
+**Al 22 settembre 2026 non ce n'e' nessuno**, e i due che c'erano sono stati
+sciolti spostando il codice al livello giusto, non aggiungendo eccezioni:
+
+- la **taratura** (iperparametri, peso della miscela, half-life) e' in
+  `evaluation/taratura.py`. Tarare e' misurare, e il modello e' l'oggetto
+  della misura, non chi la fa;
+- l'**assemblaggio del dataset** (`load_dataset`, `add_matchday`) e' in
+  `features/dataset.py`. Unire i blocchi non e' valutare.
+
+Entrambi vivevano in `models/`, e importavano `evaluation` **dentro le
+funzioni** per non creare un ciclo: un import all'indietro nascosto in una
+funzione resta un import all'indietro, e' solo piu' difficile da vedere.
+
+I comandi non sono cambiati: `goalmodel gbm --tune`, `--importance`,
+`goalmodel dixon-coles --tune` e `--check` fanno quello che facevano. E'
+`cli.py` a mandarli altrove, e per questo accetta anche la forma
+`modulo:funzione`. Verificato: `--importance` riproduce le stesse quote di
+guadagno pubblicate piu' sotto, a partire da `goals_for` al 4.7%.
 
 I comandi passano dal CLI: `goalmodel <comando>`, che funziona da qualsiasi
 directory e allo stesso modo su Linux e Windows. `python -m goalmodel.<modulo>`
