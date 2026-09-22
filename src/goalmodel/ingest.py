@@ -811,9 +811,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--stage",
+        nargs="+",
         choices=list(STAGES) + ["all"],
-        default="matches",
-        help="Quale stage eseguire",
+        default=["matches"],
+        metavar="STAGE",
+        help="Uno o piu' stage, oppure 'all'. Con piu' stage su host diversi "
+             "il parallelismo ha qualcosa da fare: "
+             "`--stage matches understat schedule` contatta tre server "
+             "distinti e costa quanto il piu' lento invece della somma.",
     )
     parser.add_argument(
         "--fixtures-file",
@@ -830,17 +835,25 @@ def main() -> None:
              "WhoScored e' li' per essere rispettato, non aggirato.")
     args = parser.parse_args()
 
-    stages = ORDER if args.stage == "all" else [args.stage]
+    if "all" in args.stage:
+        stages = ORDER
+    else:
+        # Si toglie il doppione mantenendo l'ordine di ORDER, che mette i
+        # veloci per primi: cosi' `--stage schedule matches` non inverte la
+        # priorita' solo perche' e' stato scritto in quell'ordine.
+        chiesti = set(args.stage)
+        stages = [s for s in ORDER if s in chiesti]
+
     esiti = esegui(stages, parallelo=args.parallelo,
                    fixtures_file=args.fixtures_file)
 
     falliti = {n: e for n, e in esiti.items() if e is not None}
     if falliti:
         log.error("stage falliti: %s", ", ".join(sorted(falliti)))
-        # Con un solo stage richiesto l'errore e' IL risultato e va propagato;
-        # con 'all' no, altrimenti una fonte giu' butterebbe via il lavoro
-        # gia' fatto dalle altre.
-        if args.stage != "all":
+        # Con UN solo stage richiesto l'errore e' IL risultato e va propagato.
+        # Con piu' stage no: una fonte giu' butterebbe via il lavoro gia'
+        # fatto dalle altre, che e' il modo peggiore di fallire.
+        if len(stages) == 1:
             raise next(iter(falliti.values()))
 
 
