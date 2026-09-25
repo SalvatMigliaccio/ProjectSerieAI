@@ -32,6 +32,7 @@ import hashlib
 import json
 import logging
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pandas as pd
@@ -79,7 +80,17 @@ def allowed_origins() -> list[str]:
 
 
 def _guard_writes() -> None:
-    """Refuse any write under track_record/ or data/ from inside this process."""
+    """
+    Refuse any write under track_record/ or data/ from inside this process.
+
+    UNCHANGED BY AUTHENTICATION, deliberately. Authentication writes rows to
+    Postgres, which this guard never covered and does not need to: what it
+    protects is the registry on disk. Loosening it to let auth through would
+    have been the easy mistake — auth does not need it loosened.
+
+    Still partial, and still says so: it wraps `to_parquet` and `to_csv`, not
+    `to_pickle`, `open()`, `shutil.copy` or pyarrow (security rule 9).
+    """
     if getattr(pd.DataFrame.to_csv, "_api_guarded", False):
         return
 
@@ -124,17 +135,66 @@ def config_digest() -> str:
     return hashlib.md5(repr(voci).encode(), usedforsecurity=False).hexdigest()[:8]
 
 
+# The one prefix allowed to declare write methods. Signing in has to POST
+# somewhere, and there is no way around that.
+#
+# THIS IS A NARROWING, NOT A RELAXATION, and the difference is the whole point.
+# Before authentication existed the rule was "no write route at all". It is now
+# "no write route except under /api/auth", which still guarantees the thing
+# that mattered: **nothing reachable over HTTP can touch the track record.**
+# The auth routes write to Postgres; the registry stays a set of files that
+# only predict_round and close_round, running locally, ever open for writing.
+#
+# A prediction is worth something only if it was written before kick-off by a
+# process that did not know the result. A write endpoint over the registry is
+# precisely how that guarantee is lost, so the day someone needs one, the
+# answer is still no.
+WRITABLE_PREFIX = "/api/auth/"
+
+
+def iter_routes(app: FastAPI) -> Iterator[tuple[str, set[str]]]:
+    """
+    Every route actually served, as `(path, methods)`.
+
+    WHY THIS IS NOT JUST `app.routes`, AND WHY IT MATTERS. FastAPI 0.141
+    changed `include_router`: instead of copying the router's routes into
+    `app.routes`, it appends one `_IncludedRouter` wrapper. So `app.routes`
+    now holds four entries — /docs, /redoc, /openapi.json and the oauth2
+    redirect — and none of the endpoints.
+
+    Anything that walked `app.routes` looking for endpoints therefore stopped
+    seeing any, and **passed**. That is what happened to
+    `_assert_read_only_routes` and to its test: both kept reporting no write
+    routes because both were looking at a list that no longer contained
+    routes. A guard that cannot fail is not a guard, and this one could not
+    have failed since the FastAPI upgrade.
+
+    The recursion is deliberate: a router included into a router nests the
+    wrappers, and stopping at one level would reintroduce the same blindness
+    one layer down. Inner paths already carry their prefix.
+    """
+    for route in app.routes:
+        methods = getattr(route, "methods", None)
+        if methods:
+            yield route.path, set(methods)
+            continue
+        inner = getattr(route, "original_router", None)
+        if inner is not None:
+            yield from iter_routes(inner)
+
+
 def _assert_read_only_routes(app: FastAPI) -> None:
-    """A write route must never reach production, so fail at startup instead."""
+    """A write route outside /api/auth must never reach production."""
     allowed = {"GET", "HEAD", "OPTIONS"}
     offenders = [
-        f"{sorted(set(r.methods) - allowed)} {r.path}"
-        for r in app.routes
-        if getattr(r, "methods", None) and set(r.methods) - allowed
+        f"{sorted(methods - allowed)} {path}"
+        for path, methods in iter_routes(app)
+        if methods - allowed and not path.startswith(WRITABLE_PREFIX)
     ]
     if offenders:
         raise RuntimeError(
-            "the API must expose read-only routes, found: " + "; ".join(offenders))
+            f"only routes under {WRITABLE_PREFIX} may write, found: "
+            + "; ".join(offenders))
 
 
 def create_app() -> FastAPI:
@@ -144,9 +204,16 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins(),
-        allow_credentials=False,
-        allow_methods=["GET"],
-        allow_headers=["*"],
+        # Credentials are on because the session lives in a cookie, and a
+        # cross-origin request drops cookies without it. That is exactly why
+        # `allow_origins` must stay an explicit list: browsers refuse the
+        # combination of credentials and `*`, and a wildcard here would let any
+        # site read an authenticated response.
+        allow_credentials=True,
+        # POST for /api/auth only. Every other route still rejects it at
+        # startup, via _assert_read_only_routes.
+        allow_methods=["GET", "POST"],
+        allow_headers=["content-type"],
     )
 
     # The schema digest is part of every ETag, so a change to a payload's shape
@@ -223,6 +290,18 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(routes.router)
+
+    # Mounted only when the auth extra is installed. Someone running the
+    # read-only API on public data should not need psycopg and argon2 to start
+    # it: the import lives here so its absence degrades to "no auth routes"
+    # rather than a crash at startup.
+    try:
+        from backend.auth import routes as auth_routes
+    except ImportError as exc:
+        log.info("auth routes not mounted (%s): install the 'auth' extra", exc)
+    else:
+        app.include_router(auth_routes.router)
+
     _assert_read_only_routes(app)
     return app
 
