@@ -145,3 +145,98 @@ def test_the_example_env_carries_no_real_secret() -> None:
                             "AI_NAPLES_SMTP_PASSWORD=")):
             _, _, value = line.partition("=")
             assert value.strip() == "", f"a value is filled in: {line.split('=')[0]}"
+
+
+# ---------------------------------------------------------------------------
+# The Dockerfile's explicit dependency list
+# ---------------------------------------------------------------------------
+
+def _docker_pins() -> dict[str, str]:
+    """The `name -> specifier` pairs from the API image's pip install step."""
+    import re
+
+    body = API_DOCKERFILE.read_text(encoding="utf-8")
+    found = {}
+    for raw in re.findall(r'"([a-zA-Z0-9_.\[\]-]+(?:[<>=!,.0-9]+))"', body):
+        match = re.match(r"^([a-zA-Z0-9_.-]+)(\[[a-z,]+\])?(.*)$", raw)
+        if match and match.group(3):
+            found[match.group(1).lower()] = match.group(3)
+    return found
+
+
+def _pyproject_pins() -> dict[str, str]:
+    import re
+    import tomllib
+
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    declared = list(data["project"]["dependencies"])
+    for extra in data["project"].get("optional-dependencies", {}).values():
+        declared.extend(extra)
+
+    pins = {}
+    for raw in declared:
+        match = re.match(r"^([a-zA-Z0-9_.-]+)(\[[a-z,]+\])?(.*)$", raw)
+        if match:
+            pins[match.group(1).lower()] = match.group(3)
+    return pins
+
+
+def test_the_image_pins_match_pyproject() -> None:
+    """
+    The Dockerfile lists the API's dependencies by hand, so the versions exist
+    in two places and can drift.
+
+    WHY THEY ARE DUPLICATED AT ALL. `pip install ".[api,auth]"` drags in
+    goalmodel's whole base set, and through soccerdata and seleniumbase that
+    includes PyAutoGUI - synthetic input and screen capture - inside an
+    internet-facing container. The list is explicit to keep that out.
+
+    Duplicating a version is acceptable; letting the two copies disagree is
+    not, because the image would then run something the suite never tested.
+    """
+    docker, project = _docker_pins(), _pyproject_pins()
+    assert docker, "no pinned dependencies found in the API Dockerfile"
+
+    mismatched = {
+        name: (spec, project[name])
+        for name, spec in docker.items()
+        if name in project and project[name] != spec
+    }
+    assert not mismatched, (
+        "the API image pins differ from pyproject.toml "
+        f"(name: image, pyproject): {mismatched}")
+
+    unknown = sorted(set(docker) - set(project))
+    assert not unknown, (
+        f"the image installs packages pyproject does not declare: {unknown}. "
+        f"Either add them to pyproject or drop them from the image.")
+
+
+def test_the_image_refuses_the_browser_automation_chain() -> None:
+    """
+    A build-time check, not a runtime hope.
+
+    PyAutoGUI arrives through goalmodel -> soccerdata -> seleniumbase. It
+    injects mouse and keyboard events and captures the screen; it is what the
+    ingestion pipeline uses to drive a browser against WhoScored, and it is
+    the same library whose Wayland portal prompts looked like somebody
+    requesting remote access to the machine. None of it belongs in a container
+    that reads parquet and answers JSON.
+    """
+    body = API_DOCKERFILE.read_text(encoding="utf-8")
+    assert "--no-deps" in body, \
+        "without --no-deps the image pulls goalmodel's whole dependency tree"
+    for name in ("pyautogui", "seleniumbase", "lightgbm"):
+        assert name in body, (
+            f"the build does not verify that {name} is absent: with --no-deps "
+            f"nothing else would notice if it came back")
+
+
+def test_the_build_walks_the_import_graph() -> None:
+    """
+    `--no-deps` moves a missing package from build time to runtime, which for a
+    route nobody exercises in staging means production. Importing the app
+    during the build brings that back to where it can still fail.
+    """
+    assert "import backend.api, backend.auth.routes, backend.auth.cli" in \
+        API_DOCKERFILE.read_text(encoding="utf-8")

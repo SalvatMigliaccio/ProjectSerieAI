@@ -24,17 +24,61 @@ RUN apt-get update \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Dependency metadata first, sources second. Editing a Python file then does
-# not invalidate the layer that installed the dependencies, which is the
-# difference between a 10-second rebuild and a 3-minute one.
+# THE API'S REAL DEPENDENCIES, LISTED EXPLICITLY. `pip install ".[api,auth]"`
+# would be shorter and is what this file did first. It is also wrong, and not
+# merely heavy:
+#
+#   goalmodel -> soccerdata -> seleniumbase -> PyAutoGUI
+#                                              -> pyscreeze, pygetwindow, mouseinfo
+#
+# PyAutoGUI injects synthetic mouse and keyboard events and captures the
+# screen. It belongs to the ingestion pipeline, which drives a real browser
+# against WhoScored; it has no business inside an internet-facing container
+# that only reads parquet and answers JSON. The same chain also brings a whole
+# browser-automation framework, LightGBM, matplotlib, scikit-learn and
+# statsmodels, none of which the API imports - `tests/test_api.py` asserts as
+# much for LightGBM.
+#
+# So the runtime set is spelled out and `goalmodel` goes in with `--no-deps`.
+# `tests/test_deploy.py` checks this list against pyproject so the two cannot
+# drift silently. The cleaner fix is moving ingestion and modelling out of
+# `goalmodel`'s base dependencies, which changes what `pip install goalmodel`
+# gives everyone and is therefore a decision, not a Dockerfile edit.
 COPY pyproject.toml README.md ./
-COPY src/goalmodel/__init__.py src/goalmodel/__init__.py
-COPY backend/__init__.py backend/__init__.py
-RUN pip install --no-cache-dir ".[api,auth]"
+RUN pip install --no-cache-dir \
+    "fastapi>=0.110,<1" \
+    "uvicorn[standard]>=0.27,<1" \
+    "pandas>=3.0,<4" \
+    "numpy>=2.5,<3" \
+    "pyarrow>=25,<26" \
+    "scipy>=1.18,<2" \
+    "psycopg[binary]>=3.2,<4" \
+    "sqlalchemy>=2.0,<3" \
+    "alembic>=1.14,<2" \
+    "argon2-cffi>=23.1,<26" \
+    "itsdangerous>=2.2,<3" \
+    "email-validator>=2.2,<3" \
+    "pydantic-settings>=2.7,<3"
 
 COPY src/ src/
 COPY backend/ backend/
 RUN pip install --no-cache-dir --no-deps .
+
+# FAIL THE BUILD, NOT THE DEPLOY. With `--no-deps`, a missing package does not
+# surface until something imports it at runtime - which, for a route nobody
+# exercises in staging, means in production. Importing the app here walks the
+# whole graph while the build can still fail, and the second line proves the
+# browser-automation chain really is absent.
+RUN python -c "import backend.api, backend.auth.routes, backend.auth.cli; print('import graph ok')"
+RUN python - <<'PYEOF'
+import importlib.util
+import sys
+unwanted = [n for n in ("pyautogui", "seleniumbase", "lightgbm", "matplotlib")
+            if importlib.util.find_spec(n) is not None]
+if unwanted:
+    sys.exit(f"these must not be in the API image: {unwanted}")
+print("no browser automation, no model library")
+PYEOF
 
 # ---------------------------------------------------------------------------
 
