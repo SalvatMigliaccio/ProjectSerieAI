@@ -16,17 +16,13 @@ Uso:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
+import itertools
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src.evaluate import walk_forward  # noqa: E402
-from src.models.baseline import Model, PRED_COLS  # noqa: E402
+from goalmodel.evaluation.evaluate import walk_forward
+from goalmodel.models.baseline import PRED_COLS, Model
 
 
 class Spia(Model):
@@ -42,7 +38,7 @@ class Spia(Model):
     def __init__(self) -> None:
         self.visto: list[dict] = []
 
-    def fit(self, train: pd.DataFrame) -> "Spia":
+    def fit(self, train: pd.DataFrame) -> Spia:
         self._train = train
         return self
 
@@ -52,8 +48,8 @@ class Spia(Model):
             "train_max": self._train["date"].max() if len(self._train) else pd.NaT,
             "n_train": len(self._train),
             "chiavi_train": set(zip(self._train["season"], self._train["home_team"],
-                                    self._train["away_team"])),
-            "chiavi_test": set(zip(test["season"], test["home_team"], test["away_team"])),
+                                    self._train["away_team"], strict=True)),
+            "chiavi_test": set(zip(test["season"], test["home_team"], test["away_team"], strict=True)),
         })
         out = pd.DataFrame(np.nan, index=test.index, columns=PRED_COLS)
         out["p_home"], out["p_draw"], out["p_away"] = 1 / 3, 1 / 3, 1 / 3
@@ -74,7 +70,7 @@ def _finto(n_stagioni: int = 3, squadre: int = 8) -> pd.DataFrame:
         stagione = f"{20+s}{21+s}"
         inizio = pd.Timestamp(f"20{20+s}-09-01")
         giornata = 0
-        for i in range(squadre - 1):
+        for _ in range(squadre - 1):
             giornata += 1
             data = inizio + pd.Timedelta(weeks=giornata)
             for j in range(squadre // 2):
@@ -125,7 +121,9 @@ def test_il_training_cresce() -> None:
     spia = Spia()
     walk_forward(df, [spia], test_seasons=[stagioni[-1]], exclude_seasons=[])
     n = [b["n_train"] for b in spia.visto]
-    assert all(a <= b for a, b in zip(n, n[1:])), \
+    # `pairwise` e non `zip(n, n[1:])`: quella e' l'unica forma in cui le due
+    # sequenze devono avere lunghezza diversa, e `strict=True` la romperebbe.
+    assert all(a <= b for a, b in itertools.pairwise(n)), \
         f"il training non e' monotono crescente: {n}"
     print(f"2. training da {n[0]} a {n[-1]} righe, monotono          ok")
 
@@ -170,7 +168,9 @@ def test_leakage_deliberato_viene_visto() -> None:
 
     try:
         walk_forward(rotto, [Spia()], test_seasons=[stagioni[-1]], exclude_seasons=[])
-    except AssertionError as exc:
+    # ValueError e non AssertionError: la garanzia anti-leakage e' una regola
+    # non negoziabile, e `python -O` cancella gli assert.
+    except ValueError as exc:
         print(f"4. leakage deliberato intercettato: {str(exc)[:44]}...  ok")
         return
     raise AssertionError(

@@ -15,17 +15,16 @@ Niente tocca il registro o l'archivio veri: si sostituiscono
     python -m tests.test_rounds
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import close_round, config, predict as predict_mod, rounds  # noqa: E402
-from src.models.baseline import predictions_from_lambdas  # noqa: E402
+from goalmodel.models.baseline import predictions_from_lambdas
+from goalmodel.prediction import close_round, rounds
+from goalmodel.prediction import predict as predict_mod
 
 rng = np.random.default_rng(3)
 
@@ -126,6 +125,7 @@ def _log_finto(season: str, matchday: int, n: int = 10) -> pd.DataFrame:
     })[predict_mod.LOG_COLUMNS]
 
 
+@pytest.mark.richiede_dati
 def test_chiusura(tmp: Path) -> None:
     """Il file di giornata: previsione, risultato ed errore per partita."""
     log_path = tmp / "predictions_log.csv"
@@ -158,6 +158,7 @@ def test_chiusura(tmp: Path) -> None:
     print("  RPS delle quote registrate calcolato riga per riga      ok")
 
 
+@pytest.mark.richiede_dati
 def test_stato_su_dati_veri(tmp: Path) -> None:
     """
     La macchina a stati sul calendario vero, con un registro finto.
@@ -240,3 +241,37 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_un_passo_di_rete_assorbe_solo_la_rete() -> None:
+    """
+    Un passo non fatale assorbe i problemi di rete, non i bug — audit B4.
+
+    PERCHE' CONTA. `except Exception` copriva anche un TypeError o un KeyError
+    dentro `ingest_fixtures`, e lo riportava come "non e' fatale: si prosegue
+    con i dati gia' presenti". Il comando andava avanti su una premessa falsa
+    e l'errore vero restava una riga di log fra le altre. Sono due situazioni
+    opposte: una rete che non risponde e un programma sbagliato.
+    """
+    def cade(exc: BaseException):
+        def _f() -> None:
+            raise exc
+        return _f
+
+    # La rete: si assorbe e si prosegue, che e' tutto il senso di fatale=False.
+    for errore in (ConnectionError("503"), TimeoutError("scaduto"),
+                   OSError("host irraggiungibile")):
+        assert rounds.passo("1", "rete", cade(errore), fatale=False) is False, \
+            f"{type(errore).__name__} doveva essere assorbito"
+
+    # Un bug: risale anche con fatale=False.
+    for errore in (TypeError("None non e' iterabile"), KeyError("1415"),
+                   ValueError("colonna assente")):
+        with pytest.raises(type(errore)):
+            rounds.passo("2", "bug travestito", cade(errore), fatale=False)
+
+    # E un passo fatale si ferma comunque, qualunque sia la causa.
+    with pytest.raises(rounds.PassoFallito):
+        rounds.passo("3", "locale", cade(ConnectionError("503")), fatale=True)
+
+    print("  un passo di rete assorbe la rete, non i bug   ok")

@@ -1,0 +1,156 @@
+# Packaging, dipendenze e configurazione degli strumenti in un file solo.
+#
+# PERCHE' I LIMITI SUPERIORI NON SONO BUROCRAZIA. Il progetto verifica
+# `test_production_unchanged` BIT A BIT: un aggiornamento silenzioso di
+# LightGBM, scipy o pandas fa fallire quel test senza che il codice sia
+# cambiato, e non resta modo di distinguere una regressione vera da un
+# aggiornamento di libreria. Da qui il vincolo `>=X,<Y` su ogni dipendenza
+# diretta, e `requirements.lock` per l'ambiente esatto.
+
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "goalmodel"
+version = "0.1.0"
+description = "Modello probabilistico sui gol nel calcio, con il mercato come riferimento misurato"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "andrew21111" }]
+keywords = ["football", "poisson", "dixon-coles", "forecasting", "betting-markets"]
+
+dependencies = [
+    "pandas>=3.0,<4",
+    "numpy>=2.5,<3",
+    "pyarrow>=25,<26",
+    "scipy>=1.18,<2",
+    "scikit-learn>=1.9,<2",
+    "statsmodels>=0.15,<0.16",
+    "lightgbm>=4.7,<5",
+    "joblib>=1.6,<2",
+    "matplotlib>=3.11,<4",
+    "soccerdata>=1.9.1,<2",
+    "tqdm>=4.67,<5",
+]
+
+[project.optional-dependencies]
+# NIENTE EXTRA `scraping`. Sembrava servisse per lo stage `missing`, che guida
+# un browser vero su WhoScored, ma il lock dice che `soccerdata` dipende gia'
+# da `seleniumbase`, che a sua volta tira `selenium`: l'extra sarebbe stato un
+# no-op che faceva credere il contrario. Selenium arriva comunque.
+dev = [
+    "pytest>=9.0,<10",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    # Solo per il TestClient di FastAPI in tests/test_api.py.
+    "httpx>=0.27,<1",
+]
+
+# L'API in sola lettura sul track record (`backend/api/`). E' un extra e non
+# una dipendenza normale perche' ingestion, feature, modelli e i due comandi
+# di giornata girano senza: chi lavora al modello non deve installare un web
+# server per lanciare un walk-forward.
+api = [
+    "fastapi>=0.110,<1",
+    "uvicorn[standard]>=0.27,<1",
+]
+
+[project.scripts]
+goalmodel = "goalmodel.cli:main"
+
+# DUE radici, e non e' un compromesso. `goalmodel` e' la libreria e sta in
+# src-layout (A1); `backend` e' un deployable diverso — altre dipendenze, altro
+# ciclo di rilascio, e un giorno forse un altro repository — quindi resta un
+# pacchetto suo alla radice invece di finire dentro la libreria che consuma.
+# Dichiararlo qui serve a una cosa sola: che `import backend` funzioni da
+# qualunque directory, esattamente come `import goalmodel`.
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["goalmodel*", "backend*"]
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+# I test girano SENZA RETE e senza toccare data/. Quelli che hanno bisogno del
+# dataset vero sono marcati `richiede_dati` e vengono saltati dove non c'e'.
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+markers = [
+    "richiede_dati: ha bisogno di data/ popolata da un'ingestion vera",
+    "richiede_dataset_completo: ha bisogno di TUTTI i blocchi di feature costruiti",
+    "lento: oltre il minuto; escluso di default in CI con -m 'not lento'",
+]
+filterwarnings = ["error::DeprecationWarning:goalmodel.*"]
+
+# ---------------------------------------------------------------------------
+# ruff — formattazione e lint
+# ---------------------------------------------------------------------------
+[tool.ruff]
+# `.claude/skills/` e' strumentazione di terze parti versionata con il
+# repository, non codice del progetto: 347 findings che non diciamo di voler
+# correggere renderebbero il gate di CI rumore invece che segnale.
+extend-exclude = [".claude", "frontend"]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes: import inutilizzati, variabili morte (B9)
+    "I",         # isort
+    "UP",        # pyupgrade
+    "B",         # bugbear: except larghi, mutabili di default
+    "SIM",       # semplificazioni
+    "PTH",       # usa pathlib invece di os.path
+    "RUF",
+    "S",         # bandit: regole di sicurezza
+]
+ignore = [
+    "E501",    # la lunghezza riga la impone il formatter
+
+    # ------------------------------------------------------------------
+    # CRICCHETTO. Ogni voce qui sotto e' un difetto REALE gia' diagnosticato
+    # in docs/AUDIT_TECNICO.md, non una regola che non ci piace. Si toglie
+    # una riga per volta quando si chiude la voce corrispondente, e la lista
+    # puo' solo accorciarsi: aggiungerne una richiede di scrivere prima
+    # perche', e quel perche' finisce nell'audit.
+    #
+    # Il gate di CI e' quindi verde e significativo: qualsiasi violazione
+    # NUOVA, di qualsiasi altra regola, blocca la pipeline.
+    # ------------------------------------------------------------------
+    "RUF005",  # concatenazione di liste: solo stile
+    "SIM108",  # if/else al posto dell'espressione ternaria
+]
+
+[tool.ruff.lint.per-file-ignores]
+# I test possono usare assert liberamente ed essere meno severi.
+"tests/*" = ["S", "E402"]
+"scripts/*" = ["T201"]
+# S101 (assert) e' attivo ovunque da quando B3 e' chiuso: `python -O` li
+# cancella, e un'invariante che sparisce con una variabile d'ambiente non e'
+# un'invariante. Le due eccezioni sono funzioni che NON girano in produzione e
+# il cui unico scopo e' verificare la matematica del modulo: li' l'assert e'
+# la forma giusta, perche' e' il corpo del controllo e non una difesa.
+"src/goalmodel/models/baseline.py" = ["S101"]      # _demo()
+"src/goalmodel/models/dixon_coles.py" = ["S101"]   # _check_gradient()
+
+[tool.ruff.lint.isort]
+known-first-party = ["goalmodel"]
+
+# ---------------------------------------------------------------------------
+# mypy — graduale: si parte permissivi e si stringe modulo per modulo
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["src/goalmodel"]
+ignore_missing_imports = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true

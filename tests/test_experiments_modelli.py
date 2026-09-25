@@ -15,19 +15,15 @@ sbagliato.
     python -m tests.test_experiments_modelli
 """
 
-import sys
-from pathlib import Path
 
 import numpy as np
-import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src.evaluate import load_dataset  # noqa: E402
-from src.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda  # noqa: E402
-from src.features import sets  # noqa: E402
-from src.models.baseline import PRED_COLS  # noqa: E402
+from goalmodel import config
+from goalmodel.evaluation.evaluate import load_dataset
+from goalmodel.experiments.modelli import M5MediaSemi, M5Set, media_log_lambda
+from goalmodel.features import sets
+from goalmodel.models.baseline import PRED_COLS
 
 SEMI = (0, 1, 2)
 
@@ -40,6 +36,24 @@ def _dati():
     train = played[played["date"] < cutoff]
     test = df[(df["season"] == "2324") & (df["matchday"] == 1)]
     return train, test
+
+
+pytestmark = [pytest.mark.richiede_dati, pytest.mark.richiede_dataset_completo]
+
+
+@pytest.fixture(scope="module")
+def _taglio():
+    return _dati()
+
+
+@pytest.fixture(scope="module")
+def train(_taglio):
+    return _taglio[0]
+
+
+@pytest.fixture(scope="module")
+def test(_taglio):
+    return _taglio[1]
 
 
 def test_colonne_dichiarate(train) -> None:

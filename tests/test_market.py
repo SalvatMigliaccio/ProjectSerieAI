@@ -11,16 +11,14 @@ Uso:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import numpy as np
 from scipy.optimize import brentq
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src.features.market import (  # noqa: E402
-    devig_proportional, devig_shin, implied_total_goals, implied_lambdas,
+from goalmodel.features.market import (
+    devig_proportional,
+    devig_shin,
+    implied_lambdas,
+    implied_total_goals,
 )
 
 
@@ -65,11 +63,11 @@ def test_somma_e_dominio() -> None:
 
 def test_contro_risolutore_indipendente() -> None:
     quote = _quote_plausibili(200, seed=1)
-    ps, z = devig_shin(quote)
+    ps, _z = devig_shin(quote)
 
     err = 0.0
     for i in range(len(quote)):
-        rif, z_rif = _shin_riferimento(quote[i])
+        rif, _z_rif = _shin_riferimento(quote[i])
         err = max(err, np.abs(rif - ps[i]).max())
     print(f"2. contro brentq scalare: scarto max {err:.2e}          ok")
     assert err < 1e-12, f"la bisezione vettoriale diverge dal riferimento: {err:.2e}"
@@ -155,7 +153,7 @@ def test_lambda_impliciti() -> None:
         "la scomposizione non conserva il totale"
 
     # e la P(1) ricostruita dai due lambda deve tornare quella di partenza
-    from src.models.baseline import score_matrix, outcomes_from_matrix
+    from goalmodel.models.baseline import outcomes_from_matrix, score_matrix
     rico = outcomes_from_matrix(score_matrix(lam_h, lam_a))["p_home"].to_numpy()
     assert np.allclose(rico, p_home, atol=1e-4), \
         f"la P(1) non si ricostruisce: {rico.round(4)} contro {p_home}"

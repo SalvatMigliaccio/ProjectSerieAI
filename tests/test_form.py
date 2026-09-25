@@ -8,15 +8,13 @@ contro l'errore che rovina silenziosamente questo tipo di progetti.
     python -m tests.test_form
 """
 
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from src.features import form  # noqa: E402
+from goalmodel.features import form
 
 rng = np.random.default_rng(7)
 
@@ -29,7 +27,7 @@ def synthetic() -> pd.DataFrame:
     rows = []
     day = datetime(2023, 8, 20)
     for season in SEASONS:
-        for i, home in enumerate(TEAMS):
+        for home in TEAMS:
             for away in TEAMS:
                 if home == away:
                     continue
@@ -53,6 +51,26 @@ def synthetic() -> pd.DataFrame:
                     "away_points": 3 if ag > hg else (1 if hg == ag else 0),
                 })
     return pd.DataFrame(rows)
+
+
+@pytest.fixture(scope="module")
+def df() -> pd.DataFrame:
+    """Le partite sintetiche: tre stagioni, risultati e statistiche noti."""
+    return synthetic()
+
+
+@pytest.fixture(scope="module")
+def wide(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Le feature di forma calcolate su quelle partite.
+
+    `save=False` NON e' un dettaglio: con il default il test scriverebbe le
+    sue 90 righe sintetiche sopra `data/processed/features_form.parquet`,
+    cioe' sopra le 4580 vere. Non darebbe nessun errore — il merge di
+    `load_dataset` riempirebbe di NaN tutte le feature di forma e M4
+    degenererebbe in un modello costante senza protestare. E' successo.
+    """
+    return form.build(df, save=False)
 
 
 def test_no_leakage(df: pd.DataFrame, wide: pd.DataFrame) -> None:
@@ -85,7 +103,7 @@ def test_no_leakage(df: pd.DataFrame, wide: pd.DataFrame) -> None:
         col = "home_np_xg_for_ewm" if r.venue == "home" else "away_np_xg_for_ewm"
         got.append(m[col].iloc[0])
 
-    for i, (exp, act) in enumerate(zip(manual, got)):
+    for i, (exp, act) in enumerate(zip(manual, got, strict=True)):
         if exp is None:
             assert pd.isna(act), f"riga {i}: attesa NaN, ottenuto {act}"
         else:

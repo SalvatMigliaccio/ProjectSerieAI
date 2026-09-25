@@ -18,21 +18,19 @@ Uso:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-import numpy as np
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src.normalize import (  # noqa: E402
-    apply_name_map, load_name_map, load_raw, normalize_season,
+from goalmodel import config
+from goalmodel.normalize import (
+    apply_name_map,
+    load_name_map,
+    load_raw,
+    normalize_season,
 )
-from src.predict import kickoff  # noqa: E402
+from goalmodel.prediction.predict import kickoff
 
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 
 
 def test_fuso_sintetico() -> None:
@@ -61,6 +59,7 @@ def test_fuso_sintetico() -> None:
     print("2. l'orario NON e' interpretato come UTC             ok")
 
 
+@pytest.mark.richiede_dati
 def test_contro_football_data(soglia: float = 0.98) -> None:
     """
     Le due fonti devono descrivere lo stesso istante.
@@ -128,6 +127,7 @@ def test_contro_football_data(soglia: float = 0.98) -> None:
           f"({len(residuo)} partite)")
 
 
+@pytest.mark.richiede_dati
 def test_ordine_previsione_fischio() -> None:
     """
     Sul registro reale: nessuna previsione valida puo' seguire il fischio.
@@ -135,7 +135,7 @@ def test_ordine_previsione_fischio() -> None:
     Non fallisce sulle due righe storiche note — sono conservate di proposito —
     ma verifica che `flag_post_kickoff` continui a riconoscerle.
     """
-    from src.backtest_log import flag_post_kickoff, load_log
+    from goalmodel.prediction.backtest_log import flag_post_kickoff, load_log
 
     try:
         log = load_log()

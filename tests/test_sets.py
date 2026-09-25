@@ -10,16 +10,14 @@ colonne diverse da quelle dichiarate.
     python -m tests.test_sets
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src.features import sets  # noqa: E402
+from goalmodel import config
+from goalmodel.features import sets
 
 # BASE per esteso, copiato a mano e non importato: se qualcuno modifica la
 # definizione in `sets.py` — anche con buone intenzioni — questo elenco non
@@ -76,10 +74,12 @@ def test_set_disgiunti() -> None:
     print(f"  {len(sets.SETS)} set, nessuna colonna in due set             ok")
 
 
+@pytest.mark.richiede_dati
+@pytest.mark.richiede_dataset_completo
 def test_dataset_reale() -> None:
     """Ogni colonna candidata appartiene a un set, e BASE si ricostruisce esatto."""
-    from src.evaluate import load_dataset
-    from src.models.gbm import form_features
+    from goalmodel.evaluation.evaluate import load_dataset
+    from goalmodel.models.gbm import form_features
 
     df = load_dataset()
     candidate = form_features(df, escludi=())
@@ -105,6 +105,44 @@ def test_dataset_reale() -> None:
     print(f"  BASE+GIOCATORI = {len(con_giocatori)} colonne, niente di piu'    ok")
 
 
+def test_lo_stato_del_set_decide_la_produzione() -> None:
+    """
+    Cambiare lo stato di un set cambia cosa vede il modello di produzione.
+
+    E' la chiusura di A5: finche' la produzione aveva il suo elenco scritto a
+    mano in `gbm.py`, questo test non avrebbe potuto esistere — cambiare lo
+    stato qui non avrebbe avuto nessun effetto li', ed e' esattamente come il
+    blocco giocatori e' finito nel report senza che nessuno lo decidesse.
+
+    Si prova sul set GIOCATORI perche' e' l'unico `provvisorio`: dentro il
+    modello oggi, fuori appena lo si dichiara scartato.
+    """
+    from dataclasses import replace
+
+    from goalmodel.models import gbm
+
+    giocatori = set(sets.SETS["GIOCATORI"].colonne)
+    assert not (giocatori & sets.fuori_dal_modello()), \
+        "GIOCATORI e' provvisorio: le sue colonne devono stare DENTRO il modello"
+
+    originale = sets.SETS["GIOCATORI"]
+    try:
+        sets.SETS["GIOCATORI"] = replace(originale, stato=sets.SCARTATO)
+        assert giocatori <= sets.fuori_dal_modello(), \
+            "scartando il set le sue colonne devono uscire dal modello"
+        # E il modello deve leggerlo adesso, non alla prossima importazione:
+        # una costante calcolata una volta sola darebbe la risposta vecchia.
+        finto = pd.DataFrame({c: [0.0] for c in [*giocatori, "home_goals_for_ewm"]})
+        usate = gbm.form_features(finto, escludi=tuple(sets.fuori_dal_modello()))
+        assert not (set(usate) & giocatori), \
+            "form_features ha usato colonne di un set scartato"
+    finally:
+        sets.SETS["GIOCATORI"] = originale
+
+    assert not (giocatori & sets.fuori_dal_modello()), "stato non ripristinato"
+    print("  lo stato del set decide cosa vede la produzione   ok")
+
+
 def test_esperimenti_non_scrivono_in_produzione() -> None:
     """
     La guardia rifiuta le cartelle protette e lascia passare le altre.
@@ -112,7 +150,7 @@ def test_esperimenti_non_scrivono_in_produzione() -> None:
     Si prova per ultima: `proteggi_produzione` resta attiva nel processo, e
     il resto del test non deve girare con pandas modificato.
     """
-    from src import experiments
+    from goalmodel import experiments
 
     experiments.proteggi_produzione()
     df = pd.DataFrame({"a": [1]})

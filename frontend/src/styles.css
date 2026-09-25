@@ -1,0 +1,2042 @@
+/* ---------------------------------------------------------------------------
+   Sistema visivo scuro — impaginazione del mockup MatchPoint.
+
+   TIPOGRAFIA. Poppins per titoli e interfaccia: grottesco geometrico, pesante
+   nei display, ed e' quello che da' al titolo il peso che ha nel mockup. Inter
+   per il testo corrente e per le cifre, con `tabular-nums` dove i numeri si
+   incolonnano. Niente monospazio: nel mockup non ce n'e', e le percentuali
+   sono nello stesso carattere del resto.
+
+   IL COLORE PORTA SIGNIFICATO
+     menta    = accento del marchio, ed esito azzeccato
+     corallo  = esito sbagliato
+     ardesia  = non ancora giocata: assenza di informazione, non un giudizio
+   I tre toni dell'1X2 restano categoriali e di uguale peso.
+
+   TEMA UNICO, DICHIARATO: fondo e testo sempre dipinti, nessuno stato
+   intermedio da mantenere.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* MENTA SOBRIA. Il verde resta il colore del marchio, ma non e' piu' un
+     neon su nero-verde: l'accento e' desaturato (#45c08a al posto di
+     #2ee88a) e i fondi sono grafite neutra — il nero tinto di verde era meta'
+     dell'effetto "AI". Contrasti verificati: testo 15.6:1, secondario 8.7:1,
+     terziario 5.9:1, testo sul pulsante 8.1:1. */
+  --bg: #0c1111;
+  --bg-2: #101615;
+  --surface: #151c1b;
+  --surface-2: #1b2321;
+  --line: #222b29;
+  --line-strong: #2e3936;
+
+  --fg: #f1f4f2;
+  --muted: #b0bab6;
+  --faint: #8d9a95;
+
+  --mint: #45c08a;
+  --mint-2: #36a877;
+  --mint-ink: #06170f;
+  --mint-wash: rgba(var(--accent-rgb), 0.12);
+
+  /* L'esito e' un colore suo, anche se oggi coincide con l'accento: i
+     segnali di vittoria passano da --ok e non da --mint, cosi' cambiare
+     marchio non trasforma una vittoria in un pareggio. */
+  --ok: #45c08a;
+  --ok-wash: rgba(69, 192, 138, 0.14);
+  --ko: #e6776f;
+  --ko-wash: rgba(230, 119, 111, 0.14);
+  --idle: #8a9591;
+  --idle-wash: rgba(138, 149, 145, 0.14);
+  --warn: #e3bd62;
+  --warn-wash: rgba(227, 189, 98, 0.12);
+
+  --cat-1: #6aa9dd;
+  --cat-x: #97a19d;
+  --cat-2: #dfa56b;
+
+  --display: "Poppins", "Segoe UI", system-ui, sans-serif;
+  --text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.5rem;
+  --s6: 2rem;
+  --s7: 3rem;
+  --s8: 4.5rem;
+
+  --max: 1280px;
+  --radius: 14px;
+  --radius-sm: 8px;
+
+  /* LA PALETTE IN CANALI. Ogni colore del tema usato con trasparenza passa da
+     qui, cosi' cambiare palette e' cambiare queste righe e non cercare
+     cinquanta rgba() sparsi nel foglio. `--mint` e compagni restano coi nomi
+     storici, ma sono l'ACCENTO del tema, qualunque colore sia. */
+  --accent-rgb: 69, 192, 138;
+  --accent-hi: #5fcf9d;
+  --bg-rgb: 12, 17, 17;
+  --bg2-rgb: 16, 22, 21;
+  --surface-rgb: 21, 28, 27;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--text);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; border-radius: 4px; }
+a { color: inherit; text-decoration: none; }
+
+/* --- interazione: regole comuni a tutto cio' che si clicca ----------------- */
+
+/* `touch-action: manipulation` toglie l'attesa del doppio tocco: senza, sui
+   telefoni ogni pulsante risponde con 300ms di ritardo. */
+a, button, select, [role="button"] { touch-action: manipulation; }
+
+button, select { cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.45; }
+
+/* Una risposta al tocco per ogni controllo: un leggero rimpicciolimento finche'
+   e' premuto. Solo `transform`, quindi niente ricalcolo del layout attorno. */
+.cta, .matchcard__cta, .device__cta, .nav-cta, .filter, .threshold,
+.round-chip, .round-strip__arrow, .device__status {
+  transition: transform 120ms ease, background-color 160ms ease,
+              border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.cta:active, .matchcard__cta:active, .device__cta:active, .nav-cta:active,
+.filter:active, .threshold:active, .round-chip:active,
+.round-strip__arrow:active, .device__status:active { transform: scale(0.97); }
+
+/* Invisibile finche' non arriva il fuoco da tastiera, poi in alto a sinistra
+   sopra a tutto. */
+.skip-link {
+  position: absolute; left: var(--s4); top: -60px; z-index: 100;
+  padding: var(--s2) var(--s4); border-radius: var(--radius-sm);
+  background: var(--mint); color: var(--mint-ink); font-weight: 600; font-size: 0.875rem;
+  transition: top 120ms ease;
+}
+
+.skip-link:focus { top: var(--s3); }
+
+/* Il contenitore che riceve il fuoco dal link qui sopra non si contorna:
+   `tabindex="-1"` serve a poterci portare il fuoco, non a farne un controllo. */
+[tabindex="-1"]:focus { outline: none; }
+
+/* MENO MOVIMENTO, SE IL SISTEMA LO CHIEDE. Una regola sola per tutte le
+   transizioni e le animazioni del foglio, invece di ricordarsene caso per
+   caso: il pallino che pulsa, le schede che si sollevano, il tablet inclinato.
+   Gli scorrimenti avviati dal codice passano da `lib/motion.ts`. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .step:hover { transform: none; }
+}
+
+.wrap { max-width: var(--max); margin-inline: auto; padding-inline: var(--s5); }
+
+/* La dashboard e' piu' larga della landing, e non e' un vezzo: la griglia ha
+   otto colonne di numeri accanto alla colonna delle selezioni, e a 1280 px
+   restavano 896 px di tabella con le percentuali strette. Si sovrascrive
+   `--max` su un contenitore comune, cosi' testata, contenuto e piede restano
+   allineati fra loro invece di scalare uno solo. */
+.page--wide { --max: 1520px; }
+
+h1, h2, h3, .display { font-family: var(--display); text-wrap: balance; }
+p { margin: 0 0 var(--s4); max-width: 62ch; }
+.muted { color: var(--muted); }
+.faint { color: var(--faint); }
+.small { font-size: 0.8125rem; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* --- testata: marchio a sinistra, menu al centro, azione a destra --------- */
+
+.masthead { position: relative; z-index: 4; }
+
+.masthead__inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--s5);
+  padding-block: var(--s5);
+}
+
+.brand { display: inline-flex; align-items: center; gap: var(--s3); }
+
+.brand__logo { height: 46px; width: auto; display: block; flex: none; }
+
+.brand__name {
+  font-family: var(--display);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.brand__name em { font-style: normal; color: var(--mint); }
+
+.brand__tag {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-top: 4px;
+}
+
+.nav { display: flex; justify-content: center; gap: var(--s6); }
+
+.nav a {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  padding-block: 4px var(--s1);
+  border-bottom: 2px solid transparent;
+}
+
+.nav a:hover { color: var(--fg); }
+.nav a[aria-current="page"], .nav a.on { color: var(--mint); border-bottom-color: var(--mint); }
+
+/* Pastiglia in alto a destra. Contorno e non menta piena: il verde pieno e'
+   gia' della chiamata principale della hero, e due bottoni pieni nello stesso
+   sguardo si contendono l'attenzione invece di ordinarla. */
+.nav-cta {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--fg);
+  font-size: 0.8125rem; font-weight: 600;
+  white-space: nowrap;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.nav-cta:hover { border-color: var(--mint); background: rgba(var(--accent-rgb), 0.12); color: var(--mint); }
+
+/* --- hero ----------------------------------------------------------------- */
+
+.hero { position: relative; isolation: isolate; overflow: hidden; }
+
+.hero::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -2;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(70% 60% at 72% 8%, rgba(var(--accent-rgb), 0.07), transparent 62%),
+    radial-gradient(60% 55% at 18% 92%, rgba(var(--accent-rgb), 0.03), transparent 70%),
+    /* WebP da 79 kB invece del JPG da 1.7 MB: la foto sta sotto due veli
+       scuri e la differenza non si vede. `image-set` prende il primo formato
+       che il browser sa leggere; il JPG resta come ripiego. */
+    image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
+  /* NIENTE INGRANDIMENTO, ed era la causa della sfocatura. La foto e' alta
+     725 pixel e la hero circa 960: `cover` la stira gia' di 1.32 volte, e lo
+     `scale(1.26)` di prima portava lo stiramento a 1.67 — ogni pixel della
+     foto diventava quasi due pixel dello schermo.
+     Lo zoom era li' per poterla spostare, sulla convinzione che con `cover`
+     non restasse margine orizzontale. E' vero solo per riquadri larghi quasi
+     tre volte quanto sono alti (il rapporto della foto, 2170:725): a un
+     normale 1440x960 `cover` scala sull'altezza, la foto risulta larga ~2870
+     pixel, e `background-position` la sposta senza bisogno di altro.
+     ALTA IL 78% DELLA HERO E NON DI PIU'. A 930 pixel di hero sono circa 725:
+     la risoluzione nativa della foto, stiramento 1.0 — il massimo di
+     nitidezza possibile con questo file. Per averla nitida a tutta altezza
+     serve una foto alta almeno 1000 pixel.
+     IL BORDO BASSO SFUMA NEL FONDO (la maschera qui sotto), altrimenti al 78%
+     si vedrebbe la riga dove la foto finisce.
+     A DESTRA DEL TUTTO (100%): e' la posizione che porta il giocatore piu' a
+     sinistra senza aprire bande vuote sul lato destro. La foto e' larga
+     ~2100 pixel su 1440: oltre non c'e' margine. */
+  background-size: auto 78%;
+  background-position: 100% 0%;
+  background-repeat: no-repeat;
+  -webkit-mask-image: linear-gradient(180deg, #000 56%, transparent 78%);
+  mask-image: linear-gradient(180deg, #000 56%, transparent 78%);
+}
+
+/* Due veli, non uno. Quello obliquo scurisce il lato del testo ed e' quello di
+   sempre; quello verticale spegne la FOTO SUL BORDO BASSO. Senza il secondo,
+   l'immagine della hero finisce di netto sul filo della sezione e si vede una
+   riga dritta lunga tutta la pagina — il taglio si nota perche' e' la sola
+   linea perfettamente orizzontale in mezzo a una fotografia. */
+.hero::after {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 52%,
+      rgba(var(--bg-rgb), 0.35) 74%,
+      rgba(var(--bg-rgb), 0.74) 89%,
+      rgba(var(--bg-rgb), 0.93) 100%
+    ),
+    linear-gradient(
+      98deg,
+      rgba(var(--bg-rgb), 0.97) 0%,
+      rgba(var(--bg-rgb), 0.9) 34%,
+      rgba(var(--bg-rgb), 0.45) 62%,
+      rgba(var(--bg-rgb), 0.82) 100%
+    );
+}
+
+.hero__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: var(--s8);
+  align-items: center;
+  padding-block: var(--s8);
+  min-height: 720px;
+}
+
+/* L'accento si spende dove significa qualcosa: azione, esito piu' probabile,
+   firma. Qui basta un filetto neutro — un verde acido su ogni elemento e' il
+   cliche' che rende una pagina indistinguibile da mille altre. */
+.pill-label {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: var(--s2) var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  margin: var(--s6) 0 var(--s5);
+  font-size: clamp(2.6rem, 1.5rem + 4.2vw, 4.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  font-weight: 700;
+}
+
+.hero h1 em { font-style: normal; color: var(--mint); }
+
+.hero__lead {
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--muted);
+  max-width: 40ch;
+  margin-bottom: var(--s7);
+}
+
+/* I bottoni primari hanno gradiente e alone: nel riferimento sono l'elemento
+   che "si accende" sopra la fotografia, ed e' quello a dare la profondita' —
+   una tinta piatta sullo stesso fondo scuro sparisce. */
+.cta {
+  display: inline-flex; align-items: center; gap: var(--s3);
+  padding: var(--s4) var(--s6);
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  color: var(--mint-ink);
+  border-radius: 999px;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1rem;
+  border: 0; cursor: pointer;
+  /* Un'ombra scura sotto, non un alone colorato attorno: un oggetto vero
+     proietta ombra, non luce, e l'alone menta era meta' dell'effetto neon. */
+  box-shadow:
+    0 10px 22px -12px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.cta:hover {
+  box-shadow:
+    0 14px 28px -12px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transform: translateY(-1px);
+}
+.cta__arrow {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--mint-ink); color: var(--mint);
+  display: grid; place-items: center; font-size: 0.8rem;
+}
+
+/* --- il dispositivo, inclinato -------------------------------------------- */
+
+/* Le schede flottanti stanno ACCANTO al tablet, non sopra: lo spazio glielo
+   riserva il padding dello stage. Senza, finiscono a coprire la terza cella
+   dell'1X2 e meta' del pulsante — cioe' proprio i numeri che la pagina esiste
+   per mostrare. */
+/* Nessun alone sfocato dietro il tablet: il blob radiale colorato e' uno dei
+   tell piu' riconoscibili delle pagine generate, e qui faceva il lavoro che
+   spetta alla fotografia. La profondita' la danno il bordo e l'ombra. */
+.stage { position: relative; perspective: 1800px; padding-right: 200px; }
+
+.device {
+  transform: rotateY(-11deg) rotateX(2deg) rotate(-1deg);
+  transform-origin: center center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  /* Semi-trasparente: sopra la fotografia il pannello deve lasciar vedere la
+     scena, come nel riferimento. Su fondo nero resta comunque leggibile. */
+  background: linear-gradient(165deg, rgba(var(--surface-rgb), 0.94), rgba(var(--bg2-rgb), 0.96));
+  backdrop-filter: blur(10px);
+  padding: var(--s5);
+  box-shadow:
+    -30px 50px 90px -40px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(var(--accent-rgb), 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.device__brand {
+  display: flex; align-items: center; gap: var(--s2);
+  font-family: var(--display); font-weight: 700; font-size: 1rem;
+  margin-bottom: var(--s4);
+}
+
+.device__brand em { font-style: normal; color: var(--mint); }
+
+/* La riga di stato al posto del finto campo di ricerca: stesso ingombro e
+   stessa forma a pillola, ma dice una cosa vera e porta dove promette. */
+.device__status {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  margin-bottom: var(--s5);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.device__status:hover { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.06); }
+.device__status-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.device__status-go { color: var(--mint); font-weight: 600; font-size: 0.75rem; }
+
+/* Il pallino "vivo": un anello che si espande piano. Dice che il dato viene
+   dall'API adesso, non da un'immagine; con movimento ridotto resta fermo. */
+.device__dot {
+  position: relative; flex: none; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--mint);
+}
+
+.device__dot::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid var(--mint); opacity: 0;
+  animation: impulso 2.4s ease-out infinite;
+}
+
+@keyframes impulso {
+  0% { transform: scale(0.6); opacity: 0.7; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) { .device__dot::after { animation: none; } }
+
+/* La card della partita in evidenza: un riquadro dentro il riquadro, come nel
+   mockup — il tablet mostra un'interfaccia, non una lista piatta. */
+/* Un gradino sopra il corpo del tablet: nel riferimento questa card e' piu'
+   chiara di cio' che la contiene, ed e' cosi' che si legge come "in evidenza"
+   senza bisogno di un bordo colorato. */
+.device__feature {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  padding: var(--s4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.device__label { font-size: 0.75rem; color: var(--faint); margin-bottom: var(--s2); }
+
+.device__teams {
+  font-family: var(--display);
+  font-size: 1.35rem; font-weight: 600; letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.device__teams em { font-style: normal; font-weight: 400; color: var(--faint); font-size: 0.85em; }
+
+.device__when { font-size: 0.75rem; color: var(--faint); margin: var(--s1) 0 var(--s4); }
+
+.odds-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.odds-cell {
+  background: var(--surface);
+  padding: var(--s3) var(--s2);
+  text-align: center; display: grid; gap: 2px;
+}
+
+.odds-cell__key { font-size: 0.6875rem; color: var(--faint); }
+.odds-cell__value { font-size: 1.0625rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.odds-cell--best { background: var(--surface-2); }
+.odds-cell--best .odds-cell__value { color: var(--mint); }
+
+.device__cta {
+  display: block; width: 100%;
+  margin-top: var(--s4);
+  padding: var(--s3);
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  color: var(--mint-ink);
+  border-radius: 999px;
+  text-align: center; font-weight: 600; font-size: 0.875rem;
+  font-family: var(--display);
+  box-shadow:
+    0 8px 18px -10px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.device__section { margin-top: var(--s5); }
+.device__list { display: grid; margin-top: var(--s3); }
+
+.device__row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s4);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8125rem;
+}
+
+.device__row:last-child { border-bottom: 0; }
+.device__match { font-weight: 500; }
+
+/* Etichetta piccola sopra, valore sotto: la stessa lettura delle tre celle
+   grandi, in miniatura. */
+.device__probs { display: flex; gap: var(--s4); }
+
+.device__prob { display: grid; justify-items: center; gap: 1px; min-width: 34px; }
+.device__prob i { font-style: normal; font-size: 0.6875rem; color: var(--faint); }
+.device__prob b { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.device__prob--on b { color: var(--mint); }
+
+.device__row--head { padding: 0 0 var(--s2); border-bottom: 1px solid var(--line-strong); }
+.device__row--head .device__prob i { font-size: 0.6875rem; letter-spacing: 0.08em; }
+
+/* --- schede flottanti a lato ---------------------------------------------- */
+
+/* Spinte oltre il bordo del contenitore, come nel mockup: la colonna delle
+   schede sconfina nel margine della pagina invece di stare allineata al testo. */
+.floaters {
+  position: absolute; right: -68px; top: 2%;
+  display: grid; gap: var(--s4);
+  width: 208px;
+}
+
+/* Vetro sopra la fotografia: nel riferimento le schede lasciano intravedere la
+   scena, ed e' quello che le fa galleggiare invece di stare appiccicate. */
+.floater {
+  background: rgba(var(--surface-rgb), 0.72);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  box-shadow:
+    -16px 26px 50px -28px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.floater__title { margin: 0 0 var(--s3); font-family: var(--display); font-size: 0.8125rem; font-weight: 600; }
+
+/* La riga che dice di che numero si tratta: sta sotto il titolo e sopra le
+   barre, perche' e' li' che l'occhio la cerca quando il numero non torna. */
+.floater__title + .floater__sub { margin-top: calc(var(--s3) * -1); }
+.floater__sub { display: block; margin-bottom: var(--s3); font-size: 0.6875rem; color: var(--faint); }
+
+/* Riga con l'icona a sinistra e le barre a destra, come nel riferimento. */
+.floater__row { display: flex; align-items: center; gap: var(--s3); }
+
+.floater__glyph {
+  width: 30px; height: 30px; flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--mint-wash);
+  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  color: var(--mint);
+  display: grid; place-items: center;
+}
+
+/* La firma manoscritta: corsivo, allineata a destra, ultima riga in menta con
+   il tratto sotto — e' l'unico elemento decorativo della pagina, e resta uno. */
+.signature {
+  margin-top: var(--s5);
+  text-align: right;
+  font-family: "Caveat", "Segoe Script", cursive;
+  font-size: 1.75rem;
+  line-height: 1.15;
+  color: var(--fg);
+}
+
+.signature em { font-style: normal; display: block; color: var(--mint); position: relative; }
+
+.signature em::after {
+  content: "";
+  position: absolute; left: 12%; right: 0; bottom: -2px;
+  height: 2px; border-radius: 2px;
+  background: var(--mint);
+  opacity: 0.85;
+}
+.floater__spark { display: block; width: 100%; height: auto; }
+.floater__bars { display: grid; gap: var(--s2); }
+.floater__bar { display: grid; grid-template-columns: 52px 1fr auto; gap: var(--s2); align-items: center; font-size: 0.6875rem; color: var(--faint); }
+.floater__track { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.floater__fill { display: block; height: 100%; background: var(--mint); }
+.device__logo { height: 24px; width: auto; display: block; }
+
+/* Trend e forma: la sequenza dei risultati, non i totali. Verde vittoria,
+   ambra pareggio, corallo sconfitta. Pallini pieni come nel riferimento; il
+   risultato per esteso resta nel `title`, perche' colore da solo non e' un
+   testo. */
+.floater__form { display: flex; align-items: center; gap: 5px; margin-top: var(--s2); }
+.floater__team { font-size: 0.6875rem; color: var(--muted); min-width: 44px; margin-right: 3px; }
+
+/* La lettera dentro il pallino (V, N, P): il colore resta, ma non e' piu'
+   l'unica cosa che distingue una vittoria da una sconfitta. */
+.floater__result {
+  display: grid; place-items: center; flex: none;
+  width: 17px; height: 17px; border-radius: 50%;
+  font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
+}
+
+.floater__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.floater__head .floater__title { margin-bottom: var(--s3); }
+.floater__value {
+  font-family: var(--display); font-weight: 700; font-size: 1rem;
+  font-variant-numeric: tabular-nums; color: var(--fg);
+}
+
+.floater__result--w { background: var(--ok); }
+.floater__result--d { background: var(--warn); }
+.floater__result--l { background: var(--ko); }
+
+/* --- come funziona: quattro passi ------------------------------------------ */
+
+/* LA FOTO PROSEGUE DALLA HERO. Lo stadio di `work-bg.png` sta sotto tutta la
+   sezione, non come decorazione ma come continuazione: la hero finisce sul
+   campo, questa riprende dalle luci. Due livelli separati, e serve che lo
+   siano: la foto sta in ::before, il velo scuro in ::after. Mettendo il velo
+   come gradiente nella stessa proprieta' della foto, per schiarirla o
+   scurirla si dovrebbero riscrivere entrambi. */
+.howto {
+  position: relative; isolation: isolate; overflow: hidden;
+  /* NESSUN BORDO, NE' SOPRA NE' SOTTO. Il velo della sezione arriva gia' al
+     fondo pieno su entrambi i lati: un filetto da 1px in mezzo a una
+     sfumatura e' l'unica linea perfettamente dritta della pagina, e si vede
+     solo lui. La separazione la fa il cambio di luce, non un tratto. */
+  background: var(--bg);
+  padding-block: var(--s8);
+}
+
+.howto::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -2;
+  background-image: image-set(url("/work-bg.webp") type("image/webp"), url("/work-bg.png") type("image/png"));
+  background-size: cover;
+  background-position: center 38%;
+  background-repeat: no-repeat;
+}
+
+/* Il velo. Opaco ai due bordi e piu' leggero in mezzo: cosi' la sezione non
+   comincia e non finisce con una linea netta di foto, e le due sezioni
+   confinanti — entrambe sul fondo pieno — ci si saldano senza giunture.
+   Al centro resta il 16% di foto visibile, che si vede dietro le schede e
+   basta a far capire dove siamo. */
+.howto::after {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background:
+    radial-gradient(100% 70% at 50% 34%, rgba(var(--accent-rgb), 0.05), transparent 64%),
+    linear-gradient(
+      180deg,
+      var(--bg) 0%,
+      rgba(var(--bg-rgb), 0.9) 12%,
+      rgba(var(--bg-rgb), 0.7) 44%,
+      rgba(var(--bg-rgb), 0.86) 78%,
+      var(--bg) 100%
+    );
+}
+
+.howto__head {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s5) var(--s7); align-items: start; margin-bottom: var(--s7);
+}
+
+.howto__title { margin: var(--s3) 0 var(--s4); font-size: clamp(2rem, 3.6vw, 3rem); letter-spacing: -0.03em; }
+.howto__title em { font-style: normal; color: var(--mint); }
+
+/* La postilla sta accanto al titolo e non in fondo: e' il limite dichiarato del
+   prodotto, e sepolta a fine sezione non la leggerebbe nessuno. */
+.howto__note {
+  display: flex; gap: var(--s3); align-items: flex-start; margin: 0; max-width: 24rem;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  font-size: 0.75rem; color: var(--muted); line-height: 1.5;
+}
+
+.howto__note strong { color: var(--fg); font-weight: 600; }
+.howto__note-glyph { color: var(--mint); flex: none; margin-top: 1px; }
+
+.howto__steps {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s6); list-style: none; margin: 0; padding: 0;
+}
+
+/* Quattro righe: numero, titolo, testo, riquadro. L'ultima si prende lo spazio
+   che avanza, cosi' il riquadro resta attaccato al testo e il vuoto finisce in
+   fondo alla scheda invece che in mezzo. */
+/* LA SCHEDA E' ILLUMINATA DA UN PUNTO, NON UNIFORME. La sfumatura non e' piu'
+   verticale: la luce entra dall'angolo in alto a sinistra e il fondo sprofonda
+   verso il basso a destra, quindi le quattro schede non sono quattro rettangoli
+   identici e piatti. La stessa direzione la seguono il filo di luce sul bordo e
+   le ombre, altrimenti l'illuminazione si contraddice e l'occhio se ne accorge
+   senza saper dire perche'. */
+.step {
+  position: relative; isolation: isolate;
+  display: grid; gap: var(--s3); grid-template-rows: auto auto auto 1fr;
+  padding: var(--s5);
+  border: 1px solid rgba(255, 255, 255, 0.04); border-radius: var(--radius);
+  /* L'ESCURSIONE E' STRETTA DI PROPOSITO. La scheda va da rgb(var(--surface-rgb)) a rgb(var(--bg-rgb))
+     attorno al fondo della sezione (var(--bg-2)): due passi sopra e uno sotto,
+     non una lastra chiara su un fondo scuro. La profondita' la fanno le ombre,
+     non il salto di tono — con un salto forte le quattro schede diventano
+     quattro cartelli appiccicati sulla pagina. */
+  /* Traslucide, ora che dietro c'e' lo stadio: un po' di foto passa attraverso
+     e la scheda appartiene alla scena invece di essere incollata sopra. La
+     sfocatura tiene leggibile il testo sopra le luci dei riflettori, che sono
+     la zona piu' chiara e mossa della foto. */
+  background:
+    radial-gradient(130% 90% at 0% 0%, rgba(var(--accent-rgb), 0.04), transparent 58%),
+    linear-gradient(152deg, rgba(var(--surface-rgb), 0.86) 0%, rgba(var(--surface-rgb), 0.88) 40%, rgba(var(--bg2-rgb), 0.9) 76%, rgba(var(--bg2-rgb), 0.92) 100%);
+  backdrop-filter: blur(10px) saturate(115%);
+  -webkit-backdrop-filter: blur(10px) saturate(115%);
+  /* Quattro livelli: contatto stretto, distacco medio, caduta lunga, e un filo
+     di luce interno sul bordo alto. Una sola ombra morbida non stacca la scheda
+     dal fondo, ne fa una macchia sfocata. */
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 6px 14px -8px rgba(0, 0, 0, 0.5),
+    0 22px 36px -28px rgba(0, 0, 0, 0.75),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+/* Il bordo acceso solo dove batte la luce: un anello di 1px disegnato con una
+   maschera, cosi' sfuma sul lato in ombra invece di contornare tutto uguale. */
+.step::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  border-radius: inherit; padding: 1px;
+  background: linear-gradient(152deg, rgba(var(--accent-rgb), 0.3), rgba(255, 255, 255, 0.06) 34%, transparent 62%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.step:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 12px 22px -10px rgba(0, 0, 0, 0.55),
+    0 34px 52px -30px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+/* La freccia vive nel vuoto fra due schede, non dentro una: sta nel gap, cosi'
+   resta a meta' strada qualunque sia l'altezza delle due colonne. */
+.step:not(:last-child)::after {
+  content: "\2192";
+  position: absolute; top: 50%; right: calc(var(--s6) * -1);
+  width: var(--s6); transform: translateY(-50%);
+  text-align: center; color: var(--mint); opacity: 0.75; font-size: 0.95rem;
+}
+
+.step__head { display: flex; align-items: center; justify-content: space-between; }
+
+/* Il numero e' inciso, non scritto: sfuma verso il basso come se prendesse luce
+   dall'alto, come la scheda. Pieno e bianco sarebbe l'elemento piu' forte della
+   scheda, e a contare sono i titoli. */
+.step__n {
+  font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.03em;
+  line-height: 1;
+  background: linear-gradient(170deg, #ffffff 10%, rgba(255, 255, 255, 0.55) 90%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+
+.step__glyph { color: var(--mint); display: inline-flex; }
+.step h3 { margin: 0; font-size: 1.0625rem; letter-spacing: -0.01em; }
+.step p { margin: 0; font-size: 0.8125rem; color: var(--muted); line-height: 1.55; max-width: none; }
+.step__demo { display: grid; gap: var(--s2); margin-top: var(--s2); align-self: start; align-content: start; }
+
+/* Voce a sinistra, valore a destra, una riga per passaggio. E' la forma di una
+   tabella di lettura, non di una nuvola di pastiglie: le righe si incolonnano,
+   riempiono la scheda e si leggono dall'alto in basso come il passaggio che
+   descrivono. */
+.pipe {
+  display: grid; align-content: start;
+  border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.pipe__row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  padding: 9px var(--s3);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pipe__row:last-child { border-bottom: 0; }
+.pipe__row--out { background: rgba(var(--accent-rgb), 0.07); }
+.pipe__key { font-size: 0.6875rem; color: var(--muted); }
+.pipe__val { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pipe__val--quieta { font-weight: 500; color: var(--faint); }
+.pipe__val--warn { color: var(--warn); }
+.pipe__val--mint { color: var(--mint); }
+
+/* Il passaggio fra prima e dopo: due filetti e il nome del metodo in mezzo. */
+.pipe__step {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: 7px var(--s3);
+  font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
+  background: rgba(var(--accent-rgb), 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.pipe__line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.45), transparent); }
+
+/* I riquadri dei dati sono INCASSATI nella scheda: fondo piu' scuro di quello
+   su cui stanno e ombra interna in alto. Cosi' si leggono come una finestra
+   dentro la scheda, mentre la scheda si legge come un oggetto sopra la pagina —
+   due profondita' diverse invece di tre rettangoli sullo stesso piano. */
+.mini {
+  display: grid; gap: 6px; padding: var(--s3);
+  border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mini-coppia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.mini__head { font-size: 0.6875rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.mini__cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s2); }
+.mini__cols--due { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.mini__col { display: grid; gap: 3px; justify-items: center; }
+.mini__key { font-size: 0.6875rem; color: var(--faint); }
+.mini__val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mini__bar { width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.mini__bar i { display: block; height: 100%; border-radius: 2px; }
+
+.scene {
+  display: grid; gap: var(--s3); padding: var(--s3);
+  border: 1px solid rgba(var(--accent-rgb), 0.28); border-radius: var(--radius-sm);
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(var(--accent-rgb), 0.07), transparent 62%),
+    linear-gradient(180deg, rgba(var(--bg2-rgb), 0.9), rgba(var(--bg-rgb), 0.75));
+  box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.18), 0 10px 20px -14px rgba(0, 0, 0, 0.9);
+}
+
+.scene__teams { font-size: 0.8125rem; font-weight: 600; }
+.scene__teams em { font-style: normal; color: var(--mint); font-weight: 500; }
+.scene__boxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+
+.scene__box {
+  display: grid; gap: 2px; padding: 6px 8px;
+  border: 1px solid var(--line-strong); border-radius: 6px;
+  background: rgba(var(--bg-rgb), 0.55);
+}
+
+.scene__box--mint { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.1); }
+
+.scene__esito {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
+  padding-top: var(--s2); border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.scene__box-key { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.scene__box-val { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.howto__facts {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s5) var(--s6); list-style: none; margin: var(--s7) 0 0; padding: var(--s6) 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.howto__facts li { display: flex; gap: var(--s3); align-items: flex-start; }
+.howto__facts strong { display: block; font-size: 0.875rem; font-weight: 600; }
+.howto__fact-body { display: block; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+
+.howto__fact-glyph {
+  display: grid; place-items: center; flex: none; width: 28px; height: 28px;
+  border-radius: 50%; border: 1px solid rgba(var(--accent-rgb), 0.3);
+  background: rgba(var(--accent-rgb), 0.08); color: var(--mint);
+}
+
+/* --- sezioni -------------------------------------------------------------- */
+
+.section { padding-block: var(--s8); }
+
+.eyebrow {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  margin: 0 0 var(--s4);
+  font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--faint);
+  font-family: var(--text);
+}
+
+.section h2 {
+  font-size: clamp(1.9rem, 1.3rem + 2vw, 2.6rem);
+  line-height: 1.08; letter-spacing: -0.03em; font-weight: 700;
+  margin: 0 0 var(--s4);
+}
+
+h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 var(--s2); }
+.lead { font-size: 1rem; color: var(--muted); }
+
+.link-mint { display: inline-block; padding-block: 3px; color: var(--mint); font-weight: 600; font-size: 0.875rem; }
+.link-mint:hover { text-decoration: underline; }
+
+/* La griglia di fondo: testo, tre schede partita, classifica. */
+/* LO STILE STA QUI E NON NELL'ATTRIBUTO `style`, ed e' il motivo per cui
+   adesso funziona su telefono: uno stile inline batte qualunque regola del
+   foglio, comprese le media query, quindi la vetrina restava una riga di
+   quattro elementi anche a 430px e le schede si schiacciavano. */
+.showcase { display: flex; gap: var(--s4); align-items: stretch; }
+
+/* IN PAGINA QUESTO CONTENITORE E' UN FLEX (stile inline sul componente), e i
+   figli di un flex si dimensionano sul contenuto. La classifica ha le
+   intestazioni su una riga sola, quindi un contenuto minimo largo: senza una
+   base esplicita si prendeva quasi tutta la riga e le tre schede partita si
+   riducevano a tre schegge verticali. `min-width: 0` e' la seconda meta' della
+   correzione — senza, un figlio flex non scende mai sotto il proprio
+   contenuto, qualunque base gli si dia. */
+.showcase > .matchcard { flex: 1 1 0; min-width: 0; }
+/* 1.8 e non 1.35: la classifica ha dieci colonne di numeri e le schede ne
+   hanno tre. Con le proporzioni di prima, nella colonna da 390px "+11" e "12"
+   si toccavano; cosi' le schede perdono una ventina di pixel che non usavano. */
+.showcase > .side-card { flex: 1.8 1 0; min-width: 0; }
+
+.matchcard {
+  background: rgba(var(--surface-rgb), 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: grid;
+  box-shadow:
+    0 26px 50px -30px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Testata della card: nel riferimento c'e' una fotografia sotto un velo scuro.
+   Finche' l'immagine non c'e', il velo da solo tiene la gerarchia. */
+.matchcard__head {
+  padding: var(--s3) var(--s4);
+  background:
+    linear-gradient(180deg, rgba(var(--bg-rgb), 0.35), rgba(var(--bg-rgb), 0.75)),
+    var(--surface-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.6875rem; color: var(--muted); text-align: center;
+}
+
+.matchcard__body { padding: var(--s4); display: grid; gap: var(--s4); }
+
+.matchcard__teams {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s2);
+  text-align: center;
+}
+
+.matchcard__team { display: grid; gap: var(--s2); justify-items: center; }
+
+/* Niente dischetto con la sigla: non possiamo mettere gli stemmi, e tre
+   lettere dentro un cerchio sono uno stemma finto — il nome della squadra
+   dice di piu' e si legge da lontano. */
+.matchcard__name { font-size: 0.9375rem; font-weight: 600; line-height: 1.3; }
+.matchcard__vs { font-size: 0.75rem; color: var(--faint); }
+.matchcard__ok { color: var(--ok); font-weight: 700; }
+
+/* La selezione del modello sulla scheda. Incassata come i riquadri dei dati
+   altrove, cosi' si legge come un dato e non come un bottone: qui non c'e'
+   niente da cliccare e niente da giocare. */
+.matchcard__pick {
+  display: grid; gap: 2px; padding: var(--s2) var(--s3);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius-sm);
+  background: rgba(var(--bg-rgb), 0.5);
+  text-align: center;
+}
+
+.matchcard__pick-key {
+  font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+}
+
+.matchcard__pick-val { font-size: 0.8125rem; font-weight: 600; }
+.matchcard__pick-odds { font-size: 0.6875rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* A partita giocata la selezione dice anche com'e' finita: stessa convenzione
+   della griglia in dashboard, verde se e' uscita, corallo se no. */
+.matchcard__pick--ok { border-color: rgba(var(--accent-rgb), 0.35); background: var(--ok-wash); }
+.matchcard__pick--ok .matchcard__pick-val { color: var(--ok); }
+.matchcard__pick--ko { border-color: rgba(255, 123, 123, 0.35); background: var(--ko-wash); }
+.matchcard__pick--ko .matchcard__pick-val { color: var(--ko); }
+
+.matchcard__cta {
+  display: block; text-align: center;
+  padding: var(--s3);
+  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  color: var(--mint-ink);
+  border-radius: 999px;
+  font-family: var(--display); font-weight: 600; font-size: 0.8125rem;
+  box-shadow:
+    0 12px 26px -12px rgba(var(--accent-rgb), 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+
+.matchcard__cta:hover { box-shadow: none; }
+.matchcard__note { font-size: 0.75rem; color: var(--faint); text-align: center; }
+
+.side-card {
+  background: rgba(var(--surface-rgb), 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  box-shadow:
+    0 26px 50px -30px rgba(0, 0, 0, 0.95),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.side-card__head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3);
+  margin-bottom: var(--s3);
+}
+
+.side-card__head h3 { margin: 0; font-size: 0.9375rem; }
+
+/* --- domande -------------------------------------------------------------- */
+
+.faq { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+.faq__item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--s4) var(--s5);
+}
+
+.faq__item h3 { font-size: 0.9375rem; margin-bottom: var(--s2); }
+.faq__item p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+
+/* --- numeri in evidenza --------------------------------------------------- */
+
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s6); }
+.figure { display: grid; gap: var(--s1); }
+
+.figure__label {
+  font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+}
+
+.figure__value {
+  font-family: var(--display);
+  font-variant-numeric: tabular-nums;
+  font-size: 2.1rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05;
+  min-height: 2.2rem;
+}
+
+.figure__note { font-size: 0.8125rem; color: var(--faint); }
+
+/* --- avvertenza ----------------------------------------------------------- */
+
+.notice {
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--warn);
+  background: var(--warn-wash);
+  border-radius: var(--radius-sm);
+  padding: var(--s5);
+  max-width: 72ch;
+}
+
+.notice__label {
+  display: block; font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--warn);
+  margin-bottom: var(--s2);
+}
+
+.notice p { margin: 0; font-size: 0.875rem; color: var(--muted); }
+.notice p + p { margin-top: var(--s3); }
+.notice strong { color: var(--fg); }
+
+/* --- pannelli, tabelle, dashboard ----------------------------------------- */
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s5); }
+
+.split { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: var(--s6); align-items: start; }
+
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+
+table.fixtures { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+
+table.fixtures thead th {
+  text-align: left;
+  font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+}
+
+table.fixtures th.right, table.fixtures td.right { text-align: right; }
+table.fixtures tbody td { padding: var(--s4); border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.fixtures tbody tr:last-child td { border-bottom: 0; }
+
+tr.fixture { cursor: pointer; }
+tr.fixture:hover td, tr.fixture[aria-expanded="true"] td { background: var(--surface-2); }
+
+.fixture__teams { display: grid; gap: 2px; min-width: 150px; }
+.fixture__home, .fixture__away { font-weight: 600; font-size: 0.9375rem; }
+.fixture__kickoff { font-size: 0.6875rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.odds-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--surface-2); min-width: 132px; }
+.odds-bar i { display: block; height: 100%; }
+.odds-bar i.is-1 { background: var(--cat-1); }
+.odds-bar i.is-x { background: var(--cat-x); }
+.odds-bar i.is-2 { background: var(--cat-2); }
+
+.odds-nums {
+  display: flex; justify-content: space-between; gap: var(--s3);
+  margin-top: var(--s2); font-variant-numeric: tabular-nums;
+  font-size: 0.6875rem; color: var(--faint);
+}
+
+.odds-nums b { color: var(--fg); font-weight: 600; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s1);
+  padding: 3px var(--s3); border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 600;
+  background: var(--idle-wash); color: var(--idle);
+}
+
+.pill--ok { background: var(--ok-wash); color: var(--ok); }
+.pill--ko { background: var(--ko-wash); color: var(--ko); }
+.pill--warn { background: var(--warn-wash); color: var(--warn); }
+
+.result { display: inline-flex; align-items: center; gap: var(--s2); justify-content: flex-end; }
+.result__score { font-weight: 600; font-variant-numeric: tabular-nums; }
+.result__pending { font-size: 0.8125rem; color: var(--faint); }
+
+tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); }
+.detail-grid { display: grid; gap: var(--s4) var(--s6); grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.detail-grid dt { font-size: 0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); margin-bottom: 2px; }
+.detail-grid dd { margin: 0; font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+
+/* --- selezioni del modello, in riga sotto la giornata ---------------------- */
+
+.picks { margin-top: var(--s6); }
+
+.picks__head { display: grid; gap: var(--s1); margin-bottom: var(--s4); }
+
+.picks__head h3 {
+  display: flex; align-items: center; gap: var(--s2);
+  margin: 0; font-size: 1rem;
+}
+
+.picks__head h3 svg { color: var(--mint); }
+.picks__head p { margin: 0; max-width: none; }
+
+/* La tabella delle selezioni riusa il guscio e la tipografia della
+   classifica (`.std`): sono due elenchi della stessa pagina, e due stili
+   diversi per la stessa cosa fanno sembrare che dicano cose diverse. Qui
+   cambiano solo le larghezze, perche' le colonne sono altre. */
+.picks__c-match { width: 26%; }
+.picks__c-market { width: 30%; }
+.picks__c-num { width: 14%; }
+.picks__c-esito { width: 16%; }
+
+.picks__match { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.picks__market { color: var(--mint); font-weight: 600; }
+.picks__odds { font-weight: 700; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+
+/* --- classifica ------------------------------------------------------------ */
+
+/* Larghezze fisse e nessuna barra di scorrimento: dieci colonne di numeri
+   lasciate libere si spalmano sull'intera riga e fra la squadra e i suoi punti
+   finiscono ottocento pixel di vuoto, che e' come non incolonnarli affatto. */
+.std {
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+  overflow: hidden;
+}
+
+.std__table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.875rem; }
+
+/* In percentuale e non in pixel: con `table-layout: fixed` una colonna `auto`
+   si prende TUTTO lo spazio che avanza, e a 1100px la colonna della squadra
+   diventava larga il doppio di tutte le altre messe insieme. In percentuale
+   l'avanzo si distribuisce su tutte, e la riga resta incolonnata. */
+.std__c-pos { width: 5%; }
+.std__c-team { width: 20%; }
+.std__c-num { width: 6.5%; }
+.std__c-gol { width: 7%; }
+.std__c-form { width: 11%; }
+.std__c-pts { width: 6%; }
+
+/* Nella colonna della landing ci sono 390px per dieci colonne: la posizione
+   con due cifre non ci sta nel 5% e finisce sotto il nome della squadra.
+   Proporzioni diverse e meno respiro ai lati, non una tabella diversa. */
+.std--stretta .std__table { font-size: 0.8125rem; }
+.std--stretta .std__c-pos { width: 9%; }
+.std--stretta .std__c-team { width: 24%; }
+.std--stretta .std__c-num { width: 6.4%; }
+.std--stretta .std__c-gol { width: 7.6%; }
+.std--stretta .std__c-pts { width: 9.5%; }
+.std--stretta .std__table th, .std--stretta .std__table td { padding-left: 3px; padding-right: 3px; }
+.std--stretta .std__table th:first-child, .std--stretta .std__table td:first-child { padding-left: var(--s2); }
+.std--stretta .std__table th:last-child, .std--stretta .std__table td:last-child { padding-right: var(--s2); }
+.std--stretta .std__rank { min-width: 0; }
+
+.std__table thead th {
+  text-align: left; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint);
+  padding: var(--s3) var(--s2);
+  border-bottom: 1px solid var(--line-strong);
+}
+
+.std__table th:first-child, .std__table td:first-child { padding-left: var(--s4); }
+.std__table th:last-child, .std__table td:last-child { padding-right: var(--s4); }
+.std__table th.right, .std__table td.right { text-align: right; }
+
+.std__table tbody td {
+  padding: 9px var(--s2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.045);
+  vertical-align: middle;
+}
+
+.std__table tbody tr:last-child td { border-bottom: 0; }
+.std__table tbody tr:hover td { background: rgba(255, 255, 255, 0.03); }
+
+/* Il numero di posizione e' un'etichetta, non una quantita': tabellare e in
+   tono minore, cosi' non compete con i punti a fine riga. */
+.std__rank {
+  display: inline-block; min-width: 1.6em;
+  font-variant-numeric: tabular-nums; font-size: 0.8125rem; color: var(--faint);
+}
+
+.std__team { min-width: 0; }
+
+.std__name {
+  display: block; font-weight: 600; font-size: 0.875rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Quota di punti della capolista. L'unico accento della tabella, ed e' una
+   proporzione: non dice se la squadra sta andando bene, dice quanto le manca.
+   Binario pieno piu' riempimento, non una barra sola: da sola, sotto il nome,
+   sembrava la sottolineatura del testo invece di un valore. */
+.std__track {
+  display: block; height: 3px; margin-top: 6px; max-width: 170px;
+  border-radius: 2px; background: rgba(255, 255, 255, 0.07); overflow: hidden;
+}
+
+.std__track i {
+  display: block; height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--mint-2), var(--mint));
+  opacity: 0.85;
+}
+
+.std__pts { font-weight: 700; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+
+.std__form { white-space: nowrap; }
+
+.std__pip {
+  display: inline-grid; place-items: center; vertical-align: middle;
+  width: 16px; height: 16px; margin-right: 3px;
+  border-radius: 4px; background: var(--idle);
+  font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
+}
+
+.std__pip--w { background: var(--ok); }
+.std__pip--d { background: var(--warn); }
+.std__pip--l { background: var(--ko); }
+
+/* --- track record, accanto alla classifica --------------------------------- */
+
+/* Classifica e track record sulla stessa riga: sono le due letture del
+   passato — cosa e' successo in campo e quanto il modello ci aveva preso — e
+   una sotto l'altra facevano scorrere due schermate per confrontarle. */
+.dash-bottom {
+  display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: var(--s6); align-items: start;
+}
+
+.tr {
+  display: grid; gap: var(--s5);
+  padding: var(--s5);
+  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+}
+
+.tr__stats { display: grid; }
+
+/* Etichetta e postilla a sinistra, cifra a destra: in colonna stretta i tre
+   numeri affiancati mandavano le postille a capo tre volte ciascuna. */
+.tr__stat {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--s4); align-items: baseline;
+  padding: var(--s3) 0; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tr__stat:first-child { padding-top: 0; }
+.tr__stat:last-child { padding-bottom: 0; border-bottom: 0; }
+
+.tr__label {
+  grid-column: 1; font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint);
+}
+
+.tr__value {
+  grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  font-family: var(--display); font-weight: 700; font-size: 1.6rem;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.tr__note { grid-column: 1; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
+
+.tr__chart h3, .tr__rounds h3 { margin: 0 0 var(--s2); font-size: 1rem; }
+.tr__chart p, .tr__rounds p { max-width: none; }
+
+.tr__rounds { border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: var(--s5); }
+
+.tr__table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; margin-top: var(--s3); }
+
+.tr__table thead th {
+  text-align: left; white-space: nowrap;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--faint);
+  padding-bottom: var(--s2); border-bottom: 1px solid var(--line-strong);
+}
+
+.tr__table th.right, .tr__table td.right { text-align: right; }
+.tr__table tbody td { padding: 7px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.045); }
+.tr__table tbody tr:last-child td { border-bottom: 0; }
+
+/* Menta solo quando il modello ha fatto meglio delle quote su quelle partite:
+   e' un confronto fra due numeri della stessa riga, non un giudizio sul
+   risultato in se'. */
+.tr__meglio { color: var(--ok); font-weight: 600; }
+
+/* --- dashboard: intestazione della giornata -------------------------------- */
+
+.dash-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s6);
+  padding: var(--s5) var(--s6);
+  margin-top: var(--s5);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  background: rgba(var(--surface-rgb), 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* La stessa fotografia della landing, sul lato destro e molto attenuata: fa da
+   filo conduttore fra le due schermate senza disturbare la lettura dei dati. */
+.dash-banner::before {
+  content: "";
+  position: absolute; inset: 0; z-index: -1;
+  background-image:
+    linear-gradient(90deg, rgba(var(--surface-rgb), 0.98) 34%, rgba(var(--surface-rgb), 0.55) 70%, rgba(var(--surface-rgb), 0.9)),
+    image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
+  background-size: cover;
+  background-position: center 28%;
+}
+
+.dash-banner__title { display: grid; gap: 2px; }
+
+.dash-banner__row { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+
+.dash-banner__row h1 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em;
+}
+
+.dash-banner__dates { font-size: 0.8125rem; color: var(--muted); }
+
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 3px var(--s3);
+  border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 700;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  background: var(--mint); color: var(--mint-ink);
+}
+
+.badge--quiet { background: var(--idle-wash); color: var(--idle); }
+
+.dash-chips { display: flex; gap: var(--s4); flex-wrap: wrap; margin-left: auto; }
+
+.dash-chip {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--bg-rgb), 0.55);
+}
+
+.dash-chip__glyph { color: var(--mint); display: grid; place-items: center; flex: none; }
+.dash-chip__label { display: block; font-size: 0.6875rem; color: var(--faint); }
+.dash-chip__value { display: block; font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* --- dashboard: nastro delle giornate -------------------------------------- */
+
+.round-strip { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s5); }
+
+.round-strip__arrow {
+  flex: none;
+  width: 38px; height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+
+.round-strip__arrow:hover:not(:disabled) { color: var(--fg); border-color: var(--mint); }
+.round-strip__arrow:disabled { opacity: 0.35; cursor: default; }
+
+/* `min-width: 0` e non e' pignoleria: dentro un flex, un figlio non scende
+   sotto il proprio contenuto nemmeno se e' scorrevole. Senza, le trentotto
+   pastiglie allargavano la striscia oltre lo schermo e su telefono la pagina
+   intera scorreva in orizzontale di 19px — abbastanza per far ballare tutto. */
+.round-strip__track {
+  display: flex; gap: var(--s2);
+  min-width: 0;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.round-strip__track::-webkit-scrollbar { display: none; }
+
+.round-chip {
+  flex: none;
+  min-width: 62px;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid; gap: 1px; justify-items: center;
+  font-family: var(--text);
+}
+
+.round-chip strong { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.round-chip span { font-size: 0.6875rem; letter-spacing: 0.04em; }
+.round-chip:hover { color: var(--fg); border-color: rgba(var(--accent-rgb), 0.4); }
+
+.round-chip[aria-pressed="true"] {
+  background: var(--mint); border-color: var(--mint); color: var(--mint-ink);
+}
+
+.round-chip--closed strong { color: var(--mint); }
+.round-chip[aria-pressed="true"] strong { color: var(--mint-ink); }
+
+/* --- dashboard: filtri ----------------------------------------------------- */
+
+.filters {
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s2);
+  margin-top: var(--s5);
+}
+
+.filter {
+  display: inline-flex; align-items: center; gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit; font-size: 0.8125rem; font-weight: 500;
+  cursor: pointer;
+}
+
+.filter:hover { color: var(--fg); }
+
+.filter[aria-pressed="true"] {
+  border-color: rgba(var(--accent-rgb), 0.5);
+  background: var(--mint-wash);
+  color: var(--mint);
+}
+
+.filters__sort { margin-left: auto; display: flex; align-items: center; gap: var(--s3); }
+.filters__sort label { font-size: 0.8125rem; color: var(--faint); }
+
+.filters__sort select {
+  appearance: none;
+  padding: var(--s2) var(--s5) var(--s2) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--fg);
+  font: inherit; font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+/* --- dashboard: griglia delle partite -------------------------------------- */
+
+.dash-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 310px;
+  gap: var(--s5);
+  align-items: start;
+  margin-top: var(--s5);
+}
+
+.day-head {
+  display: flex; align-items: center; gap: var(--s3);
+  margin: var(--s6) 0 var(--s3);
+  font-size: 0.9375rem; font-weight: 600; letter-spacing: normal;
+}
+
+.day-head svg { color: var(--mint); }
+
+/* Contenitore senza scorrimento orizzontale: la griglia deve stare dentro la
+   colonna, non costringere a trascinare una barra per leggere l'ultima
+   colonna. Ci sta perche' la tabella e' a larghezze fisse (sotto). */
+.grid-wrap {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  background: rgba(var(--surface-rgb), 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+table.grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+
+/* Le percentuali si somigliano tutte: dare alle colonne una larghezza fissa
+   evita che il contenuto le faccia ballare da una riga all'altra. */
+table.grid col.c-match { width: 24%; }
+table.grid col.c-pick { width: 8.2%; }
+table.grid col.c-result { width: 12%; }
+
+table.grid thead th {
+  font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint);
+  padding: var(--s3) var(--s2);
+  border-bottom: 1px solid var(--line-strong);
+  text-align: center;
+  white-space: nowrap;
+}
+
+table.grid thead th.left { text-align: left; padding-left: var(--s4); }
+table.grid thead tr.groups th { padding-bottom: var(--s1); }
+table.grid thead tr.keys th { font-size: 0.6875rem; padding-top: 0; color: var(--faint); }
+
+table.grid td { padding: var(--s3) var(--s2); border-bottom: 1px solid var(--line); vertical-align: middle; }
+table.grid tbody tr:last-child td { border-bottom: 0; }
+table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+.match-cell { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: var(--s2); padding-left: var(--s4); }
+.match-cell__home { text-align: right; font-weight: 600; font-size: 0.875rem; }
+.match-cell__away { text-align: left; font-weight: 600; font-size: 0.875rem; }
+.match-cell__time { font-size: 0.75rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* Il mercato scelto dalla soglia quando NON ha una colonna in tabella
+   (over 1.5, doppia chance, "segna"): senza questa riga la selezione
+   resterebbe invisibile proprio sulle partite dove non e' un 1X2. */
+.match-cell__flag {
+  grid-column: 1 / -1;
+  justify-self: center;
+  margin-top: 2px;
+  font-size: 0.6875rem;
+  color: var(--mint);
+  white-space: nowrap;
+}
+
+/* Una colonna per esito: percentuale, barra, quota. La barra e' la stessa
+   scala per tutte le righe, quindi le colonne si confrontano a colpo d'occhio. */
+.pick { display: grid; gap: 4px; justify-items: center; padding: var(--s1) 2px; border-radius: 6px; }
+.pick__pct { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pick__bar { width: 100%; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.pick__bar i { display: block; height: 100%; border-radius: 2px; }
+.pick__odds { font-size: 0.6875rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.pick--best .pick__pct { color: var(--mint); font-weight: 700; }
+
+/* La cella scelta dalla soglia di quota: si accende quando cambi la soglia
+   nella colonna a fianco, cosi' il filtro si vede sulla giornata e non solo
+   nella scheda. */
+.pick--picked {
+  background: rgba(var(--accent-rgb), 0.1);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.45);
+}
+
+.pick--picked .pick__pct { color: var(--mint); }
+
+/* A PARTITA GIOCATA LA CELLA SCELTA DICE ANCHE COM'E' ANDATA. Verde se quel
+   mercato e' uscito, rosso se no: senza questo, cambiando soglia si vedeva
+   cambiare la selezione ma non l'esito, e restava in pagina il "indovinato"
+   dell'1X2, che parla di un'altra giocata. */
+.pick--picked.pick--persa {
+  background: var(--ko-wash);
+  box-shadow: inset 0 0 0 1px rgba(255, 123, 123, 0.45);
+}
+
+.pick--picked.pick--persa .pick__pct { color: var(--ko); }
+
+.match-cell__flag--persa { color: var(--ko); }
+
+.score-chip {
+  display: inline-block;
+  padding: 3px var(--s3);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600; font-size: 0.8125rem; font-variant-numeric: tabular-nums;
+}
+
+.score-chip--ok { background: var(--ok-wash); color: var(--ok); }
+/* Il segno accanto al colore: verde e corallo da soli, per chi non distingue
+   il rosso dal verde, sono la stessa pastiglia. */
+.score-chip--ok::before { content: "\2713\00a0"; font-weight: 700; }
+.score-chip--ko { background: var(--ko-wash); color: var(--ko); }
+.score-chip--ko::before { content: "\2717\00a0"; font-weight: 700; }
+
+/* --- dashboard: colonna laterale ------------------------------------------- */
+
+.aside-card {
+  background: rgba(var(--surface-rgb), 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  padding: var(--s4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.aside-card + .aside-card { margin-top: var(--s4); }
+
+.aside-card__head { display: flex; align-items: center; gap: var(--s2); }
+.aside-card__head h3 { margin: 0; font-size: 0.9375rem; }
+.aside-card__head svg { color: var(--mint); flex: none; }
+.aside-card__note { font-size: 0.75rem; color: var(--faint); margin: var(--s1) 0 var(--s4); }
+
+.pick-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.pick-row:last-child { border-bottom: 0; }
+.pick-row__match { font-size: 0.8125rem; font-weight: 600; }
+.pick-row__market { font-size: 0.6875rem; color: var(--faint); }
+.pick-row__odds { font-size: 0.8125rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.pick-row__pct {
+  font-size: 0.6875rem; font-weight: 700;
+  padding: 2px var(--s2); border-radius: 999px;
+  background: var(--ok-wash); color: var(--ok);
+  font-variant-numeric: tabular-nums;
+}
+
+.thresholds { display: flex; gap: var(--s2); flex-wrap: wrap; margin-bottom: var(--s4); }
+
+.threshold {
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit; font-size: 0.75rem; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.threshold[aria-pressed="true"] { background: var(--mint); border-color: var(--mint); color: var(--mint-ink); }
+
+@media (max-width: 1100px) {
+  .dash-layout { grid-template-columns: 1fr; }
+  .dash-bottom { grid-template-columns: 1fr; }
+}
+
+/* --- barra di stato ------------------------------------------------------- */
+
+.status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3) var(--s6);
+  padding: var(--s4); background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+
+.status__signal { display: inline-flex; align-items: center; gap: var(--s2); font-size: 0.8125rem; font-weight: 600; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
+.dot--ok { background: var(--ok); }
+.dot--warn { background: var(--warn); }
+.dot--ko { background: var(--ko); }
+
+.status__item { display: grid; gap: 1px; min-width: 0; }
+.status__key { font-size: 0.6875rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); }
+.status__value { font-size: 0.8125rem; white-space: nowrap; }
+
+.notes { list-style: none; margin: var(--s3) 0 0; padding: 0; display: grid; gap: var(--s1); }
+.notes li { font-size: 0.8125rem; color: var(--warn); padding-left: var(--s4); position: relative; }
+.notes li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 6px; height: 1px; background: currentColor; }
+
+/* --- selettore giornata --------------------------------------------------- */
+
+.coupon {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  gap: 1px; background: var(--line);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden;
+}
+
+.coupon__cell {
+  appearance: none; border: 0;
+  background: var(--surface); color: var(--faint);
+  font-family: var(--text); font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem; font-weight: 500;
+  padding: var(--s3) 0 calc(var(--s3) - 3px);
+  cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2);
+}
+
+.coupon__cell:hover { background: var(--surface-2); color: var(--fg); }
+.coupon__state { width: 16px; height: 3px; border-radius: 1px; background: transparent; }
+.coupon__cell--closed { color: var(--fg); }
+.coupon__cell--closed .coupon__state { background: var(--ok); }
+.coupon__cell--played .coupon__state { background: var(--idle); }
+.coupon__cell--live { color: var(--fg); }
+.coupon__cell--live .coupon__state { background: var(--mint); }
+.coupon__cell--future .coupon__state { background: var(--line-strong); }
+.coupon__cell[aria-pressed="true"] { background: var(--mint); color: var(--mint-ink); font-weight: 700; }
+.coupon__cell[aria-pressed="true"] .coupon__state { background: var(--mint-ink); opacity: 0.45; }
+
+.legend {
+  display: flex; flex-wrap: wrap; gap: var(--s2) var(--s5); margin-top: var(--s3);
+  font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+}
+
+.legend span { display: inline-flex; align-items: center; gap: var(--s2); }
+.legend i { width: 14px; height: 3px; border-radius: 1px; display: inline-block; }
+
+/* --- selettori segmentati ------------------------------------------------- */
+
+.segmented { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s3); margin-bottom: var(--s4); }
+.segmented__label { font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+
+.segmented__option {
+  appearance: none; border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--muted);
+  font-family: var(--text); font-variant-numeric: tabular-nums;
+  font-size: 0.8125rem; font-weight: 500;
+  padding: var(--s2) var(--s4); border-radius: 999px; cursor: pointer;
+}
+
+.segmented__option:hover { color: var(--fg); }
+.segmented__option[aria-pressed="true"] { background: var(--mint); border-color: var(--mint); color: var(--mint-ink); font-weight: 600; }
+
+/* --- grafico -------------------------------------------------------------- */
+
+.chart { display: block; width: 100%; height: auto; margin-top: var(--s4); }
+.chart__grid { stroke: var(--line); stroke-width: 1; }
+.chart__ref { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart__area { fill: var(--mint); opacity: 0.12; stroke: none; }
+.chart__line { fill: none; stroke: var(--mint); stroke-width: 2; stroke-linejoin: round; }
+.chart__last { fill: var(--mint); stroke: var(--surface); stroke-width: 2; }
+.chart__tick { fill: var(--muted); font-size: 13px; font-family: var(--text); }
+.chart__caption { fill: var(--muted); font-size: 13px; font-family: var(--text); }
+
+/* --- stati ---------------------------------------------------------------- */
+
+.state {
+  padding: var(--s6) var(--s5);
+  border: 1px dashed var(--line-strong); border-radius: var(--radius);
+  color: var(--muted); font-size: 0.8125rem; text-align: center; background: var(--surface);
+}
+
+.state--error { border-style: solid; border-color: rgba(255, 123, 123, 0.4); background: var(--ko-wash); color: var(--ko); text-align: left; }
+.state--error strong { display: block; margin-bottom: var(--s1); color: var(--fg); }
+.state__retry {
+  display: inline-flex; align-items: center; min-height: 36px;
+  margin-top: var(--s3); padding: 0 var(--s4);
+  border: 1px solid currentColor; border-radius: 999px;
+  background: transparent; color: inherit; font: inherit; font-weight: 600;
+}
+
+.state__retry:hover { background: rgba(255, 123, 123, 0.12); }
+
+.state--error .state__retry { display: flex; width: fit-content; }
+
+.state code { background: var(--bg-2); border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 4px; font-size: 0.95em; }
+
+.skeleton {
+  display: inline-block; height: 1em; border-radius: 4px;
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}
+
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .device { transform: none; } }
+
+/* --- piede ---------------------------------------------------------------- */
+
+/* Nessun filetto in cima nemmeno qui: il piede si stacca perche' il fondo
+   cambia, non perche' c'e' una riga. */
+.colophon {
+  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 22%);
+  padding-top: var(--s8);
+}
+
+.colophon__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: var(--s6) var(--s5);
+  padding-bottom: var(--s7);
+}
+
+.colophon__brand .brand { align-items: flex-start; }
+.colophon__brand .brand__logo { height: 40px; }
+
+.colophon__pitch {
+  margin: var(--s4) 0 0; max-width: 34ch;
+  font-size: 0.8125rem; color: var(--muted); line-height: 1.6;
+}
+
+.colophon__col { display: grid; gap: var(--s2); align-content: start; }
+
+.colophon__col h3 {
+  margin: 0 0 var(--s1);
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--faint);
+}
+
+.colophon__col a, .colophon__col span { font-size: 0.8125rem; color: var(--muted); }
+.colophon__col a { width: fit-content; padding-block: 3px; border-bottom: 1px solid transparent; }
+.colophon__col a:hover { color: var(--mint); border-bottom-color: rgba(var(--accent-rgb), 0.5); }
+
+/* Il nome del modello in chiaro, e sotto in piccolo la versione che l'API
+   dichiara davvero: se un giorno la produzione cambiasse, la riga piccola lo
+   direbbe da sola invece di lasciare in pagina un nome scritto a mano. */
+.colophon__modello { display: grid; gap: 2px; }
+.colophon__modello em {
+  font-style: normal; font-size: 0.6875rem; color: var(--faint); line-height: 1.45;
+}
+
+/* L'indirizzo dell'API e' l'unica voce che puo' essere lunghissima (un tunnel
+   ngrok arriva a sessanta caratteri): va a capo invece di allargare la colonna. */
+.colophon__api { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+
+.colophon__rule { height: 1px; background: linear-gradient(90deg, transparent, var(--line), transparent); }
+
+.colophon__bottom {
+  display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); align-items: baseline;
+  justify-content: space-between;
+  padding-block: var(--s5) var(--s7);
+}
+
+.colophon__bottom p { margin: 0; font-size: 0.75rem; color: var(--faint); max-width: 62ch; line-height: 1.6; }
+.colophon__bottom strong { color: var(--muted); font-weight: 600; }
+.colophon__meta { letter-spacing: 0.04em; }
+
+/* --- elevazione: tre gradini, non un'ombra per componente ------------------ */
+
+/* Prima ogni scheda aveva la sua ombra scritta a mano — undici valori
+   diversi — e la profondita' non diceva niente: una tabella poteva sembrare
+   piu' in rilievo del tablet. Tre gradini con un significato:
+     1  superfici nel flusso della pagina (tabelle, pannelli)
+     2  schede staccate dal fondo (partite, passi, classifica in vetrina)
+     3  oggetti sospesi sopra la scena (il tablet e le schede fluttuanti)
+   La luce viene sempre dall'alto: filo chiaro sopra, ombra sotto. */
+:root {
+  --shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 14px -8px rgba(0, 0, 0, 0.5),
+              0 22px 36px -28px rgba(0, 0, 0, 0.75);
+  --shadow-3: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -18px rgba(0, 0, 0, 0.8),
+              0 40px 80px -40px rgba(0, 0, 0, 0.9);
+}
+
+.std, .tr, .grid-wrap, .aside-card, .faq__item, .dash-banner { box-shadow: var(--shadow-1); }
+.matchcard, .side-card, .step, .howto__note { box-shadow: var(--shadow-2); }
+.device, .floater { box-shadow: var(--shadow-3); }
+
+/* --- un solo pulsante primario per schermata ------------------------------ */
+
+/* Nella hero c'erano cinque pulsanti menta pieno — "Esplora le partite",
+   "Vedi analisi completa" e tre "Vedi analisi" — e cinque azioni primarie
+   sono nessuna: l'occhio non sa dove andare. Resta pieno solo quello della
+   hero; gli altri portano nello stesso posto e lo dicono piu' piano, con il
+   contorno. */
+.device__cta, .matchcard__cta {
+  background: rgba(var(--accent-rgb), 0.08);
+  color: var(--mint);
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  box-shadow: none;
+}
+
+.device__cta:hover, .matchcard__cta:hover {
+  background: rgba(var(--accent-rgb), 0.16);
+  border-color: var(--mint);
+  box-shadow: none;
+}
+
+/* --- adattamenti ---------------------------------------------------------- */
+
+@media (max-width: 1340px) {
+  /* Sotto questa larghezza le schede non ci stanno accanto al tablet: invece
+     di lasciarle sovrapporre, spariscono e il tablet si riprende lo spazio. */
+  .floaters { display: none; }
+  .stage { padding-right: 0; }
+  .showcase { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1100px) {
+  /* Le tre schede vanno a capo e la classifica si prende tutta la riga: a
+     meno di 1100px cinque colonne non stanno, e schiacciarle le rende
+     illeggibili tutte insieme. */
+  .showcase { flex-wrap: wrap; }
+  .showcase > .matchcard { flex: 1 1 240px; }
+  .showcase > .side-card { flex: 1 1 100%; }
+  .howto__head { grid-template-columns: 1fr; }
+  .howto__steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .howto__facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Su due colonne la freccia della seconda scheda punterebbe fuori pagina. */
+  .step:nth-child(2n)::after { display: none; }
+}
+
+@media (max-width: 900px) {
+  .colophon__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .colophon__brand { grid-column: 1 / -1; }
+  .masthead__inner { grid-template-columns: auto auto; row-gap: var(--s3); }
+  /* IL MENU NON SPARISCE. Prima `display: none`: su telefono restava solo il
+     bottone della dashboard, e "Come funziona" o le FAQ si raggiungevano solo
+     scorrendo alla cieca. Ora sta su una riga sua sotto il marchio, e scorre
+     di lato se non ci sta tutto. */
+  .nav {
+    order: 3; grid-column: 1 / -1; justify-content: flex-start;
+    gap: var(--s5); overflow-x: auto; scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav a { white-space: nowrap; }
+  .hero__grid { grid-template-columns: 1fr; padding-block: var(--s6); }
+  .device { transform: none; }
+  .split { grid-template-columns: 1fr; }
+  .showcase { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  :root { --s8: 3rem; }
+  body { font-size: 1rem; }
+  .howto__steps, .howto__facts { grid-template-columns: 1fr; }
+  .step::after { display: none; }
+  .wrap { padding-inline: var(--s4); }
+  .hide-narrow { display: none; }
+  table.fixtures tbody td { padding: var(--s3); }
+  .figure__value { font-size: 1.7rem; }
+  .device { padding: var(--s4); }
+}
+
+/* --- telefono: la griglia smette di essere una tabella -------------------- */
+
+/* OTTO COLONNE DI NUMERI NON CI STANNO IN 430 PIXEL, e stringerle non e' una
+   soluzione: a quella larghezza il nome della squadra finiva sopra le
+   percentuali. Sotto i 760px ogni partita diventa una scheda e i mercati si
+   dispongono su quattro colonne, con l'etichetta accanto al numero — perche'
+   l'intestazione della tabella, qui, non c'e' piu'. */
+@media (max-width: 760px) {
+  .grid-wrap { border: 0; background: transparent; box-shadow: none; overflow: visible; }
+  table.grid { display: block; }
+  table.grid colgroup, table.grid thead { display: none; }
+  table.grid tbody { display: grid; gap: var(--s3); }
+
+  table.grid tbody tr {
+    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--s3) var(--s2);
+    padding: var(--s4) var(--s3);
+    border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius);
+    background: rgba(var(--surface-rgb), 0.55);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  table.grid tbody td { display: block; padding: 0; border: 0; }
+  table.grid tbody td:first-child { grid-column: 1 / -1; }
+
+  /* Il risultato torna in fondo, su tutta la riga: e' l'esito, non un mercato. */
+  table.grid tbody td:last-child {
+    grid-column: 1 / -1; text-align: center;
+    padding-top: var(--s2); border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  table.grid tbody td[data-k] .pick { padding: var(--s1) 0; }
+  table.grid tbody td[data-k]::before {
+    content: attr(data-k);
+    display: block; margin-bottom: 2px;
+    font-size: 0.6875rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--faint); text-align: center;
+  }
+
+  .match-cell { grid-template-columns: 1fr auto 1fr; gap: var(--s2); }
+  .match-cell__home, .match-cell__away { font-size: 0.9375rem; }
+
+  /* La classifica: a 430px restano le colonne che si leggono davvero. Forma,
+     gol fatti e subiti spariscono; la differenza reti resta perche' e' quella
+     che separa due squadre a pari punti. */
+  .std__c-form, .std__form { display: none; }
+  .std__c-team { width: 34%; }
+  .std__c-num { width: 8%; }
+  .std__c-pos { width: 9%; }
+  .std__c-pts { width: 10%; }
+  .std__table { font-size: 0.8125rem; }
+  .std__table th, .std__table td { padding-left: 2px; padding-right: 2px; }
+  .std__name { font-size: 0.8125rem; }
+  .std__track { max-width: 90px; }
+
+  /* Il piede su una colonna sola: in due, la cella da 200px non conteneva
+     l'indirizzo di posta e sbordava dallo schermo — erano quei 19px che
+     facevano scorrere in orizzontale tutta la pagina. */
+  /* Quattro colonne visibili invece di cinque (la probabilita' sparisce con
+     `hide-narrow`), e quindi proporzioni diverse: con quelle da schermo
+     largo, "QUOTA EQUA" finiva sopra "ESITO". */
+  .picks__c-match { width: 34%; }
+  .picks__c-market { width: 30%; }
+  .picks__c-num { width: 18%; }
+  .picks__c-esito { width: 18%; }
+  .picks__match { font-size: 0.75rem; }
+
+  .colophon__grid { grid-template-columns: 1fr; }
+  .colophon__col a { overflow-wrap: anywhere; }
+  .colophon__bottom { display: grid; gap: var(--s3); }
+
+  /* Bersagli da dito: 44px di altezza per tutto cio' che si tocca. Col mouse
+     32px bastano, col pollice no — e i filtri erano proprio i piu' piccoli. */
+  .filter, .threshold, .filters__sort select, .nav-cta { min-height: 44px; }
+  .round-chip { min-height: 48px; }
+  .nav a { padding-block: var(--s3); }
+
+  /* Su telefono la vetrina e' una colonna: schede a tutta larghezza, una
+     sotto l'altra. */
+  .showcase { flex-direction: column; }
+  .showcase > .matchcard, .showcase > .side-card { flex: 1 1 auto; }
+}
