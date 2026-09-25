@@ -1,12 +1,26 @@
 import { useEffect, useRef } from "react";
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 
+import { AuthProvider } from "./auth/AuthContext";
+import { RequireAuth } from "./auth/RequireAuth";
+import {
+  ForgotPassword,
+  ResetPassword,
+  SignIn,
+  SignUp,
+  VerifyEmail,
+} from "./pages/Account";
 import { Dashboard } from "./pages/Dashboard";
 import { Hero } from "./pages/Hero";
 
 const TITOLI: Record<string, string> = {
   "/": "MatchPoint — previsioni Serie A",
   "/dashboard": "Dashboard · MatchPoint",
+  "/sign-in": "Accedi · MatchPoint",
+  "/sign-up": "Crea un account · MatchPoint",
+  "/forgot-password": "Password dimenticata · MatchPoint",
+  "/reset-password": "Nuova password · MatchPoint",
+  "/verify-email": "Attivazione · MatchPoint",
 };
 
 /**
@@ -57,12 +71,29 @@ function CambioPagina() {
 export function App() {
   return (
     <HashRouter>
-      <CambioPagina />
-      <Routes>
-        <Route path="/" element={<Hero />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="*" element={<Hero />} />
-      </Routes>
+      <AuthProvider>
+        <CambioPagina />
+        <Routes>
+          {/* The landing page stays open: it sells the thing. */}
+          <Route path="/" element={<Hero />} />
+
+          <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/sign-up" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <Dashboard />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<Hero />} />
+        </Routes>
+      </AuthProvider>
     </HashRouter>
   );
 }

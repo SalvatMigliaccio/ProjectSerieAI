@@ -82,6 +82,36 @@ export function season(): string {
   return (import.meta.env.VITE_SEASON as string | undefined) ?? "2627";
 }
 
+/**
+ * Thrown when the API says the caller is not signed in.
+ *
+ * A separate type because the interface reacts to it differently: a 401 is not
+ * an error to display, it is a reason to show the sign-in screen. Rendering
+ * "the API answered 401" to somebody whose session simply expired is how a
+ * dashboard turns a routine event into something that looks broken.
+ */
+export class NotAuthenticated extends ApiError {
+  constructor(url: string) {
+    super("sessione scaduta", { status: 401, url, hint: null });
+    this.name = "NotAuthenticated";
+  }
+}
+
+/**
+ * Announced on the window so the auth layer can react without this module
+ * importing it.
+ *
+ * WHY AN EVENT AND NOT A DIRECT CALL. `client.ts` is the bottom of the stack;
+ * importing the React context here would point the dependency the wrong way
+ * and make the API client untestable without React. The event keeps the arrow
+ * pointing one way, the same rule the Python side follows.
+ *
+ * WHAT IT FIXES. A session that expires while the dashboard is open otherwise
+ * turns every panel into an error box reading "sessione scaduta", with no way
+ * out but a manual reload. With this, the app returns to the sign-in screen.
+ */
+export const UNAUTHENTICATED_EVENT = "ainaples:unauthenticated";
+
 async function get<T>(path: string): Promise<T> {
   const url = `${baseUrl()}${path}`;
   let response: Response;
@@ -100,6 +130,11 @@ async function get<T>(path: string): Promise<T> {
     // JSON, e l'errore parla di sintassi invece che di tunnel.
     response = await fetch(url, {
       headers: { Accept: "application/json", "ngrok-skip-browser-warning": "1" },
+      // The session lives in an HttpOnly cookie, and a cross-origin fetch
+      // drops cookies unless asked to send them. Without this every request
+      // arrives anonymous and the whole dashboard answers 401 while the user
+      // is, as far as the browser is concerned, signed in.
+      credentials: "include",
       signal: controllo.signal,
     });
   } catch {
@@ -119,6 +154,11 @@ async function get<T>(path: string): Promise<T> {
   }
 
   window.clearTimeout(timer);
+
+  if (response.status === 401) {
+    window.dispatchEvent(new CustomEvent(UNAUTHENTICATED_EVENT));
+    throw new NotAuthenticated(url);
+  }
 
   if (!response.ok) {
     let detail = "";

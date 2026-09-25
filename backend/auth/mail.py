@@ -123,10 +123,20 @@ def sender(cfg: Settings | None = None) -> Sender:
 # dependency, and HTML email cannot use modern CSS anyway.
 
 def _link(cfg: Settings, path: str, token: str) -> str:
-    # `quote` on the token: it is base64url and contains nothing that needs
-    # encoding, but building a URL by concatenation without escaping is the
-    # habit not to form — the day the format changes, nobody revisits this.
-    return f"{cfg.public_url.rstrip('/')}{path}?token={quote(token, safe='')}"
+    """
+    A link the frontend can actually route.
+
+    THE `#` IS load-BEARING. The dashboard uses HashRouter, because it is a
+    static site that must survive being dropped on any host without rewrite
+    rules. With real paths, opening `/verify-email` returns 404 from anything
+    not configured for it — and the one place that breaks is the link inside
+    an email, which is exactly where nobody can fix it afterwards.
+
+    `quote` on the token: it is base64url and contains nothing that needs
+    encoding, but building a URL by concatenation without escaping is the
+    habit not to form — the day the format changes, nobody revisits this.
+    """
+    return f"{cfg.public_url.rstrip('/')}/#{path}?token={quote(token, safe='')}"
 
 
 def verification_message(cfg: Settings, to: str, token: str) -> Message:

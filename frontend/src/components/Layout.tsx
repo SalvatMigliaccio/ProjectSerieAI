@@ -2,6 +2,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import { scorrimento } from "../lib/motion";
 
 /**
@@ -88,16 +89,44 @@ function SkipLink() {
 /**
  * Testata: marchio a sinistra, menu al centro, stato a destra.
  *
- * NIENTE "ACCEDI". Non esiste autenticazione e non deve esistere: l'API e' in
- * sola lettura e il track record si scrive solo da processi locali. Al suo
- * posto, nello stesso angolo, una pastiglia che dice quando i dati sono stati
- * aggiornati — informazione vera al posto di un bottone che non porta da
- * nessuna parte.
+ * ACCEDI / ESCI, dal 25 settembre 2026. Fino alla fase 2 qui c'era scritto che
+ * l'autenticazione non doveva esistere, perche' l'API era in sola lettura. Ora
+ * i dati sono dietro una sessione; quello che NON e' cambiato e' il track
+ * record, che resta scrivibile solo dai comandi locali — nessuna rotta HTTP lo
+ * tocca, e `_assert_read_only_routes` lo verifica all'avvio.
  *
  * LE VOCI DEL MENU PUNTANO A SEZIONI CHE ESISTONO. "Come funziona",
  * "Statistiche" e "FAQ" sono ancore della landing; "Partite" e' la dashboard.
  * Una voce che apre il vuoto e' una promessa rotta al primo clic.
  */
+/**
+ * Sign in, or sign out, depending on who is looking.
+ *
+ * Renders nothing while the session is still being checked. A control that
+ * says "Accedi" for a moment and then flips to "Esci" is a flicker on every
+ * reload, and it reads as the account dropping out by itself.
+ */
+function AccountLink() {
+  const { phase, user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  if (phase === "checking") return null;
+  if (phase === "anonymous") return <Link to="/sign-in">Accedi</Link>;
+
+  return (
+    <button
+      type="button"
+      className="nav__account"
+      title={user?.email}
+      onClick={() => {
+        void signOut().then(() => navigate("/"));
+      }}
+    >
+      Esci
+    </button>
+  );
+}
+
 export function Masthead({ current }: { current: "hero" | "dashboard" }) {
   return (
     <header className="masthead">
@@ -129,6 +158,7 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
             Partite
           </Link>
           <SectionLink id="faq">FAQ</SectionLink>
+          <AccountLink />
         </nav>
 
         {/* L'angolo in alto a destra e' il posto dell'azione, non di un dato:
