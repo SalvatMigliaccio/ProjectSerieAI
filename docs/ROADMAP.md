@@ -6,7 +6,7 @@ verificato, non quando "sembra fatta".
 | # | fase | chi | stato |
 |---|---|---|---|
 | 1 | motore: modello e feature | noi | **chiusa**, con un rinvio dichiarato |
-| 2 | harness enterprise: auth, authz, modelli dati | noi | prossima |
+| 2 | harness enterprise: auth, authz, modelli dati | noi | **fatta** (25 set 2026) |
 | 3 | infrastruttura: separazione, Docker, deploy | misto | dopo la 2 |
 | 4 | modello di business | noi | da aprire |
 | 5 | frontend: porting e build | collega | dipende dalla 3 |

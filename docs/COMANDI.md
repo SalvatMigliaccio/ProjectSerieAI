@@ -893,3 +893,98 @@ $env:AI_NAPLES_FORCE_BUILD = "1"; goalmodel normalize --build
 - soccerdata usa una cache persistente in `~/soccerdata/data/`: rilanciare uno
   stage gia' completato non riscarica nulla, tranne la stagione in corso che
   viene sempre aggiornata.
+
+---
+
+## 14. Authentication and the database (phase 2)
+
+> Written in English on purpose: from 25 September 2026 all new code, comments
+> and documentation in this project are English. The sections above predate
+> that and have not been rewritten.
+
+### Bringing the services up
+
+```bash
+cp .env.example .env          # then change the values; .env is git-ignored
+docker compose up -d          # Postgres 17 (pgvector) + Mailpit
+alembic -c alembic.ini upgrade head
+```
+
+Mailpit captures every outgoing message and delivers none of it. Read them at
+**http://127.0.0.1:8025**. That is the point: sending a real email to a test
+address by accident is a mistake you cannot take back.
+
+If port 5432 is already taken, set `POSTGRES_PORT` in your `.env` and update
+`AI_NAPLES_DATABASE_URL` to match. Do not edit `compose.yaml` for this.
+
+### The first administrator
+
+Public signup only ever grants `customer`. `superadmin` is created from the
+machine, and there is no HTTP route that can grant it — a test walks the route
+table to keep it that way.
+
+```bash
+python -m backend.auth.cli create-superadmin --email you@example.com
+python -m backend.auth.cli list-users
+python -m backend.auth.cli grant  --email x@example.com --role admin
+python -m backend.auth.cli revoke --email x@example.com --role admin
+python -m backend.auth.cli suspend --email x@example.com   # also kills sessions
+```
+
+The password is typed at the prompt, never passed as an argument: `--password`
+lands in shell history and in the process list.
+
+### Before deploying
+
+```bash
+python -m backend.auth.cli check-config
+```
+
+Exits non-zero when the configuration is unfit for production, so it works as a
+deployment gate. It currently refuses on the development defaults, which is
+correct — `COOKIE_SECURE=0` would send the session cookie over plain http.
+
+### Environment variables
+
+Every one is listed with a comment in `.env.example`. The ones that must change
+for a real deployment:
+
+| variable | why it matters |
+|---|---|
+| `AI_NAPLES_SECRET_KEY` | signs emailed tokens; the example value is public |
+| `AI_NAPLES_COOKIE_SECURE` | `1` behind HTTPS, or the session cookie travels in the clear |
+| `AI_NAPLES_DATABASE_URL` | never a versioned file; comes from the service environment |
+| `AI_NAPLES_SMTP_*` | point at a real provider instead of Mailpit |
+| `AI_NAPLES_PUBLIC_URL` | builds the links inside emails — wrong value, dead links |
+
+### Migrations
+
+```bash
+alembic -c alembic.ini upgrade head            # apply
+alembic -c alembic.ini revision --autogenerate -m "what changed"
+alembic -c alembic.ini check                   # do models and schema still agree?
+alembic -c alembic.ini downgrade -1            # step back one
+```
+
+`env.py` filters out tables this project does not own, so `--autogenerate`
+never proposes dropping something that merely lives in the same database.
+
+### What is gated
+
+Every data route needs a session. `/api/health` does not, deliberately: a
+monitor that must authenticate reports the wrong thing exactly when
+authentication is what broke.
+
+`/api/picks` and `/api/selections` additionally require `picks:read`, so phase 4
+can sell them without touching anything else.
+
+### Running the tests
+
+Database tests skip with a usable message when the containers are down, rather
+than failing as if the code were broken:
+
+```bash
+pytest                                  # everything
+pytest -m requires_db                   # only the ones that need Postgres
+pytest -m "not requires_db"             # nothing that needs containers
+```
