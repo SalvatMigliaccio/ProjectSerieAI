@@ -36,6 +36,10 @@ Ambiente, una volta sola:
 ```bash
 pip install -r requirements.lock      # l'ambiente esatto, riproducibile
 pip install -e ".[dev]" --no-deps     # il pacchetto in modalita' sviluppo
+
+# Senza il lock, gli extra vanno chiesti: dal 25 settembre 2026 le dipendenze
+# di base sono solo quelle di `import goalmodel`. `pip install -e ".[all]"` fa
+# quello che faceva `pip install -e .`.
 ```
 
 **Installare dal lock e non da `pyproject.toml`**: il progetto verifica alcune

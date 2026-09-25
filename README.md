@@ -112,6 +112,26 @@ aggiornamento di libreria diventano indistinguibili. `requirements.lock` e'
 universale: un file solo con i marcatori di piattaforma per Linux e Windows,
 generato con `uv pip compile pyproject.toml --universal --extra dev --extra api`.
 
+**Gli extra, dal 25 settembre 2026.** Le dipendenze di base sono ora solo
+quelle che servono a `import goalmodel`: pandas, numpy, pyarrow, scipy,
+scikit-learn. Il resto sta negli extra, e chi installa dal `requirements.lock`
+non se ne accorge — il lock pinna tutto e `--no-deps` non risolve niente, quindi
+la procedura qui sopra e la CI non cambiano.
+
+| extra | cosa aggiunge | a chi serve |
+|---|---|---|
+| `ml` | lightgbm, statsmodels, joblib, matplotlib | modelli e taratura |
+| `ingest` | soccerdata (e con esso selenium) | scaricare i dati |
+| `api` | FastAPI, uvicorn | servire l'API |
+| `auth` | psycopg, SQLAlchemy, Alembic, argon2 | autenticazione |
+| `all` | tutti i precedenti | una macchina di sviluppo |
+
+**Perche' e' stato spezzato**: `soccerdata` porta `seleniumbase` e quindi
+`PyAutoGUI`, che inietta eventi di mouse e tastiera e cattura lo schermo. Giusto
+per la pipeline, che pilota un browser vero su WhoScored; da non far arrivare
+mai in un'immagine esposta in rete, dove finiva perche' era una dipendenza di
+base.
+
 Per lavorare anche sull'API: `pip install -e ".[api]"` aggiunge FastAPI e
 uvicorn, che il resto della pipeline non usa.
 

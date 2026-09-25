@@ -148,95 +148,111 @@ def test_the_example_env_carries_no_real_secret() -> None:
 
 
 # ---------------------------------------------------------------------------
-# The Dockerfile's explicit dependency list
+# The dependency split
 # ---------------------------------------------------------------------------
 
-def _docker_pins() -> dict[str, str]:
-    """The `name -> specifier` pairs from the API image's pip install step."""
-    import re
-
-    body = API_DOCKERFILE.read_text(encoding="utf-8")
-    found = {}
-    for raw in re.findall(r'"([a-zA-Z0-9_.\[\]-]+(?:[<>=!,.0-9]+))"', body):
-        match = re.match(r"^([a-zA-Z0-9_.-]+)(\[[a-z,]+\])?(.*)$", raw)
-        if match and match.group(3):
-            found[match.group(1).lower()] = match.group(3)
-    return found
-
-
-def _pyproject_pins() -> dict[str, str]:
-    import re
+def _pyproject() -> dict:
     import tomllib
-
-    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    declared = list(data["project"]["dependencies"])
-    for extra in data["project"].get("optional-dependencies", {}).values():
-        declared.extend(extra)
-
-    pins = {}
-    for raw in declared:
-        match = re.match(r"^([a-zA-Z0-9_.-]+)(\[[a-z,]+\])?(.*)$", raw)
-        if match:
-            pins[match.group(1).lower()] = match.group(3)
-    return pins
+    return tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
 
-def test_the_image_pins_match_pyproject() -> None:
+def test_the_scraping_stack_is_optional() -> None:
     """
-    The Dockerfile lists the API's dependencies by hand, so the versions exist
-    in two places and can drift.
+    soccerdata reaches seleniumbase and then PyAutoGUI - synthetic mouse and
+    keyboard events, plus screen capture. It is what the ingestion pipeline
+    uses to drive a browser against WhoScored, and for two years it was a base
+    dependency of goalmodel, so anything installing the library got it.
 
-    WHY THEY ARE DUPLICATED AT ALL. `pip install ".[api,auth]"` drags in
-    goalmodel's whole base set, and through soccerdata and seleniumbase that
-    includes PyAutoGUI - synthetic input and screen capture - inside an
-    internet-facing container. The list is explicit to keep that out.
-
-    Duplicating a version is acceptable; letting the two copies disagree is
-    not, because the image would then run something the suite never tested.
+    That surfaced when a deployment image turned out to be installing it into
+    an internet-facing container whose whole job is reading parquet.
     """
-    docker, project = _docker_pins(), _pyproject_pins()
-    assert docker, "no pinned dependencies found in the API Dockerfile"
-
-    mismatched = {
-        name: (spec, project[name])
-        for name, spec in docker.items()
-        if name in project and project[name] != spec
-    }
-    assert not mismatched, (
-        "the API image pins differ from pyproject.toml "
-        f"(name: image, pyproject): {mismatched}")
-
-    unknown = sorted(set(docker) - set(project))
-    assert not unknown, (
-        f"the image installs packages pyproject does not declare: {unknown}. "
-        f"Either add them to pyproject or drop them from the image.")
+    project = _pyproject()["project"]
+    base = " ".join(project["dependencies"])
+    assert "soccerdata" not in base, \
+        "soccerdata is back in the base dependencies: every consumer now gets " \
+        "seleniumbase, selenium and PyAutoGUI"
+    assert "soccerdata" in " ".join(project["optional-dependencies"]["ingest"])
 
 
-def test_the_image_refuses_the_browser_automation_chain() -> None:
+def test_lightgbm_is_optional() -> None:
     """
-    A build-time check, not a runtime hope.
+    Only `models/gbm.py` imports it, and the API never reaches that module -
+    tests/test_api.py asserts it stays out of sys.modules.
+    """
+    project = _pyproject()["project"]
+    assert "lightgbm" not in " ".join(project["dependencies"])
+    assert "lightgbm" in " ".join(project["optional-dependencies"]["ml"])
 
-    PyAutoGUI arrives through goalmodel -> soccerdata -> seleniumbase. It
-    injects mouse and keyboard events and captures the screen; it is what the
-    ingestion pipeline uses to drive a browser against WhoScored, and it is
-    the same library whose Wayland portal prompts looked like somebody
-    requesting remote access to the machine. None of it belongs in a container
-    that reads parquet and answers JSON.
+
+def test_the_base_set_keeps_what_the_api_really_needs() -> None:
+    """
+    The counterpart to the two tests above, and the one that catches
+    over-trimming.
+
+    scikit-learn is the example worth naming: `models/baseline.py` imports
+    PoissonRegressor at module level, and the API reaches it through a lazy
+    import inside a route. A hand-written runtime list left it out, the image
+    built cleanly, and /api/health answered 500.
+    """
+    base = " ".join(_pyproject()["project"]["dependencies"])
+    for needed in ("pandas", "numpy", "pyarrow", "scipy", "scikit-learn"):
+        assert needed in base, (
+            f"{needed} left the base dependencies: the API imports it through "
+            f"goalmodel and would fail at runtime, not at install time")
+
+
+def test_the_image_installs_the_extras_instead_of_a_handwritten_list() -> None:
+    """
+    The list used to be maintained by hand with `--no-deps`. It worked until it
+    silently omitted scikit-learn. pip resolving a declared extra cannot drift
+    the way a comment in a Dockerfile does.
     """
     body = API_DOCKERFILE.read_text(encoding="utf-8")
-    assert "--no-deps" in body, \
-        "without --no-deps the image pulls goalmodel's whole dependency tree"
-    for name in ("pyautogui", "seleniumbase", "lightgbm"):
-        assert name in body, (
-            f"the build does not verify that {name} is absent: with --no-deps "
-            f"nothing else would notice if it came back")
+    assert '".[api,auth]"' in body, \
+        "the image no longer installs the declared extras"
 
 
-def test_the_build_walks_the_import_graph() -> None:
+def test_the_build_imports_the_lazy_modules_too() -> None:
     """
-    `--no-deps` moves a missing package from build time to runtime, which for a
-    route nobody exercises in staging means production. Importing the app
-    during the build brings that back to where it can still fail.
+    Importing `backend.api` alone is not enough: the routes pull
+    goalmodel.prediction.backtest_log from inside a function, which reaches
+    models.baseline and scikit-learn. That is exactly how the 500 got past an
+    earlier version of this check.
     """
-    assert "import backend.api, backend.auth.routes, backend.auth.cli" in \
-        API_DOCKERFILE.read_text(encoding="utf-8")
+    body = API_DOCKERFILE.read_text(encoding="utf-8")
+    for lazy in ("goalmodel.prediction.backtest_log",
+                 "goalmodel.reporting.sezioni",
+                 "goalmodel.models.baseline"):
+        assert lazy in body, f"the build does not import {lazy}"
+
+
+def test_the_container_is_told_where_the_repository_root_is() -> None:
+    """
+    goalmodel derives its paths from its own __file__, which is right from a
+    checkout and wrong from an installed package: in the image it resolves to
+    the Python directory, so DATA pointed inside site-packages while the files
+    were mounted at /srv/data. The API then reported a missing dataset, which
+    blames the data rather than the path.
+    """
+    assert "AI_NAPLES_ROOT: /srv" in PROD.read_text(encoding="utf-8")
+
+
+def test_the_image_carries_alembic_ini() -> None:
+    """
+    Without it the deploy cannot migrate, and the failure is late and
+    misleading: the stack comes up healthy and the documented
+    `alembic -c alembic.ini upgrade head` reports a missing `script_location`
+    key, which reads like a broken configuration rather than an absent file.
+    """
+    body = API_DOCKERFILE.read_text(encoding="utf-8")
+    assert "COPY --chown=app:app alembic.ini" in body, \
+        "alembic.ini is not copied into the API image: migrations cannot run"
+    assert "ScriptDirectory.from_config" in body, \
+        "the build does not verify that the migrations are reachable"
+
+
+def test_alembic_ini_is_not_excluded_from_the_build_context() -> None:
+    """A COPY of a file the context drops fails the build, but only late."""
+    ignored = _lines(DOCKERIGNORE)
+    assert "alembic.ini" not in ignored
+    assert "*.ini" not in ignored

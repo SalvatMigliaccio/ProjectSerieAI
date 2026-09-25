@@ -85,7 +85,18 @@ HTTP can write either.
   reads the socket address, so audit rows record the proxy. Fixing it properly
   means an explicit "trusted proxy" setting rather than believing a header
   anyone can send.
-- **The API image carries the full `goalmodel` dependency set**, LightGBM
-  included, although `tests/test_api.py` asserts the API never imports it. It
-  is a consequence of `goalmodel` declaring those as hard dependencies. It
-  costs image size and build time, not correctness.
+- **`goalmodel`'s base dependencies are wider than the API needs**, and the
+  image no longer honours them. `pip install ".[api,auth]"` reached
+  `soccerdata -> seleniumbase -> PyAutoGUI`: synthetic input and screen
+  capture, inside an internet-facing container. It also brought LightGBM,
+  matplotlib, scikit-learn and statsmodels, none of which the API imports.
+
+  The image now installs 13 named packages and adds `goalmodel` with
+  `--no-deps`, and the build fails if any of those four can be imported. 41
+  packages, 672 MB.
+
+  **The proper fix is still open**: move ingestion and modelling out of
+  `goalmodel`'s base dependencies into extras, so nothing has to opt out of
+  them. That changes what `pip install goalmodel` gives every consumer,
+  including CI and the repo split, so it is a decision rather than a
+  Dockerfile edit.

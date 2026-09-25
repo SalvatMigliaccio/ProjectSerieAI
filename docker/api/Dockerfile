@@ -24,61 +24,28 @@ RUN apt-get update \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# THE API'S REAL DEPENDENCIES, LISTED EXPLICITLY. `pip install ".[api,auth]"`
-# would be shorter and is what this file did first. It is also wrong, and not
-# merely heavy:
+# Dependency metadata first, sources second, so editing a Python file does not
+# invalidate the layer that installed the dependencies.
 #
-#   goalmodel -> soccerdata -> seleniumbase -> PyAutoGUI
-#                                              -> pyscreeze, pygetwindow, mouseinfo
+# `.[api,auth]` IS NOW ENOUGH, and it was not before. goalmodel used to declare
+# soccerdata among its base dependencies, which reached seleniumbase and then
+# PyAutoGUI - synthetic input and screen capture - inside a web-facing image.
+# The base set is now what `import goalmodel` actually needs; lightgbm lives in
+# `[ml]` and soccerdata in `[ingest]`, neither of which is installed here.
 #
-# PyAutoGUI injects synthetic mouse and keyboard events and captures the
-# screen. It belongs to the ingestion pipeline, which drives a real browser
-# against WhoScored; it has no business inside an internet-facing container
-# that only reads parquet and answers JSON. The same chain also brings a whole
-# browser-automation framework, LightGBM, matplotlib, scikit-learn and
-# statsmodels, none of which the API imports - `tests/test_api.py` asserts as
-# much for LightGBM.
-#
-# So the runtime set is spelled out and `goalmodel` goes in with `--no-deps`.
-# `tests/test_deploy.py` checks this list against pyproject so the two cannot
-# drift silently. The cleaner fix is moving ingestion and modelling out of
-# `goalmodel`'s base dependencies, which changes what `pip install goalmodel`
-# gives everyone and is therefore a decision, not a Dockerfile edit.
+# An earlier version of this file listed the packages by hand and used
+# `--no-deps`. That worked and was fragile: the list missed scikit-learn,
+# because `models/baseline.py` imports it at module level and the API only
+# reaches it through a lazy import inside a route. Declaring the split in
+# pyproject means pip works it out instead of a human keeping a list current.
 COPY pyproject.toml README.md ./
-RUN pip install --no-cache-dir \
-    "fastapi>=0.110,<1" \
-    "uvicorn[standard]>=0.27,<1" \
-    "pandas>=3.0,<4" \
-    "numpy>=2.5,<3" \
-    "pyarrow>=25,<26" \
-    "scipy>=1.18,<2" \
-    "psycopg[binary]>=3.2,<4" \
-    "sqlalchemy>=2.0,<3" \
-    "alembic>=1.14,<2" \
-    "argon2-cffi>=23.1,<26" \
-    "itsdangerous>=2.2,<3" \
-    "email-validator>=2.2,<3" \
-    "pydantic-settings>=2.7,<3"
+COPY src/goalmodel/__init__.py src/goalmodel/__init__.py
+COPY backend/__init__.py backend/__init__.py
+RUN pip install --no-cache-dir ".[api,auth]"
 
 COPY src/ src/
 COPY backend/ backend/
 RUN pip install --no-cache-dir --no-deps .
-
-# FAIL THE BUILD, NOT THE DEPLOY. With `--no-deps`, a missing package does not
-# surface until something imports it at runtime - which, for a route nobody
-# exercises in staging, means in production. Importing the app here walks the
-# whole graph while the build can still fail, and the second line proves the
-# browser-automation chain really is absent.
-RUN python -c "import backend.api, backend.auth.routes, backend.auth.cli; print('import graph ok')"
-RUN python - <<'PYEOF'
-import importlib.util
-import sys
-unwanted = [n for n in ("pyautogui", "seleniumbase", "lightgbm", "matplotlib")
-            if importlib.util.find_spec(n) is not None]
-if unwanted:
-    sys.exit(f"these must not be in the API image: {unwanted}")
-print("no browser automation, no model library")
-PYEOF
 
 # ---------------------------------------------------------------------------
 
@@ -100,6 +67,78 @@ COPY --from=builder /opt/venv /opt/venv
 WORKDIR /srv
 COPY --chown=app:app backend/ backend/
 COPY --chown=app:app src/ src/
+# alembic.ini, WITHOUT WHICH THE DEPLOY CANNOT MIGRATE. It was missing from the
+# first version of this file, and the symptom was not subtle but it was late:
+# the stack came up healthy and `alembic -c alembic.ini upgrade head` - the very
+# next command in docs/DEPLOY.md - answered "No 'script_location' key found in
+# configuration", which reads like a broken config rather than an absent file.
+COPY --chown=app:app alembic.ini alembic.ini
+# manual/ is versioned and small: team name maps, derbies, coach changes. The
+# API reads them through the results chain, so they are baked in rather than
+# mounted - one less thing to get wrong on the server.
+COPY --chown=app:app manual/ manual/
+
+# The directories goalmodel expects, created here with the right owner. It also
+# creates them on import, but that has to stay best-effort: the mounts below
+# are read-only and the process is not root, so a mkdir that insisted would
+# stop the API from starting at all - which is exactly what it did.
+RUN mkdir -p /srv/data/raw /srv/data/interim /srv/data/processed /srv/track_record \
+ && chown -R app:app /srv
+
+# VERIFIED ON THE IMAGE THAT SHIPS, not on the builder. The first version of
+# these checks ran in the builder stage, where `alembic.ini` had never been
+# copied - so the alembic one failed for the wrong reason and the other two
+# proved something about a layer that gets thrown away. What matters is this
+# image.
+#
+# FAIL THE BUILD, NOT THE DEPLOY. With `--no-deps` a missing package does not
+# surface until something imports it, which for a route nobody exercises in
+# staging means in production.
+# THE LAZY IMPORTS TOO, and that is the whole point of this step. Importing
+# `backend.api` alone is not enough: the routes pull
+# `goalmodel.prediction.backtest_log` from inside a function, which reaches
+# `evaluation.evaluate` and then `models.baseline`, which needs scikit-learn at
+# module level. An earlier build passed this check and then answered 500 on
+# /api/health for exactly that reason. Everything the API can reach gets
+# imported here, while the build can still fail.
+RUN python - <<'PYEOF'
+import importlib
+
+# Eager: the application itself.
+for name in ("backend.api", "backend.auth.routes", "backend.auth.cli"):
+    importlib.import_module(name)
+
+# Lazy: imported inside route handlers, so the line above never touches them.
+# Keep this list in step with the `from goalmodel...` imports in backend/.
+for name in ("goalmodel.prediction.backtest_log",
+             "goalmodel.prediction.rounds",
+             "goalmodel.reporting.sezioni",
+             "goalmodel.evaluation.evaluate",
+             "goalmodel.models.baseline"):
+    importlib.import_module(name)
+
+print("import graph ok, lazy imports included")
+PYEOF
+
+# Migrations reachable. Needs no database: it only proves the ini resolves and
+# the script directory is present.
+RUN python -c "\
+from alembic.config import Config; \
+from alembic.script import ScriptDirectory; \
+n = len(ScriptDirectory.from_config(Config('alembic.ini')).get_revisions('heads')); \
+print(f'migrations reachable, {n} head(s)')"
+
+# And that the browser-automation chain really is absent, so nothing quietly
+# reintroduces it.
+RUN python - <<'PYEOF'
+import importlib.util
+import sys
+unwanted = [n for n in ("pyautogui", "seleniumbase", "lightgbm", "matplotlib")
+            if importlib.util.find_spec(n) is not None]
+if unwanted:
+    sys.exit(f"these must not be in the API image: {unwanted}")
+print("no browser automation, no model library")
+PYEOF
 
 USER app
 
