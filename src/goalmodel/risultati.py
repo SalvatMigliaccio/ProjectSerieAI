@@ -40,11 +40,14 @@ import logging
 
 import pandas as pd
 
-from . import config
+from . import config, data
 
 log = logging.getLogger("risultati")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+# La quadrupla si legge da `config`, non si ricopia: e' la regola non
+# negoziabile n.5, e una copia qui e' un posto in piu' da cui dimenticarsi
+# di allargare ai Big 5 — senza che nessun errore lo segnali.
+KEYS = config.JOIN_KEYS
 COLONNE = KEYS + ["date", "FTHG", "FTAG", "FTR", "fonte_risultato"]
 
 FOOTBALL_DATA = "football-data"
@@ -61,8 +64,12 @@ def _esito(casa: pd.Series, fuori: pd.Series) -> pd.Series:
 
 
 def _da_football_data() -> pd.DataFrame:
-    master = pd.read_parquet(config.INTERIM / "matches_master.parquet",
-                             columns=KEYS + ["date", "FTHG", "FTAG", "FTR"])
+    # Passa da `data.load_master` e non da `read_parquet`: e' li' che il
+    # contratto di `schema.py` viene verificato. Leggendo per conto proprio si
+    # saltava la verifica, quindi anche i tre modi in cui questo progetto ha
+    # gia' perso dati in silenzio — un tipo cambiato, una colonna sparita, una
+    # chiave duplicata.
+    master = data.load_master(columns=[*KEYS, "date", "FTHG", "FTAG", "FTR"])
     out = master[master["FTR"].notna()].copy()
     out["fonte_risultato"] = FOOTBALL_DATA
     return out

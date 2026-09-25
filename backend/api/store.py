@@ -42,11 +42,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from goalmodel import config
+from goalmodel import config, schema
 
 log = logging.getLogger("api.store")
 
-KEYS = ["league", "season", "home_team", "away_team"]
+# Read from `config`, never copied: rule 5. A second copy is a second
+# place to forget when the key changes, and nothing would report it.
+KEYS = config.JOIN_KEYS
 PROB_COLS = ["p_home", "p_draw", "p_away"]
 OUTCOMES = ("H", "D", "A")
 
@@ -113,6 +115,30 @@ class Sources:
 
 def default_sources() -> Sources:
     return Sources.at(config.TRACK_RECORD, config.DATA)
+
+
+def read_master(src: Sources | None = None) -> pd.DataFrame:
+    """
+    `matches_master`, checked against its schema before anyone uses it.
+
+    WHY THIS LIVES HERE AND NOT IN `goalmodel.data`. `backend/` keeps its own
+    read boundary — `Sources`, where every path is a parameter — because it is
+    a separate deployable (ADR 0001) and the tests point it at their own
+    fixtures. Routing it through `goalmodel.data` would hard-wire the package
+    layout and break that.
+
+    But "separate boundary" does not mean "no contract". `standings.py` used
+    to call `read_parquet` itself, so it skipped the schema check and with it
+    the three ways this project has already lost data in silence: a dtype that
+    changes, a column that vanishes, a key that duplicates.
+    """
+    src = src or default_sources()
+    if not src.master.exists():
+        raise FileNotFoundError(
+            f"{src.master.name} is missing: run 'goalmodel normalize --build'")
+    df = pd.read_parquet(src.master)
+    schema.MATCHES_MASTER.verifica(df, "goalmodel normalize --build")
+    return df
 
 
 # ---------------------------------------------------------------------------

@@ -149,11 +149,7 @@ def _ordered(table: dict[str, dict], played: pd.DataFrame) -> list[dict]:
 def standings(season: str, src: store.Sources | None = None) -> dict | None:
     """La classifica della stagione. `None` se non c'e' nessuna partita giocata."""
     src = src or store.default_sources()
-    if not src.master.exists():
-        raise FileNotFoundError(
-            f"{src.master.name} is missing: run 'python -m goalmodel.normalize --build'")
-
-    master = pd.read_parquet(src.master)
+    master = store.read_master(src)
     code = store.season_in(season)
     played = master[(master["season"].astype(str) == code) & master["FTR"].notna()]
     played = played.dropna(subset=["FTHG", "FTAG"])
