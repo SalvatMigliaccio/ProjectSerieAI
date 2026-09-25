@@ -107,6 +107,7 @@ addopts = "-q --strict-markers --strict-config"
 markers = [
     "richiede_dati: ha bisogno di data/ popolata da un'ingestion vera",
     "richiede_dataset_completo: ha bisogno di TUTTI i blocchi di feature costruiti",
+    "requires_db: needs the Postgres from compose.yaml, migrated to head",
     "lento: oltre il minuto; escluso di default in CI con -m 'not lento'",
 ]
 filterwarnings = ["error::DeprecationWarning:goalmodel.*"]

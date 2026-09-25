@@ -84,8 +84,16 @@ class User(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(
         TimestampTz, nullable=False, server_default=func.now(), onupdate=now)
 
+    # The join is spelled out because `user_roles` holds TWO foreign keys to
+    # `users`: `user_id` (who holds the role) and `granted_by` (who gave it).
+    # SQLAlchemy cannot guess which one to walk and raises
+    # AmbiguousForeignKeysError at mapper configuration — at import time, far
+    # from anything that looks related.
     roles: Mapped[list[Role]] = relationship(
-        secondary="user_roles", back_populates="users", lazy="selectin")
+        secondary="user_roles",
+        primaryjoin="User.id == UserRole.user_id",
+        secondaryjoin="Role.id == UserRole.role_id",
+        back_populates="users", lazy="selectin")
 
     __table_args__ = (
         CheckConstraint(
@@ -117,7 +125,10 @@ class Role(Base):
     permissions: Mapped[list[Permission]] = relationship(
         secondary="role_permissions", back_populates="roles", lazy="selectin")
     users: Mapped[list[User]] = relationship(
-        secondary="user_roles", back_populates="roles")
+        secondary="user_roles",
+        primaryjoin="Role.id == UserRole.role_id",
+        secondaryjoin="User.id == UserRole.user_id",
+        back_populates="roles")
 
 
 class Permission(Base):
