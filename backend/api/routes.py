@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+
+from backend.auth.deps import require_permission
 
 from . import (
     schemas,
@@ -38,7 +40,25 @@ from . import (
 
 log = logging.getLogger("api.routes")
 
-router = APIRouter(prefix="/api")
+# EVERY DATA ROUTE REQUIRES A PERMISSION, declared here once rather than
+# repeated on each decorator: a router-level dependency cannot be forgotten
+# when a route is added, and forgetting it is the whole risk.
+#
+# `data:read` covers results, standings and the track record. `picks:read`
+# covers the model's selections, declared separately on those two routes so
+# phase 4 can sell them without touching anything else.
+#
+# /api/health is the exception and lives on its own router below: a monitor
+# that has to authenticate is a monitor that reports the wrong thing when
+# authentication breaks.
+router = APIRouter(
+    prefix="/api",
+    dependencies=[Depends(require_permission("data:read"))],
+)
+
+# Unauthenticated on purpose, and it must stay dull: liveness only, nothing
+# about the data it serves.
+public = APIRouter(prefix="/api")
 
 VALID_STATUS = (store.STATUS_PREDICTED, store.STATUS_RESOLVED, store.STATUS_INVALID)
 
@@ -145,6 +165,7 @@ def get_standings(season: str) -> dict:
 
 
 @router.get("/picks/{season}", response_model=schemas.Picks,
+            dependencies=[Depends(require_permission("picks:read"))],
             summary="The canonical M1 selections — no threshold to move")
 def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> dict:
     """
@@ -162,6 +183,7 @@ def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> d
 
 
 @router.get("/selections/{season}", response_model=schemas.Selections,
+            dependencies=[Depends(require_permission("picks:read"))],
             summary="Markets priced under a ceiling on the odds")
 def get_selections(
     season: str,
@@ -190,7 +212,7 @@ def get_status() -> dict:
     return status_mod.status()
 
 
-@router.get("/health", response_model=schemas.Health,
+@public.get("/health", response_model=schemas.Health,
             summary="Liveness and data freshness")
 def get_health() -> dict:
     return status_mod.health()

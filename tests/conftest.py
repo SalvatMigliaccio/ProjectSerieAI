@@ -53,6 +53,54 @@ def blocchi_mancanti() -> list[str]:
     return [b.nome for b in registry.mancanti()]
 
 
+def _database_reachable() -> bool:
+    """
+    Is the auth database up and migrated?
+
+    Checked once and cached. The alternative is every database test failing
+    with a connection error, which reads like a broken test suite rather than
+    "the containers are not running".
+    """
+    global _DB_OK
+    if _DB_OK is None:
+        try:
+            from backend.auth.db import engine
+            from sqlalchemy import text
+            with engine().connect() as c:
+                c.execute(text("SELECT 1 FROM roles LIMIT 1"))
+            _DB_OK = True
+        except Exception:
+            _DB_OK = False
+    return _DB_OK
+
+
+_DB_OK: bool | None = None
+
+
+@pytest.fixture
+def db():
+    """
+    A session inside a transaction that is always rolled back.
+
+    Tests share one migrated database and must not see each other's rows.
+    Binding the session to an open connection-level transaction and rolling it
+    back afterwards is cheaper and more reliable than deleting rows: nothing
+    survives, not even on failure.
+    """
+    from backend.auth.db import engine
+    from sqlalchemy.orm import Session as SASession
+
+    conn = engine().connect()
+    trans = conn.begin()
+    s = SASession(bind=conn, expire_on_commit=False)
+    try:
+        yield s
+    finally:
+        s.close()
+        trans.rollback()
+        conn.close()
+
+
 @pytest.fixture
 def tmp(tmp_path: Path) -> Path:
     """
@@ -77,6 +125,15 @@ def pytest_collection_modifyitems(config, items: list[pytest.Item]) -> None:
             if "richiede_dati" in item.keywords:
                 item.add_marker(salta)
         return
+
+    if not _database_reachable():
+        salta_db = pytest.mark.skip(
+            reason="Postgres not reachable or not migrated: "
+                   "docker compose up -d && alembic -c alembic.ini upgrade head"
+        )
+        for item in items:
+            if "requires_db" in item.keywords:
+                item.add_marker(salta_db)
 
     mancanti = blocchi_mancanti()
     if mancanti:

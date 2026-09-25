@@ -33,12 +33,47 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from backend.api import app, store
 from fastapi.testclient import TestClient
 
 from goalmodel import config
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _signed_in():
+    """
+    Every test in this file calls the API as a signed-in user.
+
+    WHY AN OVERRIDE RATHER THAN A REAL SIGN-IN. These tests are about payload
+    shapes, caching and the read-only guarantees — not about authentication,
+    which has its own files. Making each one create an account and verify an
+    email would need Postgres for tests that otherwise touch only parquet and
+    CSV, and would couple this file to a flow it is not checking.
+
+    `current_user` is the seam: `require_permission` depends on it, so
+    replacing it grants the request whatever this stub says it holds. The
+    permission names are the real ones, so a route asking for a permission
+    that does not exist here still fails.
+    """
+    from backend.auth.deps import current_user
+    from backend.auth.models import Permission, Role, User
+
+    everything = Role(
+        name="test", description="all permissions, in memory only",
+        permissions=[Permission(name=n) for n in
+                     ("data:read", "picks:read", "users:manage", "system:manage")],
+    )
+    stub = User(email="test@example.com", password_hash="unused", status="active")
+    stub.roles = [everything]
+
+    app.dependency_overrides[current_user] = lambda: stub
+    try:
+        yield stub
+    finally:
+        app.dependency_overrides.pop(current_user, None)
 
 SEASON = "2026-27"
 
@@ -368,10 +403,67 @@ def test_filters() -> None:
 
 
 def test_read_only_routes() -> None:
+    """
+    Only /api/auth may write. Everything else stays GET-only.
+
+    THIS TEST WAS VACUOUS AND PASSED ANYWAY. It walked `app.routes`, which
+    since FastAPI 0.141 holds one `_IncludedRouter` wrapper per included
+    router instead of the routes themselves — so it iterated four
+    documentation endpoints, found no write methods, and reported success.
+    `iter_routes` descends into the wrappers; the assertion below is the same
+    one, now actually looking at the endpoints.
+    """
+    from backend.api import WRITABLE_PREFIX, iter_routes
+
     allowed = {"GET", "HEAD", "OPTIONS"}
-    for route in app.routes:
-        methods = getattr(route, "methods", None) or set()
-        assert not (methods - allowed), f"write route: {methods} {route.path}"
+    seen = list(iter_routes(app))
+    # If this ever drops back to the handful of docs routes, the walker has
+    # gone blind again and every assertion below becomes meaningless.
+    assert len(seen) > 10, f"only {len(seen)} routes visible: the walker is blind again"
+
+    for path, methods in seen:
+        if path.startswith(WRITABLE_PREFIX):
+            continue
+        assert not (methods - allowed), f"write route outside auth: {methods} {path}"
+
+
+def test_the_write_guard_actually_fires() -> None:
+    """
+    A guard nobody has seen fail is not a guard.
+
+    Given the previous one silently stopped working for months, this adds a
+    write route outside /api/auth and checks startup refuses it.
+    """
+    from backend.api import _assert_read_only_routes, create_app
+    from fastapi import APIRouter
+
+    offending = APIRouter()
+
+    @offending.post("/api/danger")
+    def danger() -> dict:
+        return {}
+
+    app_under_test = create_app()
+    app_under_test.include_router(offending)
+    with pytest.raises(RuntimeError, match="may write"):
+        _assert_read_only_routes(app_under_test)
+
+
+def test_no_route_can_write_the_track_record() -> None:
+    """
+    The guarantee that survived adding authentication.
+
+    A prediction is worth something only if it was written before kick-off by
+    a process that did not know the result. Auth writes rows to Postgres; no
+    HTTP route may touch the registry on disk.
+    """
+    from backend.api import WRITABLE_PREFIX, iter_routes
+
+    writers = [p for p, m in iter_routes(app) if m - {"GET", "HEAD", "OPTIONS"}]
+    assert writers, "no write routes at all: this test would pass vacuously"
+    for path in writers:
+        assert path.startswith(WRITABLE_PREFIX), (
+            f"{path} can write and is outside {WRITABLE_PREFIX}")
 
 
 def test_no_model_is_loaded() -> None:
