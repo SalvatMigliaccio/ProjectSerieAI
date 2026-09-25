@@ -38,7 +38,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from . import context, form, market, players
 
 log = logging.getLogger("registry")
@@ -54,11 +54,13 @@ class Blocco:
 
     @property
     def parquet(self) -> Path:
+        # Resta solo per NOMINARE il file nei messaggi d'errore. Leggerlo e
+        # sapere se c'e' passano da `data`, che e' il confine: vedi ADR 0002.
         return config.PROCESSED / f"{self.nome}.parquet"
 
     @property
     def disponibile(self) -> bool:
-        return self.parquet.exists()
+        return data.processed_esiste(self.nome)
 
 
 # L'ordine e' quello di costruzione: `market` e `form` leggono solo
@@ -108,7 +110,7 @@ def unisci(base: pd.DataFrame, keys: list[str] | None = None) -> pd.DataFrame:
             log.warning("%s assente: blocco '%s' non disponibile. Lancia '%s'.",
                         b.parquet.name, b.descrizione, b.comando)
             continue
-        extra = pd.read_parquet(b.parquet)
+        extra = data.load_processed(b.nome, b.comando)
         extra = extra.drop(columns=[c for c in extra.columns if c == "date"])
         df = df.merge(extra, on=keys, how="left", validate="one_to_one")
     return df

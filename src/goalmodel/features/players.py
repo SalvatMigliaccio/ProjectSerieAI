@@ -142,21 +142,15 @@ def carica_assenze() -> pd.DataFrame:
     """
     from ..normalize import apply_name_map, load_name_map
 
-    path = config.RAW / "whoscored_missing.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path.name} assente: lancia 'goalmodel ingest --stage missing'"
-        )
-    miss = pd.read_parquet(path)
+    miss = data.load_raw("whoscored_missing",
+                         "goalmodel ingest --stage missing")
 
-    cal = [pd.read_parquet(p)[["season", "game_id", "home_team", "away_team"]]
-           for p in sorted((config.RAW / "whoscored").glob("schedule_*.parquet"))]
-    if not cal:
+    cal = data.load_whoscored_schedules()
+    if cal is None:
         raise FileNotFoundError(
             "nessun calendario WhoScored in data/raw/whoscored/: senza, il "
             "game_id non si traduce nella quadrupla"
         )
-    cal = pd.concat(cal, ignore_index=True).drop_duplicates("game_id")
 
     mappa = load_name_map()
     # `apply_name_map` pretende home_team e away_team: il calendario le ha, il
@@ -210,12 +204,8 @@ def carica_giocatori() -> pd.DataFrame:
     """
     from ..normalize import load_name_map, load_raw
 
-    path = config.RAW / "fbref_player_match.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path.name} assente: lancia 'goalmodel ingest --stage player_stats'"
-        )
-    df = pd.read_parquet(path)
+    df = data.load_raw("fbref_player_match",
+                       "goalmodel ingest --stage player_stats")
     # `apply_name_map` pretende home_team/away_team, che qui non ci sono: la
     # squadra sta in `team` e si mappa a mano.
     df["team"] = df["team"].replace(load_name_map())

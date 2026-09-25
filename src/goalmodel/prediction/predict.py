@@ -220,12 +220,12 @@ def _merge_odds_source(
 
 def load_fixtures_odds() -> tuple[pd.DataFrame, pd.Timestamp | None]:
     """Lo snapshot scaricato da football-data, con l'ora in cui e' stato preso."""
-    path = config.RAW / "fixtures_odds.parquet"
-    if not path.exists():
-        log.warning("%s assente: lancia 'goalmodel ingest --stage fixtures'", path.name)
+    df = data.load_raw_opzionale("fixtures_odds")
+    if df is None:
+        log.warning("fixtures_odds.parquet assente: lancia "
+                    "'goalmodel ingest --stage fixtures'")
         return pd.DataFrame(), None
 
-    df = pd.read_parquet(path)
     scaricato = pd.to_datetime(df["downloaded_at"]).max() if "downloaded_at" in df else None
     # Snapshot VUOTO ma esistente: e' lo stato normale fra un turno e l'altro —
     # football-data risponde, la Serie A non e' ancora pubblicata, il file viene

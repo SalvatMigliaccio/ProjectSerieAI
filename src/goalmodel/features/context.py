@@ -114,16 +114,15 @@ def carica_coppe() -> pd.DataFrame:
     Se il file non c'e', si restituisce un frame vuoto e il blocco si calcola
     senza coppe — dichiarandolo, perche' e' esattamente la meta' che mancava.
     """
-    path = config.RAW / "fbref_cups_schedule.parquet"
-    if not path.exists():
-        log.warning("%s assente: riposo e congestione contano le sole partite "
-                    "di campionato. Lancia 'goalmodel ingest --stage cups'.",
-                    path.name)
+    df = data.load_raw_opzionale("fbref_cups_schedule")
+    if df is None:
+        log.warning("fbref_cups_schedule.parquet assente: riposo e congestione "
+                    "contano le sole partite di campionato. Lancia "
+                    "'goalmodel ingest --stage cups'.")
         return pd.DataFrame(columns=["team", "date"])
 
     from ..normalize import apply_name_map, load_name_map
 
-    df = pd.read_parquet(path)
     df = apply_name_map(df, load_name_map())
     df = df.dropna(subset=["date"])
     righe = []

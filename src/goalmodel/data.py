@@ -69,12 +69,63 @@ def _leggi(path, descrizione: str, rimedio: str,
     return df
 
 
-def load_raw(nome: str) -> pd.DataFrame:
-    """Un parquet grezzo da `data/raw`, come lo ha scritto l'ingestion."""
+def load_raw(nome: str, rimedio: str | None = None) -> pd.DataFrame:
+    """
+    Un parquet grezzo da `data/raw`, come lo ha scritto l'ingestion.
+
+    `rimedio` serve a chi sa NOMINARE lo stage: il messaggio predefinito dice
+    `--stage <stage>`, che e' onesto ma inutile a chi ha appena clonato.
+    """
     df = _leggi(config.RAW / f"{nome}.parquet", nome,
-                f"goalmodel ingest --stage <stage>  (per '{nome}')")
+                rimedio or f"goalmodel ingest --stage <stage>  (per '{nome}')")
     log.info("caricato %-24s %6d righe, %3d colonne", nome, len(df), df.shape[1])
     return df
+
+
+def load_raw_opzionale(nome: str) -> pd.DataFrame | None:
+    """
+    Come `load_raw`, ma `None` quando il file non c'e'.
+
+    PERCHE' UNA FUNZIONE A PARTE E NON UN FLAG. Un file assente non e' sempre
+    un guasto: le coppe, le quote del turno e i blocchi di feature possono
+    mancare, e il chiamante lo dice a modo suo — c'e' chi avvisa e prosegue
+    senza due colonne, chi restituisce un frame vuoto. Quella decisione e' sua
+    e resta sua: qui si sposta solo la lettura, cioe' l'unica cosa che dovra'
+    cambiare quando i dati staranno in Postgres (ADR 0002).
+
+    `None` e non un DataFrame vuoto di proposito: "non c'e'" e "c'e' e non
+    contiene niente" sono stati diversi, e confonderli e' il modo tipico di
+    far sparire un problema di ingestion in un grafico vuoto.
+    """
+    if not (config.RAW / f"{nome}.parquet").exists():
+        return None
+    return load_raw(nome)
+
+
+def load_processed(nome: str, rimedio: str) -> pd.DataFrame:
+    """Un parquet di `data/processed`: feature gia' calcolate."""
+    return _leggi(config.PROCESSED / f"{nome}.parquet", nome, rimedio)
+
+
+def load_whoscored_schedules() -> pd.DataFrame | None:
+    """
+    I calendari WhoScored, uno per stagione, gia' concatenati.
+
+    Sono l'unica cosa che traduce il `game_id` di WhoScored nella quadrupla.
+    Stanno in una CARTELLA e non in un file solo perche' `ingest_missing` li
+    scrive una stagione per volta ed e' riprendibile; chi legge pero' li vuole
+    insieme, e ripetere la glob dal chiamante significa ripetere anche il
+    percorso.
+
+    `None` se la cartella non c'e' o e' vuota: e' lo stato normale di un clone
+    pulito, non un guasto. Chi chiama decide cosa farne.
+    """
+    cartella = config.RAW / "whoscored"
+    pezzi = [pd.read_parquet(p)[["season", "game_id", "home_team", "away_team"]]
+             for p in sorted(cartella.glob("schedule_*.parquet"))]
+    if not pezzi:
+        return None
+    return pd.concat(pezzi, ignore_index=True).drop_duplicates("game_id")
 
 
 def load_master(columns: list[str] | None = None,
@@ -91,6 +142,11 @@ def load_master(columns: list[str] | None = None,
     if date and "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
+
+
+def processed_esiste(nome: str) -> bool:
+    """Per chi deve DECIDERE se un blocco c'e', non leggerlo."""
+    return (config.PROCESSED / f"{nome}.parquet").exists()
 
 
 def master_esiste() -> bool:
