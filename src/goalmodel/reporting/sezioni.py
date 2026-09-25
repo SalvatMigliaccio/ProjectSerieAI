@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, data
 from ..prediction import predict as predict_mod
 
 log = logging.getLogger("report")
@@ -502,14 +502,14 @@ def _sd_cluster_walk_forward(diag: Diagnostica) -> float | None:
     giornate: la stessa quantita', misurata su 114 giornate vere del test set
     invece che sulle due o tre gia' accumulate in produzione.
     """
-    path = config.PROCESSED / "walk_forward_predictions.parquet"
-    if not path.exists():
-        diag.avvisa(f"{path.name} assente: non posso stimare quante previsioni "
-                    f"servono. Lancia 'goalmodel evaluate'.")
+    wf = data.load_processed_opzionale("walk_forward_predictions")
+    if wf is None:
+        diag.avvisa("walk_forward_predictions.parquet assente: non posso "
+                    "stimare quante previsioni servono. Lancia "
+                    "'goalmodel evaluate'.")
         return None
     from ..evaluation.evaluate import PROB_COLS, outcome_index, rps
 
-    wf = pd.read_parquet(path)
     rif = "M1b market-only (diretto)"
     wf = wf[wf["model"] == rif] if rif in set(wf["model"]) else wf[wf["model"] == wf["model"].iloc[0]]
     wf = wf.dropna(subset=PROB_COLS)

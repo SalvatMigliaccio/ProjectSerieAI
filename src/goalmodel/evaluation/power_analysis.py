@@ -58,7 +58,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .. import config
+from .. import data
 from ..models.baseline import predictions_from_lambdas
 from .evaluate import PROB_COLS, outcome_index, rps
 
@@ -98,8 +98,8 @@ SOTTOINSIEMI = {
 # La scala del rumore, misurata
 # ---------------------------------------------------------------------------
 
-def _rps_per_modello(path) -> pd.DataFrame:
-    preds = pd.read_parquet(path)
+def _rps_per_modello(nome: str) -> pd.DataFrame:
+    preds = data.load_processed(nome, "goalmodel evaluate")
     keys = ["season", "matchday", "home_team", "away_team"]
     ok = preds.dropna(subset=PROB_COLS).copy()
     ok["rps"] = rps(ok[PROB_COLS].to_numpy(float), outcome_index(ok["FTR"]))
@@ -127,8 +127,8 @@ def differenze_appaiate(annidata: bool = True) -> tuple[np.ndarray, np.ndarray, 
     nessun walk-forward di blocco, dicendolo.
     """
     if annidata:
-        for path in sorted(config.PROCESSED.glob("walk_forward_blocco_*.parquet")):
-            wide = _rps_per_modello(path)
+        for nome in data.nomi_processed("walk_forward_blocco_*"):
+            wide = _rps_per_modello(nome)
             con = [c for c in wide.columns if "(con " in c]
             senza = [c for c in wide.columns if "(senza " in c]
             if con and senza:
@@ -139,12 +139,9 @@ def differenze_appaiate(annidata: bool = True) -> tuple[np.ndarray, np.ndarray, 
         log.warning("nessun walk-forward di blocco: ripiego sulla coppia contro "
                     "il mercato, che SOVRASTIMA il rumore di circa 4 volte")
 
-    path = config.PROCESSED / "walk_forward_predictions.parquet"
-    if not path.exists():
-        raise FileNotFoundError(
-            f"{path.name} assente: lancia prima goalmodel evaluate"
-        )
-    wide = _rps_per_modello(path)
+    # L'assenza la segnala `data`, con lo stesso messaggio di ogni altra
+    # lettura: prima ogni chiamante ne scriveva uno suo.
+    wide = _rps_per_modello("walk_forward_predictions")
     a, b = "M5 GBM ancorato al mercato", "M1b market-only (diretto)"
     if a not in wide.columns or b not in wide.columns:
         a, b = wide.columns[0], wide.columns[1]

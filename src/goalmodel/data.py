@@ -102,9 +102,34 @@ def load_raw_opzionale(nome: str) -> pd.DataFrame | None:
     return load_raw(nome)
 
 
-def load_processed(nome: str, rimedio: str) -> pd.DataFrame:
-    """Un parquet di `data/processed`: feature gia' calcolate."""
-    return _leggi(config.PROCESSED / f"{nome}.parquet", nome, rimedio)
+def processed_esiste(nome: str) -> bool:
+    """Per chi deve DECIDERE se un blocco c'e', non leggerlo."""
+    return (config.PROCESSED / f"{nome}.parquet").exists()
+
+
+def load_processed(nome: str, rimedio: str | None = None) -> pd.DataFrame:
+    """Un parquet di `data/processed`: feature o previsioni gia' calcolate."""
+    return _leggi(config.PROCESSED / f"{nome}.parquet", nome,
+                  rimedio or f"il comando che produce '{nome}'")
+
+
+def load_processed_opzionale(nome: str) -> pd.DataFrame | None:
+    """`None` se quel file non e' stato ancora prodotto."""
+    if not processed_esiste(nome):
+        return None
+    return load_processed(nome)
+
+
+def nomi_processed(pattern: str) -> list[str]:
+    """
+    I nomi (senza estensione) dei file di `data/processed` che combaciano.
+
+    Serve a chi SCOPRE cosa c'e' invece di sapere cosa cercare — per esempio
+    un walk-forward per blocco, uno per file. La glob e' conoscenza del
+    formato su disco, quindi sta qui e non nel chiamante: quando i dati
+    staranno in Postgres questa diventa una query, e chi chiama non cambia.
+    """
+    return sorted(p.stem for p in config.PROCESSED.glob(f"{pattern}.parquet"))
 
 
 def load_whoscored_schedules() -> pd.DataFrame | None:
@@ -142,11 +167,6 @@ def load_master(columns: list[str] | None = None,
     if date and "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
-
-
-def processed_esiste(nome: str) -> bool:
-    """Per chi deve DECIDERE se un blocco c'e', non leggerlo."""
-    return (config.PROCESSED / f"{nome}.parquet").exists()
 
 
 def master_esiste() -> bool:
