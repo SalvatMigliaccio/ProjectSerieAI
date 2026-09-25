@@ -276,6 +276,33 @@ TRACK_TOLERANCE_RPS = 0.01
 # Sono le due che precedono il test, quindi il taratura vede solo il passato.
 VALIDATION_SEASONS = ["2122", "2223"]
 
+# L'ORDINE IN CUI CONVIENE SCARICARE, CHE NON E' QUELLO CRONOLOGICO.
+#
+# Vale per gli stage lunghi e interrompibili — `missing` e `player_stats`, che
+# su WhoScored costano ~11.6 secondi a partita, quindi ore. Uno scraping cosi'
+# va potuto fermare in qualsiasi momento e avere gia' in mano qualcosa di
+# misurabile; con l'ordine cronologico invece le prime ore se ne vanno sulle
+# stagioni che contano meno.
+#
+# E' successo: un run di 15 ore e' stato fermato dopo tre stagioni, e le tre
+# erano 1415 (burn-in, esclusa dall'addestramento per definizione), 1516 e
+# 1617. Nessuna delle tre entra nella misura di un blocco, quindi il lavoro
+# fatto non permetteva di decidere niente.
+#
+# L'ordine giusto segue il valore: prima il TEST, che e' dove un blocco si
+# decide; poi la VALIDAZIONE, dove si tara; poi il resto dalla piu' recente
+# alla piu' vecchia, perche' e' solo arricchimento del training e le stagioni
+# vicine al test somigliano di piu' a quelle su cui si misura.
+#
+# Gli stage sono riprendibili (il file `*_viste.parquet` tiene le partite gia'
+# interrogate), quindi cambiare l'ordine non rifa' niente di gia' fatto.
+SEASONS_PRIORITA = [
+    *TEST_SEASONS,
+    *VALIDATION_SEASONS,
+    *[s for s in reversed(SEASONS)
+      if s not in TEST_SEASONS and s not in VALIDATION_SEASONS],
+]
+
 # Ricampionamenti del bootstrap a cluster sulle giornate.
 BOOTSTRAP_SAMPLES = 10_000
 

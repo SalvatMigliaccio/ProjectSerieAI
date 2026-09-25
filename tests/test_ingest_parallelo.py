@@ -416,3 +416,48 @@ def test_ogni_stage_invocabile_e_anche_eseguibile() -> None:
         ingest.esegui([])
 
     print("10. ogni stage invocabile e' anche eseguibile          ok")
+
+
+def test_le_stagioni_lunghe_partono_da_quelle_che_contano() -> None:
+    """
+    L'ordine di scaricamento segue il valore, non il calendario.
+
+    PERCHE' E' UN TEST E NON UNA CONVENZIONE. Uno scraping da 15 ore e' stato
+    fermato dopo tre stagioni, e le tre erano 1415 (burn-in, esclusa
+    dall'addestramento per definizione), 1516 e 1617: nessuna entra nella
+    misura di un blocco, quindi quelle ore non permettevano di decidere
+    niente. Non c'era nessun errore da vedere — solo l'ordine cronologico che
+    sembrava ovvio.
+
+    Le due cose che devono restare vere: nessuna stagione persa per strada, e
+    il test set davanti a tutto.
+    """
+    from goalmodel import config
+
+    assert sorted(config.SEASONS_PRIORITA) == sorted(config.SEASONS), (
+        "SEASONS_PRIORITA non e' una permutazione di SEASONS: "
+        f"in piu' {sorted(set(config.SEASONS_PRIORITA) - set(config.SEASONS))}, "
+        f"mancanti {sorted(set(config.SEASONS) - set(config.SEASONS_PRIORITA))}"
+    )
+
+    quante = len(config.TEST_SEASONS)
+    assert config.SEASONS_PRIORITA[:quante] == config.TEST_SEASONS, (
+        f"le prime {quante} scaricate sono {config.SEASONS_PRIORITA[:quante]}, "
+        f"non il test set {config.TEST_SEASONS}"
+    )
+    dopo = config.SEASONS_PRIORITA[quante:quante + len(config.VALIDATION_SEASONS)]
+    assert dopo == config.VALIDATION_SEASONS, (
+        f"dopo il test dovrebbe venire la validazione {config.VALIDATION_SEASONS}, non {dopo}")
+
+    # E gli stage lunghi devono davvero usarlo: un default cronologico
+    # rimasto indietro annullerebbe tutto senza dare errore.
+    import inspect
+
+    from goalmodel import ingest
+    for nome in ("ingest_missing", "ingest_player_stats"):
+        sorgente = inspect.getsource(getattr(ingest, nome))
+        assert "config.SEASONS_PRIORITA" in sorgente, (
+            f"{nome} non usa config.SEASONS_PRIORITA: tornerebbe all'ordine "
+            f"cronologico e le prime ore andrebbero sulle stagioni sbagliate")
+
+    print("11. gli stage lunghi partono dal test set             ok")

@@ -585,7 +585,10 @@ def ingest_player_stats(seasons: list[str] | None = None) -> pd.DataFrame:
     interi e stringhe tipo `25-182`: si appiattisce e si converte, altrimenti
     il parquet non si scrive e si perde tutto il lavoro sull'ultima riga.
     """
-    seasons = seasons or SEASONS
+    # Ordine per valore, non cronologico: uno stage da ore va potuto fermare
+    # in qualsiasi momento avendo gia' in mano le stagioni che servono a
+    # misurare. Vedi `config.SEASONS_PRIORITA`.
+    seasons = seasons or config.SEASONS_PRIORITA
     dst = RAW / "fbref_player_match.parquet"
     pezzi = [pd.read_parquet(dst)] if dst.exists() else []
     fatte = set(pezzi[0]["season"].astype(str)) if pezzi else set()
@@ -673,7 +676,7 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
     import time
 
     applica_locale_whoscored()
-    seasons = seasons or SEASONS
+    seasons = seasons or config.SEASONS_PRIORITA   # vedi player_stats
     dst = RAW / "whoscored_missing.parquet"
     viste_path = RAW / "whoscored_missing_viste.parquet"
 
