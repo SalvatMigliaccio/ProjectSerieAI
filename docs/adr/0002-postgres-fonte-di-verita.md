@@ -81,33 +81,27 @@ dal database invece che verificata a ogni lettura.
   feature sono cose diverse con cicli di vita diversi; lo schema si progetta
   quando si scrive, non qui.
 
-## La precondizione, ed e' l'unica cosa da fare adesso
+## La precondizione — FATTA il 25 settembre 2026
 
-**Il confine di lettura e' costruito a meta'.** `data.py` esiste proprio per
-essere l'unico punto che tocca il disco, ma oggi **11 moduli di produzione
-leggono parquet per conto loro**:
+Era: **il confine di lettura e' costruito a meta'**. `data.py` esisteva per
+essere l'unico punto che tocca il disco, ma **11 moduli di produzione
+leggevano parquet per conto loro**, e due (`risultati.py`,
+`backend/api/standings.py`) saltavano cosi' anche la verifica dello schema.
 
-```
-ingest.py (7)      players.py (3)     registry.py       context.py
-normalize.py       risultati.py       predict.py        sezioni.py
-power_analysis.py  backend/api/store.py   backend/api/standings.py
-```
+**Chiuso.** Restano **due** letture fuori dai confini, entrambe di proposito e
+dichiarate: `ingest.py` e `normalize.py` rileggono cio' che hanno appena
+scritto — lato produttore, dove `load_raw` farebbe la cosa sbagliata perche'
+solleva quando il file manca, e al primo run manca sempre.
 
-I tre moduli di `experiments/` che leggono parquet NON contano: per progetto
-leggono tutto e non sono importati da nessuno. `ingest.py` e' il caso a parte —
-rilegge i grezzi che ha appena scritto — e va giudicato a se'.
+**I confini sono due, e non e' un ripiego.** `goalmodel` legge da `data.py`,
+`backend/api` da `store.py`: il backend e' un deployable separato (ADR 0001)
+con i percorsi come parametri, e instradarlo su `goalmodel.data` ne fisserebbe
+il layout proprio mentre la fase 3 lo prepara a diventare un repository suo.
+La migrazione tocchera' **un file per deployable**.
 
-Finche' e' cosi', migrare significa modificare una dozzina di file e
-**dimenticarne uno non da' errore** — da' un modulo che legge un parquet stantio mentre tutti
-gli altri leggono il database. E' lo stesso modo di fallire che la regola DRY
-di `CLAUDE.md` gia' descrive per la chiave di join.
-
-Chiudere il confine va fatto **comunque**, indipendentemente dal database:
-e' il completamento di A1/A2 dell'audit. Fatto quello, la migrazione e' un
-cambiamento dentro `data.py` e resta reversibile.
-
-**Ordine, quindi**: chiudere il confine di lettura -> progettare lo schema ->
-migrare. Non il contrario.
+`tests/test_confine_lettura.py` impedisce che si sfaldi di nuovo: elenca i due
+confini e le due eccezioni con il motivo, e fallisce se compare una lettura
+nuova. Verificato che scatti.
 
 ## Cosa non e' stato deciso qui
 
