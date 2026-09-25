@@ -84,6 +84,10 @@ auth = [
 
 [project.scripts]
 goalmodel = "goalmodel.cli:main"
+# Account administration. Deliberately a local command and not an HTTP route:
+# somebody has to hold superadmin before anyone can grant it, and an endpoint
+# that mints the first administrator mints the second one too.
+ainaples-admin = "backend.auth.cli:main"
 
 # DUE radici, e non e' un compromesso. `goalmodel` e' la libreria e sta in
 # src-layout (A1); `backend` e' un deployable diverso — altre dipendenze, altro
