@@ -1,0 +1,85 @@
+# I servizi di sviluppo: il database e il relay di posta.
+#
+# COSA NON C'E' QUI, E NON E' UNA DIMENTICANZA. Non c'e' l'API, e non c'e' la
+# pipeline. L'API la si lancia a mano (`python -m backend.api`) finche' la fase
+# 3 non decide come va containerizzata; la pipeline **non si containerizza**,
+# perche' scrive il track record e quel registro vale solo se lo scrive un
+# processo locale. Questo file mette a disposizione cio' che serve accanto,
+# non l'applicazione.
+#
+# PERCHE' ESISTE GIA' ORA. La fase 2 ha bisogno di Postgres, e installarlo a
+# mano sulla macchina di ciascuno significa due ambienti diversi entro una
+# settimana. Il file e' anche il punto di partenza della fase 3: quando si
+# containerizzera' l'API, si aggiunge un servizio qui invece di ricominciare.
+
+name: ai-naples
+
+services:
+  db:
+    # pgvector/pgvector e non postgres: e' l'immagine ufficiale di Postgres con
+    # pgvector gia' compilato dentro. Serve piu' avanti per la ricerca
+    # semantica sui dati di partita (ADR 0002); installarlo ora costa zero e
+    # evita di dover ricreare il volume quando servira'.
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ainaples}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?serve POSTGRES_PASSWORD, copia .env.example in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-ainaples}
+      # Le collazioni deterministiche evitano che l'ordinamento cambi con la
+      # locale del sistema: due macchine con locale diversa darebbero indici
+      # diversi sulla stessa tabella.
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=und-x-icu"
+    ports:
+      # La porta sull'HOST e' configurabile di proposito: se un giorno c'e'
+      # gia' un altro Postgres in ascolto, si cambia POSTGRES_PORT nel proprio
+      # .env invece di modificare questo file. Scoprire il conflitto con un
+      # "connection refused" verso il database sbagliato e' il modo peggiore.
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      # Gli script in initdb.d girano SOLO alla prima creazione del volume.
+      # Non sono migrazioni e non vanno usati come tali: le migrazioni sono
+      # Alembic. Qui stanno solo le estensioni, che devono esserci prima che
+      # la prima migrazione parta.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # `pg_isready` da solo dice che il processo risponde, non che il database
+      # accetta query: durante l'init il server e' su ma il db non c'e' ancora.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ainaples} -d ${POSTGRES_DB:-ainaples}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  mail:
+    # Mailpit e non MailHog: MailHog e' fermo dal 2020, Mailpit e' il suo
+    # successore mantenuto e ha un'API REST, quindi un test puo' CHIEDERE se
+    # il messaggio e' arrivato invece di fidarsi che l'invio non abbia sollevato.
+    #
+    # NON E' UN PROVIDER, E NON DEVE DIVENTARLO. Cattura tutto e non consegna
+    # niente: e' esattamente cio' che serve in sviluppo, dove mandare per
+    # sbaglio una mail vera a un indirizzo di prova e' un incidente possibile.
+    # In produzione al suo posto va un provider vero, e l'applicazione non se
+    # ne accorge: cambia solo AI_NAPLES_SMTP_* (vedi .env.example).
+    image: axllent/mailpit:latest
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"   # SMTP: qui scrive l'applicazione
+      - "${MAILPIT_UI_PORT:-8025}:8025"     # web UI + API REST: qui si legge
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    volumes:
+      - mail_data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  mail_data:

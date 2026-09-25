@@ -46,3 +46,6 @@ frontend/.env
 # Artefatti di seleniumbase: lock e download temporanei dello scraper
 # WhoScored. Si rigenerano a ogni avvio del browser.
 downloaded_files/
+
+# I segreti veri: fuori dal repository (regola di sicurezza n.1).
+.env
