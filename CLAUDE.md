@@ -7,6 +7,7 @@ Contesto operativo per Claude Code.
 | `README.md` | cos'e' il progetto, installazione, architettura, contribuzione |
 | `docs/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
 | `docs/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, con stato |
+| `docs/ROADMAP.md` | le fasi del progetto, chi le fa, quando si chiudono |
 | `docs/adr/` | decisioni di architettura, una per file |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
 | **`docs/COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
