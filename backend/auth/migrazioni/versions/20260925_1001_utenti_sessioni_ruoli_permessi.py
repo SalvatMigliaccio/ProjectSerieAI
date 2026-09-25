@@ -1,7 +1,7 @@
 """utenti sessioni ruoli permessi
 
 Revision ID: cd1d08a4ce6a
-Revises: 
+Revises:
 Create Date: 2026-09-25 10:01:32.038086
 """
 from __future__ import annotations
@@ -11,6 +11,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
 revision: str = 'cd1d08a4ce6a'
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
