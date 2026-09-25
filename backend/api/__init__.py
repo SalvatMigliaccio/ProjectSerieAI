@@ -289,18 +289,19 @@ def create_app() -> FastAPI:
                                f"'python -m goalmodel.prediction.close_round'."},
         )
 
+    app.include_router(routes.public)
     app.include_router(routes.router)
 
-    # Mounted only when the auth extra is installed. Someone running the
-    # read-only API on public data should not need psycopg and argon2 to start
-    # it: the import lives here so its absence degrades to "no auth routes"
-    # rather than a crash at startup.
-    try:
-        from backend.auth import routes as auth_routes
-    except ImportError as exc:
-        log.info("auth routes not mounted (%s): install the 'auth' extra", exc)
-    else:
-        app.include_router(auth_routes.router)
+    # FAIL CLOSED. This import is NOT optional, and an earlier draft of it was
+    # — wrapped in try/except ImportError so the API could still start without
+    # the `auth` extra. That is exactly the wrong failure mode now that the
+    # data routes require a permission: a missing dependency would take the
+    # guards with it and serve everything to anyone, while looking healthy.
+    #
+    # A broken install must stop the process, not quietly widen access.
+    from backend.auth import routes as auth_routes
+
+    app.include_router(auth_routes.router)
 
     _assert_read_only_routes(app)
     return app

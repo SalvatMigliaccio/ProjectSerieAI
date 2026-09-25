@@ -25,6 +25,7 @@ from .deps import (
     CurrentSession,
     CurrentUser,
     Db,
+    Mailer,
     clear_session_cookie,
     client_ip,
     set_session_cookie,
@@ -101,9 +102,8 @@ def _limit(limiter, request: Request, what: str) -> None:
 # --- signup and verification ------------------------------------------------
 
 @router.post("/signup", status_code=status.HTTP_202_ACCEPTED)
-def signup(payload: Credentials, request: Request,
-           db: Db,
-           cfg: Cfg) -> dict:
+def signup(payload: Credentials, request: Request, db: Db, cfg: Cfg,
+           sender: Mailer) -> dict:
     """
     Always 202, whether or not the address is already registered.
 
@@ -113,12 +113,12 @@ def signup(payload: Credentials, request: Request,
     """
     _limit(signup_limiter, request, "signup")
     try:
-        service.sign_up(db, payload.email, payload.password, cfg=cfg,
+        service.sign_up(db, payload.email, payload.password, cfg=cfg, sender=sender,
                         ip=client_ip(request),
                         user_agent=request.headers.get("user-agent"))
     except WeakPassword as exc:
         # The only detail worth returning: the caller must be able to fix it.
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return {"detail": ACCEPTED}
 
 
@@ -185,12 +185,11 @@ def me(user: CurrentUser) -> Identity:
 # --- password ---------------------------------------------------------------
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
-def forgot_password(payload: EmailOnly, request: Request,
-                    db: Db,
-                    cfg: Cfg) -> dict:
+def forgot_password(payload: EmailOnly, request: Request, db: Db, cfg: Cfg,
+                    sender: Mailer) -> dict:
     """Always 202. A 404 here would make this an address checker."""
     _limit(reset_limiter, request, "forgot-password")
-    service.request_reset(db, payload.email, cfg=cfg, ip=client_ip(request),
+    service.request_reset(db, payload.email, cfg=cfg, sender=sender, ip=client_ip(request),
                           user_agent=request.headers.get("user-agent"))
     return {"detail": ACCEPTED}
 
@@ -211,7 +210,7 @@ def reset_password(payload: ResetPayload, request: Request,
     except service.InvalidToken as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return {"detail": "password changed: sign in again"}
 
 
@@ -226,5 +225,5 @@ def change_password(payload: ChangePayload,
     except service.AccessDenied as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return Response(status_code=status.HTTP_204_NO_CONTENT)

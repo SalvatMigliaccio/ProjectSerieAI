@@ -41,6 +41,40 @@ from goalmodel import config
 
 client = TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def _signed_in():
+    """
+    Every test in this file calls the API as a signed-in user.
+
+    WHY AN OVERRIDE RATHER THAN A REAL SIGN-IN. These tests are about payload
+    shapes, caching and the read-only guarantees — not about authentication,
+    which has its own files. Making each one create an account and verify an
+    email would need Postgres for tests that otherwise touch only parquet and
+    CSV, and would couple this file to a flow it is not checking.
+
+    `current_user` is the seam: `require_permission` depends on it, so
+    replacing it grants the request whatever this stub says it holds. The
+    permission names are the real ones, so a route asking for a permission
+    that does not exist here still fails.
+    """
+    from backend.auth.deps import current_user
+    from backend.auth.models import Permission, Role, User
+
+    everything = Role(
+        name="test", description="all permissions, in memory only",
+        permissions=[Permission(name=n) for n in
+                     ("data:read", "picks:read", "users:manage", "system:manage")],
+    )
+    stub = User(email="test@example.com", password_hash="unused", status="active")
+    stub.roles = [everything]
+
+    app.dependency_overrides[current_user] = lambda: stub
+    try:
+        yield stub
+    finally:
+        app.dependency_overrides.pop(current_user, None)
+
 SEASON = "2026-27"
 
 REQUIRED_MATCH_FIELDS = [

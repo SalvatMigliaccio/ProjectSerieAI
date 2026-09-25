@@ -15,12 +15,14 @@ tier is added. Roles are how permissions are granted, not what is checked.
 
 from __future__ import annotations
 
+import ipaddress
 from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
+from . import mail as mail_mod
 from . import service
 from .db import request_session
 from .models import User, UserSession
@@ -33,15 +35,32 @@ def config(request: Request) -> Settings:
 
 def client_ip(request: Request) -> str | None:
     """
-    The caller's address, trusting a proxy header only when told to.
+    The caller's address, or `None` when it is not one.
 
-    `X-Forwarded-For` is trivially forged by the client. Behind a reverse proxy
-    it is the only way to see the real address; exposed directly it is a way to
-    poison the audit log and dodge any per-IP limit. Reading it is therefore a
-    deployment decision, and phase 3 will make it an explicit setting rather
-    than something this function guesses.
+    THE VALIDATION IS NOT DEFENSIVE PROGRAMMING, IT IS A BUG THAT HAPPENED.
+    `auth_events.ip` is an `INET` column, so a value Postgres cannot parse
+    makes the INSERT fail — and because the audit row is written inside the
+    sign-in transaction, an unparseable address does not lose a log line, it
+    takes **authentication** down. Starlette's TestClient reports the host as
+    the literal string `testclient`, which is how this surfaced; a reverse
+    proxy passing a hostname, or a unix socket, would do the same in
+    production.
+
+    Best-effort context must never be load-bearing: if it is not an address,
+    it is `None` and the event is still recorded.
+
+    `X-Forwarded-For` is deliberately NOT read here. It is trivially forged by
+    the client, so trusting it without a proxy in front is a way to poison the
+    audit log and dodge any per-address limit. Reading it is a deployment
+    decision, and phase 3 will make it an explicit setting rather than
+    something this function guesses.
     """
-    return request.client.host if request.client else None
+    if request.client is None:
+        return None
+    try:
+        return str(ipaddress.ip_address(request.client.host))
+    except ValueError:
+        return None
 
 
 # Declared as Annotated aliases rather than `= Depends(...)` defaults: it is
@@ -49,6 +68,21 @@ def client_ip(request: Request) -> str | None:
 # call in a default argument is a real footgun everywhere except here.
 Db = Annotated[Session, Depends(request_session)]
 Cfg = Annotated["Settings", Depends(config)]
+
+
+def mail_sender(cfg: Cfg) -> mail_mod.Sender:
+    """
+    How email leaves the process.
+
+    A dependency rather than a module-level default so tests can swap in
+    `InMemorySender` and read what was sent. Without the seam, testing the
+    signup route means either talking to a real relay or asserting nothing
+    about the message.
+    """
+    return mail_mod.sender(cfg)
+
+
+Mailer = Annotated[mail_mod.Sender, Depends(mail_sender)]
 
 
 def current_session(request: Request, db: Db, cfg: Cfg) -> UserSession:
