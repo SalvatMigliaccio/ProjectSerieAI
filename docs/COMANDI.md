@@ -470,13 +470,14 @@ uscito.
 
 ## 7ter. API in sola lettura sul track record
 
-**Dove sta.** Monorepo: `backend/api/` contiene l'API, `src/` resta la
-pipeline. La dipendenza e' a senso unico — `backend` importa `src.config`,
-`src.rounds`, `src.predict`, `src.backtest_log`, `src.evaluate` e
-`src.models.baseline`, in sola lettura; `src` non sa che il backend esiste.
-Il frontend andra' in una cartella sua accanto a queste due. **Tutti i comandi
-si lanciano dalla radice del repository**, dove `src` e `backend` sono
-entrambi importabili.
+**Dove sta.** Monorepo: `backend/api/` contiene l'API, `src/goalmodel/` la
+pipeline. La dipendenza e' a senso unico — `backend` importa `goalmodel.config`,
+`goalmodel.schema`, `goalmodel.prediction.rounds`,
+`goalmodel.prediction.backtest_log`, `goalmodel.evaluation.evaluate`,
+`goalmodel.models.baseline` e `goalmodel.reporting.sezioni`, in sola lettura;
+`goalmodel` non sa che il backend esiste. **I due pacchetti si installano
+insieme** (`pip install -e ".[dev,api]"`): `goalmodel` sta in src-layout e senza
+installazione non e' importabile nemmeno dalla radice del repository.
 
 ```bash
 python -m backend.api --port 8000                          # http://127.0.0.1:8000/docs

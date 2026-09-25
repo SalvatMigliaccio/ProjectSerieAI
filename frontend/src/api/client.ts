@@ -132,7 +132,7 @@ async function get<T>(path: string): Promise<T> {
       url,
       hint:
         response.status === 503
-          ? "Il dato non è ancora stato prodotto: servono `python -m src.predict_round` e `python -m src.close_round`."
+          ? "Il dato non è ancora stato prodotto: servono `python -m goalmodel.prediction.predict_round` e `python -m goalmodel.prediction.close_round`."
           : null,
     });
   }
