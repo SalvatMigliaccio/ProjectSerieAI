@@ -1,14 +1,14 @@
 """
-Il motore e la sessione SQLAlchemy.
+SQLAlchemy engine and session.
 
-PERCHE' UN POOL E NON UNA CONNESSIONE PER RICHIESTA. Aprire una connessione a
-Postgres costa una manciata di millisecondi di handshake: per richiesta e'
-tempo speso a ogni chiamata. Il pool le riusa.
+WHY A POOL AND NOT A CONNECTION PER REQUEST. Opening a Postgres connection
+costs a handshake of a few milliseconds; per request that is paid on every
+call. The pool reuses them.
 
-`pool_pre_ping` non e' pessimismo: un database riavviato, o un firewall che
-chiude le connessioni inattive, lascia nel pool socket che sembrano vivi e
-falliscono alla prima query. Il ping costa una query banale e trasforma un
-errore casuale in una riconnessione.
+`pool_pre_ping` is not pessimism: a restarted database, or a firewall closing
+idle connections, leaves sockets in the pool that look alive and fail on the
+first query. The ping costs a trivial round trip and turns a random error into
+a reconnect.
 """
 
 from __future__ import annotations
@@ -22,40 +22,36 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from .settings import impostazioni
+from .settings import settings
 
 log = logging.getLogger("auth.db")
 
 
 @lru_cache(maxsize=1)
-def motore() -> Engine:
-    cfg = impostazioni()
+def engine() -> Engine:
     return create_engine(
-        cfg.database_url,
+        settings().database_url,
         pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
         pool_recycle=1800,
-        # Gli identificatori finiscono nei log di Postgres: un URL con la
-        # password dentro non deve comparirci.
-        hide_parameters=False,
         future=True,
     )
 
 
 @lru_cache(maxsize=1)
-def fabbrica_sessioni() -> sessionmaker[Session]:
-    # `expire_on_commit=False`: dopo il commit gli oggetti restano leggibili.
-    # Con il default, accedere a un attributo dopo il commit scatena una query
-    # nuova — e in una dipendenza FastAPI quella query cade fuori dalla
-    # sessione, sollevando `DetachedInstanceError` in un punto lontano.
-    return sessionmaker(bind=motore(), expire_on_commit=False, future=True)
+def session_factory() -> sessionmaker[Session]:
+    # `expire_on_commit=False`: objects stay readable after commit. With the
+    # default, touching an attribute post-commit fires a fresh query, and
+    # inside a FastAPI dependency that query lands outside the session and
+    # raises `DetachedInstanceError` somewhere far away.
+    return sessionmaker(bind=engine(), expire_on_commit=False, future=True)
 
 
 @contextmanager
-def sessione() -> Iterator[Session]:
-    """Una transazione: commit se esce bene, rollback se solleva."""
-    s = fabbrica_sessioni()()
+def session_scope() -> Iterator[Session]:
+    """One transaction: commit on clean exit, rollback on exception."""
+    s = session_factory()()
     try:
         yield s
         s.commit()
@@ -66,7 +62,7 @@ def sessione() -> Iterator[Session]:
         s.close()
 
 
-def sessione_richiesta() -> Iterator[Session]:
-    """Dipendenza FastAPI. Stessa semantica, forma che Depends si aspetta."""
-    with sessione() as s:
+def request_session() -> Iterator[Session]:
+    """FastAPI dependency. Same semantics, the shape `Depends` expects."""
+    with session_scope() as s:
         yield s

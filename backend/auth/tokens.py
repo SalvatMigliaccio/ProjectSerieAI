@@ -1,15 +1,15 @@
 """
-Token di sessione e token via mail: generazione e confronto.
+Session and email tokens: generation and comparison.
 
-UN SOLO PRINCIPIO, APPLICATO OVUNQUE: **quello che finisce nel database e' un
-hash; il valore in chiaro esiste solo nel cookie del browser o nel link dentro
-la mail.** Chi legge la tabella non puo' impersonare nessuno.
+ONE PRINCIPLE, APPLIED EVERYWHERE: **what reaches the database is a hash; the
+cleartext value exists only in the browser cookie or in the emailed link.**
+Whoever reads the table cannot impersonate anyone.
 
-PERCHE' SHA-256 QUI E argon2 PER LE PASSWORD. Sembra un'incoerenza e non lo e'.
-argon2 e' lento di proposito perche' una password ha poca entropia e va difesa
-dal brute force. Questi token hanno 256 bit da `secrets`: non c'e' niente da
-indovinare, e un hash lento verrebbe eseguito a ogni richiesta autenticata
-soltanto per rallentare il sito.
+WHY SHA-256 HERE AND argon2 FOR PASSWORDS. It looks inconsistent and is not.
+argon2 is deliberately slow because a password carries little entropy and must
+survive brute force. These tokens carry 256 bits from `secrets`: there is
+nothing to guess, and a slow hash would run on every authenticated request
+purely to slow the site down.
 """
 
 from __future__ import annotations
@@ -18,34 +18,34 @@ import hashlib
 import hmac
 import secrets
 
-# 32 byte = 256 bit. Anche potendo provare mille miliardi di token al secondo,
-# lo spazio non si esaurisce prima della fine del sistema solare.
-BYTE_DI_ENTROPIA = 32
+# 32 bytes = 256 bits. Even at a trillion guesses per second the space outlives
+# the system that stores it.
+ENTROPY_BYTES = 32
 
 
-def genera() -> tuple[str, str]:
+def generate() -> tuple[str, str]:
     """
-    Un token nuovo: `(in_chiaro, hash)`.
+    A fresh token: `(cleartext, hash)`.
 
-    Il chiamante manda `in_chiaro` all'utente e salva `hash`. Non esiste una
-    funzione che riporti indietro il valore in chiaro, ed e' voluto: se
-    servisse, vorrebbe dire che e' stato conservato da qualche parte.
+    The caller sends `cleartext` to the user and stores `hash`. There is no
+    function that turns a hash back into cleartext, by design: if one were
+    needed, the cleartext would have been kept somewhere.
     """
-    chiaro = secrets.token_urlsafe(BYTE_DI_ENTROPIA)
-    return chiaro, impronta(chiaro)
+    clear = secrets.token_urlsafe(ENTROPY_BYTES)
+    return clear, digest(clear)
 
 
-def impronta(token: str) -> str:
-    """SHA-256 esadecimale, 64 caratteri — quanto la colonna `token_hash`."""
+def digest(token: str) -> str:
+    """Hex SHA-256, 64 characters — the width of the `token_hash` column."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def combacia(token: str, hash_salvato: str) -> bool:
+def matches(token: str, stored_hash: str) -> bool:
     """
-    Confronto a tempo costante.
+    Constant-time comparison.
 
-    `==` su stringhe esce al primo byte diverso, quindi il tempo di risposta
-    dipende da quanti caratteri iniziali sono corretti. Su una rete rumorosa
-    e' difficile da sfruttare, ma il rimedio costa una riga.
+    `==` on strings returns at the first differing byte, so response time
+    depends on how many leading characters are right. Hard to exploit over a
+    noisy network, but the fix costs one line.
     """
-    return hmac.compare_digest(impronta(token), hash_salvato)
+    return hmac.compare_digest(digest(token), stored_hash)

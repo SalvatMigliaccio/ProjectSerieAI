@@ -1,20 +1,19 @@
 """
-La configurazione dell'autenticazione, letta dall'ambiente.
+Authentication configuration, read from the environment.
 
-PERCHE' DALL'AMBIENTE E NON DA UN FILE NEL REPOSITORY. E' la regola di
-sicurezza n.1: nessun segreto versionato, nemmeno in un file di esempio. In
-sviluppo le variabili arrivano da `.env`, che e' ignorato da git; in
-produzione dall'ambiente del servizio, che non passa mai da un file.
+WHY THE ENVIRONMENT AND NOT A FILE IN THE REPOSITORY. Security rule 1: no
+secret is ever versioned, not even in an example file. In development the
+values come from `.env`, which git ignores; in production from the service
+environment, which never touches a file.
 
-PERCHE' UN OGGETTO E NON `os.environ` SPARSO. Una variabile letta in sei punti
-e' sei posti da cui dimenticarsi un default, e un default diverso in due punti
-non da' errore: da' due comportamenti. Qui si legge una volta, si valida, e
-chi la usa riceve un valore gia' controllato.
+WHY AN OBJECT AND NOT `os.environ` SCATTERED AROUND. A variable read in six
+places is six places to forget a default, and two different defaults do not
+raise — they produce two behaviours. Here it is read once, validated once, and
+callers get a value that has already been checked.
 
-LA VALIDAZIONE CHE CONTA DAVVERO e' `controlla_produzione()`: dice di no
-all'avvio quando la configurazione e' insicura, invece di funzionare e basta.
-Una chiave di firma lasciata al valore di esempio non rompe niente — e' questo
-il problema.
+THE VALIDATION THAT ACTUALLY MATTERS is `production_problems()`: it refuses to
+start on an insecure configuration instead of just working. A signing key left
+at its example value breaks nothing — that is precisely the problem.
 """
 
 from __future__ import annotations
@@ -24,12 +23,12 @@ from functools import lru_cache
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Il valore che sta in `.env.example`. Se arriva fin qui, nessuno l'ha cambiato.
-CHIAVE_DI_ESEMPIO = "generane-una-con-secrets-token-urlsafe-64"
+# The value shipped in `.env.example`. If it reaches here, nobody changed it.
+EXAMPLE_KEY = "generate-one-with-secrets-token-urlsafe-64"
 
 
-class Impostazioni(BaseSettings):
-    """Tutto cio' che l'autenticazione ha bisogno di sapere dall'esterno."""
+class Settings(BaseSettings):
+    """Everything authentication needs to know from outside."""
 
     model_config = SettingsConfigDict(
         env_prefix="AI_NAPLES_",
@@ -40,33 +39,33 @@ class Impostazioni(BaseSettings):
 
     database_url: str = "postgresql+psycopg://ainaples:ainaples@127.0.0.1:5432/ainaples"
 
-    # Firma i token di verifica e di reset. Cambiarla li invalida tutti in
-    # blocco, ed e' anche il modo di annullarli in fretta se serve.
-    secret_key: SecretStr = SecretStr(CHIAVE_DI_ESEMPIO)
+    # Signs the verification and reset tokens. Rotating it invalidates them all
+    # at once, which is also how you revoke them in a hurry.
+    secret_key: SecretStr = SecretStr(EXAMPLE_KEY)
 
-    # --- sessioni -----------------------------------------------------------
-    # Due scadenze, non una. Quella di inattivita' butta fuori chi lascia il
-    # portatile aperto; quella assoluta limita il danno di un cookie rubato,
-    # che altrimenti resterebbe valido finche' qualcuno continua a usarlo.
-    sessione_inattivita_minuti: int = Field(default=60 * 12, ge=5)
-    sessione_durata_massima_ore: int = Field(default=24 * 14, ge=1)
-    cookie_nome: str = "ainaples_sessione"
+    # --- sessions -----------------------------------------------------------
+    # Two deadlines, not one. The idle one evicts whoever left the laptop open;
+    # the absolute one caps the damage of a stolen cookie, which would
+    # otherwise stay valid as long as someone keeps using it.
+    session_idle_minutes: int = Field(default=60 * 12, ge=5)
+    session_max_hours: int = Field(default=24 * 14, ge=1)
+    cookie_name: str = "ainaples_session"
     cookie_secure: bool = False
     cookie_domain: str | None = None
 
-    # --- difese sul login ---------------------------------------------------
-    # Il blocco e' sull'ACCOUNT, non sull'IP: un attacco distribuito cambia IP
-    # a ogni tentativo e un limite per IP non lo vedrebbe nemmeno.
-    tentativi_massimi: int = Field(default=8, ge=3)
-    blocco_minuti: int = Field(default=15, ge=1)
+    # --- login defences -----------------------------------------------------
+    # The lockout is per ACCOUNT, not per IP: a distributed attack rotates
+    # addresses on every attempt and a per-IP limit would never see it.
+    max_attempts: int = Field(default=8, ge=3)
+    lockout_minutes: int = Field(default=15, ge=1)
 
-    # --- token via mail -----------------------------------------------------
-    # Il reset dura poco: e' un'apertura temporanea sull'account, e una mail
-    # resta nella casella per sempre.
-    verifica_validita_ore: int = Field(default=48, ge=1)
-    reset_validita_minuti: int = Field(default=30, ge=5)
+    # --- emailed tokens -----------------------------------------------------
+    # Reset is short-lived: it is a temporary opening into the account, and an
+    # email sits in a mailbox forever.
+    verify_valid_hours: int = Field(default=48, ge=1)
+    reset_valid_minutes: int = Field(default=30, ge=5)
 
-    # --- posta --------------------------------------------------------------
+    # --- mail ---------------------------------------------------------------
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 1025
     smtp_user: str = ""
@@ -75,59 +74,58 @@ class Impostazioni(BaseSettings):
     smtp_from: str = "no-reply@ainaples.local"
     smtp_from_name: str = "AI Naples"
 
-    # Dove vive il frontend: serve a costruire i link dentro le mail.
+    # Where the frontend lives: used to build the links inside emails.
     public_url: str = "http://127.0.0.1:5173"
 
     @field_validator("smtp_security")
     @classmethod
-    def _sicurezza_nota(cls, v: str) -> str:
-        ammessi = {"none", "starttls", "ssl"}
-        if v not in ammessi:
-            raise ValueError(f"smtp_security deve essere uno di {sorted(ammessi)}, non '{v}'")
+    def _known_security(cls, v: str) -> str:
+        allowed = {"none", "starttls", "ssl"}
+        if v not in allowed:
+            raise ValueError(f"smtp_security must be one of {sorted(allowed)}, not '{v}'")
         return v
 
     @property
-    def mittente(self) -> str:
-        """`Nome <indirizzo>`, come lo vuole l'intestazione From."""
+    def sender(self) -> str:
+        """`Name <address>`, as the From header wants it."""
         return f"{self.smtp_from_name} <{self.smtp_from}>" if self.smtp_from_name else self.smtp_from
 
-    def controlla_produzione(self) -> list[str]:
+    def production_problems(self) -> list[str]:
         """
-        I problemi che in produzione non sono opinioni.
+        The problems that are not a matter of taste in production.
 
-        Restituisce una lista invece di sollevare: chi chiama decide se
-        fermarsi (l'avvio dell'API) o solo avvisare (un comando di sviluppo).
-        Restituire l'elenco COMPLETO e non il primo problema e' voluto — chi
-        sta configurando un deploy vuole sapere tutto adesso, non scoprirne
-        uno per riavvio.
+        Returns a list instead of raising: the caller decides whether to stop
+        (API startup) or merely warn (a development command). Returning the
+        COMPLETE list rather than the first problem is deliberate — whoever is
+        configuring a deployment wants all of it now, not one per restart.
         """
-        problemi = []
-        if self.secret_key.get_secret_value() == CHIAVE_DI_ESEMPIO:
-            problemi.append(
-                "AI_NAPLES_SECRET_KEY e' ancora quella di esempio. Generane una: "
+        problems = []
+        if self.secret_key.get_secret_value() == EXAMPLE_KEY:
+            problems.append(
+                "AI_NAPLES_SECRET_KEY is still the example value. Generate one: "
                 'python -c "import secrets; print(secrets.token_urlsafe(64))"'
             )
         if len(self.secret_key.get_secret_value()) < 32:
-            problemi.append("AI_NAPLES_SECRET_KEY e' piu' corta di 32 caratteri")
+            problems.append("AI_NAPLES_SECRET_KEY is shorter than 32 characters")
         if not self.cookie_secure:
-            problemi.append(
-                "AI_NAPLES_COOKIE_SECURE=0: il cookie di sessione viaggerebbe "
-                "anche su http. In produzione va 1."
+            problems.append(
+                "AI_NAPLES_COOKIE_SECURE=0: the session cookie would travel "
+                "over plain http too. It must be 1 in production."
             )
         if self.smtp_security == "none" and self.smtp_host not in ("127.0.0.1", "localhost", "mail"):
-            problemi.append(
-                f"SMTP verso {self.smtp_host} senza cifratura: credenziali e "
-                f"link di reset passerebbero in chiaro. Usa starttls o ssl."
+            problems.append(
+                f"SMTP to {self.smtp_host} without encryption: credentials and "
+                f"reset links would cross the network in the clear. Use starttls or ssl."
             )
         if self.public_url.startswith("http://") and "127.0.0.1" not in self.public_url:
-            problemi.append(
-                f"AI_NAPLES_PUBLIC_URL e' http: i link di verifica e di reset "
-                f"finirebbero in chiaro nelle mail ({self.public_url})"
+            problems.append(
+                f"AI_NAPLES_PUBLIC_URL is http: verification and reset links "
+                f"would be emailed in the clear ({self.public_url})"
             )
-        return problemi
+        return problems
 
 
 @lru_cache(maxsize=1)
-def impostazioni() -> Impostazioni:
-    """Lette una volta sola per processo."""
-    return Impostazioni()
+def settings() -> Settings:
+    """Read once per process."""
+    return Settings()

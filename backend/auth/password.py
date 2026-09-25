@@ -1,18 +1,18 @@
 """
-Hashing delle password con argon2id.
+Password hashing with argon2id.
 
-PERCHE' argon2id E NON bcrypt. bcrypt tronca in silenzio a 72 byte: due
-password lunghe che condividono i primi 72 caratteri sono la stessa password,
-e non lo dice nessuno. argon2id inoltre e' *memory-hard* — un attaccante con
-GPU o ASIC non guadagna gli ordini di grandezza che guadagna su bcrypt, perche'
-il collo di bottiglia e' la RAM per tentativo, non i cicli.
+WHY argon2id AND NOT bcrypt. bcrypt silently truncates at 72 bytes: two long
+passwords sharing their first 72 characters are the same password, and nothing
+says so. argon2id is also memory-hard — an attacker with GPUs or ASICs does
+not gain the orders of magnitude they gain against bcrypt, because the
+bottleneck is RAM per attempt rather than cycles.
 
-PERCHE' NON SHA-256 CON SALT. Un hash generico e' veloce di proposito, ed e'
-esattamente la proprieta' sbagliata qui: serve lentezza calibrata.
+WHY NOT SALTED SHA-256. A general-purpose hash is fast by design, which is
+exactly the wrong property here: what is needed is calibrated slowness.
 
-IL RE-HASH NON E' UN DETTAGLIO. I parametri si alzano col tempo. Senza
-`va_riaggiornata`, chi si e' registrato due anni fa resta sui parametri di
-allora per sempre, e l'aggiornamento protegge solo gli iscritti nuovi.
+REHASHING IS NOT A DETAIL. Parameters get raised over time. Without
+`needs_rehash`, whoever signed up two years ago keeps the parameters of two
+years ago forever, and raising them protects only new accounts.
 """
 
 from __future__ import annotations
@@ -25,10 +25,10 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 
 log = logging.getLogger("auth.password")
 
-# OWASP Password Storage Cheat Sheet, profilo argon2id: 19 MiB, 2 iterazioni,
-# parallelismo 1. Costa ~50-100 ms per verifica su hardware comune: abbastanza
-# da rendere il brute force costoso, abbastanza poco da non diventare un modo
-# di mettere in ginocchio il server mandando richieste di login.
+# OWASP Password Storage Cheat Sheet, argon2id profile: 19 MiB, 2 iterations,
+# parallelism 1. That is ~50-100 ms per verification on ordinary hardware:
+# enough to make brute force expensive, little enough that sign-in does not
+# become a way to bring the server down with a handful of requests.
 _HASHER = PasswordHasher(
     time_cost=2,
     memory_cost=19 * 1024,
@@ -37,73 +37,69 @@ _HASHER = PasswordHasher(
     salt_len=16,
 )
 
-# Lunghezza minima e non un regolamento su maiuscole e cifre: le regole di
-# composizione spingono verso "Password1!" e riducono l'entropia reale invece
-# di aumentarla. NIST SP 800-63B le sconsiglia esplicitamente.
-LUNGHEZZA_MINIMA = 12
+# A minimum length, not a rulebook about uppercase and digits: composition
+# rules push people towards "Password1!" and lower real entropy instead of
+# raising it. NIST SP 800-63B advises against them explicitly.
+MIN_LENGTH = 12
 
-# argon2 non tronca, ma senza un tetto una password da 10 MB diventa un modo
-# di consumare CPU e RAM del server con una sola richiesta.
-LUNGHEZZA_MASSIMA = 1024
+# argon2 does not truncate, but without a ceiling a 10 MB password is a way to
+# burn server CPU and RAM with a single request.
+MAX_LENGTH = 1024
 
-# Hash di una password che non usera' mai nessuno. Serve a `verifica_fittizia`.
-_FITTIZIO = _HASHER.hash("password inesistente per il confronto a vuoto")
-
-
-class PasswordDebole(ValueError):
-    """La password non rispetta i requisiti minimi."""
+# The hash of a password nobody will ever use. Feeds `dummy_verify`.
+_DUMMY = _HASHER.hash("nonexistent password used for the empty comparison")
 
 
-def controlla_robustezza(password: str) -> None:
-    """Solleva `PasswordDebole` con un messaggio che dice cosa fare."""
-    if len(password) < LUNGHEZZA_MINIMA:
-        raise PasswordDebole(
-            f"la password deve essere lunga almeno {LUNGHEZZA_MINIMA} caratteri"
-        )
-    if len(password) > LUNGHEZZA_MASSIMA:
-        raise PasswordDebole(
-            f"la password non puo' superare {LUNGHEZZA_MASSIMA} caratteri"
-        )
+class WeakPassword(ValueError):
+    """The password does not meet the minimum requirements."""
 
 
-def cifra(password: str) -> str:
-    controlla_robustezza(password)
+def check_strength(password: str) -> None:
+    """Raise `WeakPassword` with a message that says what to do."""
+    if len(password) < MIN_LENGTH:
+        raise WeakPassword(f"the password must be at least {MIN_LENGTH} characters long")
+    if len(password) > MAX_LENGTH:
+        raise WeakPassword(f"the password cannot exceed {MAX_LENGTH} characters")
+
+
+def hash_password(password: str) -> str:
+    check_strength(password)
     return _HASHER.hash(password)
 
 
-def verifica(hash_salvato: str, password: str) -> bool:
+def verify(stored_hash: str, password: str) -> bool:
     """
-    `True` se la password corrisponde. Non solleva sulle password sbagliate.
+    `True` if the password matches. Does not raise on wrong passwords.
 
-    Un hash corrotto o in un formato ignoto vale come password sbagliata, ma
-    viene registrato: e' un difetto dei dati, non un tentativo fallito, e
-    confondere i due casi nasconde una corruzione del database.
+    A corrupt or unknown-format hash counts as a wrong password, but is logged:
+    that is a data defect rather than a failed attempt, and conflating the two
+    hides database corruption.
     """
     try:
-        return _HASHER.verify(hash_salvato, password)
+        return _HASHER.verify(stored_hash, password)
     except VerifyMismatchError:
         return False
     except (VerificationError, InvalidHashError):
-        log.warning("hash di password illeggibile: trattato come non valido")
+        log.warning("unreadable password hash: treated as invalid")
         return False
 
 
-def verifica_fittizia() -> None:
+def dummy_verify() -> None:
     """
-    Brucia lo stesso tempo di una verifica vera, su un hash finto.
+    Burn the same time as a real verification, against a fake hash.
 
-    PERCHE' SERVE. Se il login risponde subito quando l'email non esiste e
-    dopo 80 ms quando esiste, il tempo di risposta dice a un estraneo quali
-    indirizzi sono registrati. E' enumerazione degli account, e non serve
-    nessun errore esplicito per ottenerla: basta un cronometro.
+    WHY IT IS NEEDED. If sign-in answers instantly when the address does not
+    exist and after 80 ms when it does, response time tells a stranger which
+    addresses are registered. That is account enumeration, and it needs no
+    explicit error message — only a stopwatch.
     """
     with contextlib.suppress(VerifyMismatchError, VerificationError, InvalidHashError):
-        _HASHER.verify(_FITTIZIO, "qualunque cosa")
+        _HASHER.verify(_DUMMY, "anything at all")
 
 
-def va_riaggiornata(hash_salvato: str) -> bool:
-    """`True` se l'hash usa parametri superati e va rifatto al prossimo login."""
+def needs_rehash(stored_hash: str) -> bool:
+    """`True` if the hash uses outdated parameters and should be redone at next sign-in."""
     try:
-        return _HASHER.check_needs_rehash(hash_salvato)
+        return _HASHER.check_needs_rehash(stored_hash)
     except InvalidHashError:
         return True

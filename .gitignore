@@ -51,4 +51,4 @@ downloaded_files/
 .env
 
 # Alembic compila i template qui dentro.
-backend/auth/migrazioni/__pycache__/
+backend/auth/migrations/__pycache__/

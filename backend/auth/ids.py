@@ -1,21 +1,20 @@
 """
-UUID v7 come chiave primaria, con una via d'uscita per Python < 3.14.
+UUID v7 primary keys, with a fallback for Python < 3.14.
 
-PERCHE' v7 E NON v4. Un v4 e' casuale, quindi ogni inserimento cade in un
-punto qualsiasi dell'indice B-tree: le pagine si riempiono a meta' e l'indice
-di una tabella che cresce si frammenta. Un v7 ha il tempo nei primi 48 bit,
-quindi gli inserimenti sono quasi sempre in coda — lo stesso comportamento di
-una chiave seriale, ma senza rivelare quanti utenti ci sono ne' permettere di
-indovinare l'id del prossimo.
+WHY v7 AND NOT v4. A v4 is random, so every insert lands anywhere in the
+B-tree: pages fill halfway and the index of a growing table fragments. A v7
+carries the timestamp in its first 48 bits, so inserts are almost always at
+the tail — the same behaviour as a serial key, without revealing how many
+users exist or letting anyone guess the next id.
 
-PERCHE' NON UN INTERO SERIALE. Un id sequenziale esposto in un URL dice al
-mondo quanti utenti hai e rende enumerabile ogni risorsa. Su una tabella di
-account e' proprio l'informazione da non regalare.
+WHY NOT A SERIAL INTEGER. A sequential id in a URL tells the world how many
+users you have and makes every resource enumerable. On an accounts table that
+is exactly the information not to give away.
 
-PERCHE' NON `uuidv7()` DI POSTGRES. Arriva con Postgres 18; qui gira la 17.
-Generarlo nell'applicazione ha comunque un vantaggio che si tiene anche dopo:
-l'id esiste PRIMA dell'INSERT, quindi si puo' scrivere un evento di audit che
-lo nomina nella stessa transazione, senza un giro di RETURNING.
+WHY NOT POSTGRES `uuidv7()`. It ships with Postgres 18; this runs 17.
+Generating it in the application keeps an advantage even after that: the id
+exists BEFORE the INSERT, so an audit row naming it can be written in the same
+transaction without a RETURNING round trip.
 """
 
 from __future__ import annotations
@@ -24,21 +23,20 @@ import os
 import time
 import uuid
 
-_NATIVA = hasattr(uuid, "uuid7")
+_NATIVE = hasattr(uuid, "uuid7")
 
 
 def uuid7() -> uuid.UUID:
-    """Un UUID v7. Usa quella della libreria standard dove c'e' (3.14+)."""
-    if _NATIVA:
+    """A UUID v7. Uses the standard library one where available (3.14+)."""
+    if _NATIVE:
         return uuid.uuid7()
 
-    # RFC 9562 sezione 5.7: 48 bit di millisecondi Unix, 4 di versione, 12 di
-    # casuale, 2 di variante, 62 di casuale. La monotonia dentro lo stesso
-    # millisecondo non e' garantita da questa versione di ripiego, e va bene:
-    # serve che gli id crescano nel tempo, non che siano un contatore.
-    ms = int(time.time() * 1000) & 0xFFFFFFFFFFFF          # 48 bit
-    caso = int.from_bytes(os.urandom(10), "big")            # 80 bit di entropia
-    rand_a = (caso >> 62) & 0xFFF                           # 12 bit
-    rand_b = caso & ((1 << 62) - 1)                         # 62 bit
-    valore = (ms << 80) | (0x7 << 76) | (rand_a << 64) | (0b10 << 62) | rand_b
-    return uuid.UUID(int=valore)
+    # RFC 9562 section 5.7: 48 bits of Unix milliseconds, 4 of version, 12
+    # random, 2 of variant, 62 random. This fallback does not guarantee
+    # monotonicity within the same millisecond, which is fine: we need ids
+    # that grow over time, not a counter.
+    ms = int(time.time() * 1000) & 0xFFFFFFFFFFFF          # 48 bits
+    noise = int.from_bytes(os.urandom(10), "big")           # 80 bits of entropy
+    rand_a = (noise >> 62) & 0xFFF                          # 12 bits
+    rand_b = noise & ((1 << 62) - 1)                        # 62 bits
+    return uuid.UUID(int=(ms << 80) | (0x7 << 76) | (rand_a << 64) | (0b10 << 62) | rand_b)
