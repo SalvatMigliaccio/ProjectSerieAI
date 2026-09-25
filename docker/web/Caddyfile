@@ -1,0 +1,58 @@
+# Caddy serves the built dashboard and forwards /api to the API container.
+#
+# ONE ORIGIN FOR BOTH, and that is the point. With the browser talking to a
+# single host, the session cookie is same-origin: no CORS preflight, no
+# `allow_credentials` subtleties, and no second hostname to keep in the allowed
+# list. It is also what makes SameSite=Lax do its job.
+#
+# DOMAIN comes from the environment. Set it to a real hostname and Caddy gets a
+# Let's Encrypt certificate by itself; leave it as `localhost` and it issues a
+# local one, which is enough to test that COOKIE_SECURE=1 behaves.
+
+{$DOMAIN:localhost} {
+	encode zstd gzip
+
+	# The API first: a path match beats the file server below it.
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# Without these the application sees the proxy as the client, and
+			# every audit row records Caddy's address instead of the caller's.
+			# `client_ip` still refuses anything that is not an IP.
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	handle /openapi.json {
+		reverse_proxy api:8000
+	}
+
+	handle {
+		root * /srv
+		# The dashboard uses HashRouter, so every real path is index.html and
+		# the routing happens after the fragment. `try_files` keeps a deep link
+		# working anyway if that ever changes.
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		# Clickjacking: the dashboard has nothing to embed and nothing that
+		# should be embedded.
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# HSTS. Only meaningful on a real domain; harmless on localhost because
+		# browsers ignore it there.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# The bundle loads fonts from its own origin and talks only to its own
+		# API, so the policy can be strict. 'unsafe-inline' for styles is what
+		# the build emits; tightening it needs a nonce and a build change.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+
+		-Server
+	}
+}

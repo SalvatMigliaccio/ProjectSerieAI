@@ -1,0 +1,98 @@
+# The full stack for a VPS you control.
+#
+# HOW IT DIFFERS FROM `compose.yaml`. That file runs the two services a
+# developer needs beside their own processes — Postgres and a mail catcher.
+# This one runs the product: the API, the dashboard behind Caddy, the database,
+# and nothing that catches mail, because in production mail must actually leave.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# WHAT IS DELIBERATELY NOT HERE: the pipeline. `predict_round` and
+# `close_round` write the track record, and a prediction is worth something
+# only if a local process wrote it before kick-off. They stay on the host,
+# under cron or run by hand; this stack only ever READS what they produce.
+
+name: ai-naples-prod
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    # NO PORTS. The database is reachable only from the compose network. A
+    # Postgres published on a public VPS is found by scanners within hours, and
+    # a mapped port is the single most common way that happens by accident.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    environment:
+      # Inside the network the host is the service name, never 127.0.0.1 —
+      # which in a container is the container itself.
+      AI_NAPLES_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      AI_NAPLES_SECRET_KEY: ${AI_NAPLES_SECRET_KEY:?generate one, do not reuse the example}
+      # Behind Caddy the connection is HTTPS, so the cookie must carry Secure.
+      AI_NAPLES_COOKIE_SECURE: "1"
+      AI_NAPLES_PUBLIC_URL: ${AI_NAPLES_PUBLIC_URL:?the address that goes into emailed links}
+      AI_NAPLES_CORS_ORIGINS: ${AI_NAPLES_PUBLIC_URL}
+      AI_NAPLES_SMTP_HOST: ${AI_NAPLES_SMTP_HOST:?a real provider, not Mailpit}
+      AI_NAPLES_SMTP_PORT: ${AI_NAPLES_SMTP_PORT:-587}
+      AI_NAPLES_SMTP_USER: ${AI_NAPLES_SMTP_USER:-}
+      AI_NAPLES_SMTP_PASSWORD: ${AI_NAPLES_SMTP_PASSWORD:-}
+      AI_NAPLES_SMTP_SECURITY: ${AI_NAPLES_SMTP_SECURITY:-starttls}
+      AI_NAPLES_SMTP_FROM: ${AI_NAPLES_SMTP_FROM:?the From address}
+    volumes:
+      # READ-ONLY, both of them, and for different reasons.
+      #
+      # `track_record/` is the one thing in this project that does not
+      # regenerate: a prediction has to be written before kick-off by a process
+      # that did not know the result. `:ro` makes "no HTTP route can write the
+      # registry" true at the kernel, not only in the application guards.
+      #
+      # `data/` is regenerable, but the API has no business writing it either —
+      # the pipeline on the host owns it.
+      - ${TRACK_RECORD_DIR:-./track_record}:/srv/track_record:ro
+      - ${DATA_DIR:-./data}:/srv/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # No ports either: only Caddy talks to it.
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN:?the hostname Caddy should get a certificate for}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Certificates survive a rebuild. Without this, every deploy asks
+      # Let's Encrypt again and runs into the rate limit after a few tries.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

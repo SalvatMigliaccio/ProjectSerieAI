@@ -87,6 +87,8 @@ silenzioso renderebbe indistinguibile una regressione da un cambio di libreria.
 **Criterio di chiusura**: l'immagine parte da zero su una macchina pulita, la
 suite passa dentro il container, e nessun segreto compare in `docker history`.
 
+**Come si mette in produzione**: `docs/DEPLOY.md`.
+
 ## Fase 4 — modello di business
 
 Da aprire. Dipende dalla 2 (abbonamenti) e dalla 3 (qualcosa di deployabile).
