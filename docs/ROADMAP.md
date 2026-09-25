@@ -89,7 +89,14 @@ suite passa dentro il container, e nessun segreto compare in `docker history`.
 
 ## Fase 4 — modello di business
 
-Da aprire. Dipende dalla 2 (abbonamenti) e dalla 3 (qualcosa di deployabile).
+Bozza in `docs/MODELLO_DI_BUSINESS.md`. Dipende dalla 2 (abbonamenti) e dalla 3
+(qualcosa di deployabile).
+
+**Una cosa non dipende da nessuna delle due e va fatta per prima**: la verifica
+legale. Un servizio a pagamento di previsioni calcistiche in Italia sta in zona
+grigia rispetto al divieto di pubblicita' dei giochi con vincite in denaro, e
+i processori di pagamento hanno liste di attivita' ristrette. Scoprirlo dopo
+aver scritto il codice degli abbonamenti costa il codice.
 
 **Il vincolo che non cambia**: si mostrano le selezioni con la quota equa, mai
 valore atteso, puntata consigliata o "value". Non e' prudenza, e' aritmetica
