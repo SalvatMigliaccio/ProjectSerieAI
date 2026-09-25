@@ -31,6 +31,28 @@ def dati_presenti() -> bool:
     return DATASET.exists()
 
 
+def blocchi_mancanti() -> list[str]:
+    """
+    Quali blocchi di feature non sono stati costruiti.
+
+    PERCHE' NON BASTA `dati_presenti()`. Quella dice che `matches_master` c'e',
+    e per quasi tutti i test e' abbastanza. Ma alcuni confrontano l'INSIEME
+    delle colonne del dataset con il registro dei set, e quelli hanno bisogno
+    che ogni blocco sia stato costruito: con un blocco in meno falliscono su
+    una differenza di colonne che sembra una regressione del registro e non e'
+    altro che un parquet non ancora prodotto.
+
+    E' successo: il blocco GIOCATORI e' stato rinviato (serve ~7 ore di
+    WhoScored, vedi docs/ROADMAP.md) e due test sono diventati rossi senza che
+    niente fosse rotto. Un rosso che non corrisponde a un difetto e' peggio di
+    un test saltato: dopo due giorni nessuno lo guarda piu'.
+    """
+    if not dati_presenti():
+        return []
+    from goalmodel.features import registry
+    return [b.nome for b in registry.mancanti()]
+
+
 @pytest.fixture
 def tmp(tmp_path: Path) -> Path:
     """
@@ -47,11 +69,21 @@ def tmp(tmp_path: Path) -> Path:
 # risolto in DATASET, quindi dentro l'hook il modulo non serve.
 def pytest_collection_modifyitems(config, items: list[pytest.Item]) -> None:
     """Salta i test che chiedono data/ quando data/ non c'e'."""
-    if dati_presenti():
+    if not dati_presenti():
+        salta = pytest.mark.skip(
+            reason=f"serve {DATASET.name}: lancia l'ingestion (docs/COMANDI.md sezione 2)"
+        )
+        for item in items:
+            if "richiede_dati" in item.keywords:
+                item.add_marker(salta)
         return
-    salta = pytest.mark.skip(
-        reason=f"serve {DATASET.name}: lancia l'ingestion (docs/COMANDI.md sezione 2)"
-    )
-    for item in items:
-        if "richiede_dati" in item.keywords:
-            item.add_marker(salta)
+
+    mancanti = blocchi_mancanti()
+    if mancanti:
+        salta = pytest.mark.skip(
+            reason=f"blocchi non costruiti: {', '.join(mancanti)}. "
+                   f"Il dataset c'e' ma e' incompleto (docs/ROADMAP.md)"
+        )
+        for item in items:
+            if "richiede_dataset_completo" in item.keywords:
+                item.add_marker(salta)

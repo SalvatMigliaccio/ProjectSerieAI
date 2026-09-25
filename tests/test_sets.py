@@ -75,6 +75,7 @@ def test_set_disgiunti() -> None:
 
 
 @pytest.mark.richiede_dati
+@pytest.mark.richiede_dataset_completo
 def test_dataset_reale() -> None:
     """Ogni colonna candidata appartiene a un set, e BASE si ricostruisce esatto."""
     from goalmodel.evaluation.evaluate import load_dataset

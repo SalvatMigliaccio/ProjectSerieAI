@@ -38,7 +38,7 @@ def _dati():
     return train, test
 
 
-pytestmark = pytest.mark.richiede_dati
+pytestmark = [pytest.mark.richiede_dati, pytest.mark.richiede_dataset_completo]
 
 
 @pytest.fixture(scope="module")
