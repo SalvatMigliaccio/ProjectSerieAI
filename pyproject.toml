@@ -59,6 +59,29 @@ api = [
     "uvicorn[standard]>=0.27,<1",
 ]
 
+# L'autenticazione (fase 2). E' un extra a parte e non dentro `api` di
+# proposito: chi lancia l'API in sola lettura su dati pubblici non deve
+# installare un driver di database ne' una libreria di hashing. Quando la
+# fase 3 containerizzera' l'API, l'immagine installera' `api,auth`.
+auth = [
+    # psycopg 3 e non psycopg2: il modo binario evita che i float passino da
+    # una rappresentazione testuale. Conta quando i dati di partita
+    # migreranno (ADR 0002), perche' test_production_unchanged confronta
+    # bit a bit e un round-trip lossy lo farebbe fallire senza che il codice
+    # sia cambiato.
+    "psycopg[binary]>=3.2,<4",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.14,<2",
+    # argon2id. NON bcrypt: bcrypt tronca silenziosamente a 72 byte, quindi
+    # due password lunghe che condividono il prefisso sono la stessa password
+    # e nessuno se ne accorge mai.
+    "argon2-cffi>=23.1,<26",
+    # Firma dei token di verifica e di reset, con scadenza dentro il token.
+    "itsdangerous>=2.2,<3",
+    "email-validator>=2.2,<3",
+    "pydantic-settings>=2.7,<3",
+]
+
 [project.scripts]
 goalmodel = "goalmodel.cli:main"
 

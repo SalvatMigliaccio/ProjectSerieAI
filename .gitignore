@@ -49,3 +49,6 @@ downloaded_files/
 
 # I segreti veri: fuori dal repository (regola di sicurezza n.1).
 .env
+
+# Alembic compila i template qui dentro.
+backend/auth/migrazioni/__pycache__/
