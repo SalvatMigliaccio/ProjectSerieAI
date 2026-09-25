@@ -21,6 +21,7 @@ sono intatti. Questo e' un secondo modo di chiamarli, non un rimpiazzo.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 
 # comando -> (bersaglio, descrizione). Il bersaglio e' un modulo, e allora si
@@ -68,7 +69,65 @@ def _aiuto() -> str:
     )
 
 
+# I comandi che possono arrivare a soccerdata, e quindi al resolver di Go.
+# `ingest` direttamente; gli altri tre passano da `rounds.py`, che importa
+# `ingest` dentro una funzione per aggiornare i dati prima di agire.
+COMANDI_DI_RETE = frozenset({"ingest", "predict-round", "close-round", "rounds"})
+
+
+def _assicura_resolver_go(comando: str, argv: list[str]) -> None:
+    """
+    Ri-esegue il processo con GODEBUG=netdns=cgo, se serve e se non c'e' gia'.
+
+    PERCHE' UN RE-EXEC E NON UNA RIGA IN `__init__.py`. soccerdata scarica
+    Understat con `tls_requests`, che non e' Python: e' un binario Go caricato
+    come libreria condivisa, e il runtime Go legge GODEBUG **dall'ambiente del
+    processo catturato all'exec**. `os.environ[...]` da dentro Python non lo
+    raggiunge mai — verificato: impostarla come primissima istruzione, prima di
+    qualunque import, non ha alcun effetto, mentre la stessa variabile messa
+    nella shell funziona. L'unico punto in cui si puo' rimediare e' prima che
+    l'interprete parta, cioe' ri-eseguendolo.
+
+    COSA RISOLVE. Con la risoluzione "pura Go" quel binario interroga da solo i
+    nameserver di /etc/resolv.conf e qui fallisce su OGNI host — `example.com`
+    compreso — con `dial tcp: lookup ...: no such host`, mentre `getent`,
+    `nslookup` sullo stesso nameserver e `requests` risolvono senza problemi.
+    `netdns=cgo` fa passare Go da glibc, quindi da /etc/nsswitch.conf come
+    tutto il resto del sistema.
+
+    E' costata due diagnosi sbagliate: sembrava che Understat fosse
+    irraggiungibile da questa macchina. Non lo era, e non era nemmeno un
+    problema di Understat. `read_schedule()` funzionava solo dalla cache,
+    quindi il guasto sembrava pure intermittente.
+
+    Non tocca Windows (il problema e' del resolver di Go su Linux) e non
+    sovrascrive una scelta gia' fatta da chi lancia: se GODEBUG contiene gia'
+    un `netdns=`, quella vince e non si ri-esegue niente.
+    """
+    if sys.platform == "win32" or comando not in COMANDI_DI_RETE:
+        return
+    if "netdns=" in os.environ.get("GODEBUG", ""):
+        return
+
+    ambiente = {**os.environ,
+                "GODEBUG": ",".join(filter(None, (os.environ.get("GODEBUG"),
+                                                  "netdns=cgo")))}
+    # Il figlio trova `netdns=` gia' impostato e non ri-esegue a sua volta:
+    # la guardia sopra e' anche cio' che impedisce il ciclo infinito.
+    #
+    # S606 ("processo senza shell") e' proprio la forma che la regola di
+    # sicurezza n.4 impone: lista di argomenti, `sys.executable`, nessuna
+    # shell e nessuna interpolazione. Gli argomenti arrivano da `sys.argv` e
+    # non toccano mai un interprete di comandi.
+    os.execve(sys.executable,  # noqa: S606
+              [sys.executable, "-m", "goalmodel.cli", comando, *argv],
+              ambiente)
+
+
 def main(argv: list[str] | None = None) -> int:
+    # Solo l'invocazione vera da shell puo' ri-eseguirsi: i test chiamano
+    # `main([...])` con argv esplicito e non devono veder sparire il processo.
+    da_shell = argv is None
     argv = list(sys.argv[1:] if argv is None else argv)
 
     if not argv or argv[0] in ("-h", "--help", "help"):
@@ -87,6 +146,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"comando sconosciuto: '{comando}'{suggerimento}\n", file=sys.stderr)
         print(_aiuto(), file=sys.stderr)
         return 2
+
+    if da_shell:
+        _assicura_resolver_go(comando, resto)
 
     bersaglio, _ = COMANDI[comando]
     modulo, _, funzione = bersaglio.partition(":")
