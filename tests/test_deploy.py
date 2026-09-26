@@ -9,6 +9,8 @@ they fail the day someone else notices.
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from pathlib import Path
 
 import pytest
@@ -256,3 +258,38 @@ def test_alembic_ini_is_not_excluded_from_the_build_context() -> None:
     ignored = _lines(DOCKERIGNORE)
     assert "alembic.ini" not in ignored
     assert "*.ini" not in ignored
+
+
+def test_the_api_trusts_exactly_the_proxy_it_sits_behind() -> None:
+    """
+    Caddy sends X-Forwarded-For, but uvicorn believes it only from an address
+    in FORWARDED_ALLOW_IPS, whose default is 127.0.0.1 — nobody, behind a
+    container. The header was therefore dropped and every caller looked like
+    the proxy: audit rows recorded Caddy, and the per-address rate limiter
+    became a single global bucket, where twenty sign-in attempts from anyone
+    locked out everyone.
+
+    Nothing about that is visible in a response, which is why it is a test.
+    The three values have to agree, and they live in three places, so this
+    checks the agreement rather than any one of them:
+      - the API trusts the web container's address,
+      - the web container is pinned to it,
+      - and it is inside the subnet the stack declares.
+    """
+    body = PROD.read_text(encoding="utf-8")
+
+    trusted = re.search(r"FORWARDED_ALLOW_IPS: \$\{WEB_ADDRESS:-([\d.]+)\}", body)
+    pinned = re.search(r"ipv4_address: \$\{WEB_ADDRESS:-([\d.]+)\}", body)
+    subnet = re.search(r"subnet: \$\{COMPOSE_SUBNET:-([\d./]+)\}", body)
+    assert trusted and pinned and subnet, \
+        "the proxy-trust settings are not all in compose.prod.yaml"
+    assert trusted.group(1) == pinned.group(1), \
+        f"the API trusts {trusted.group(1)} but web is pinned to {pinned.group(1)}"
+    assert ipaddress.ip_address(pinned.group(1)) in ipaddress.ip_network(subnet.group(1)), \
+        f"{pinned.group(1)} is outside {subnet.group(1)}: the container will not start"
+
+    # And the proxy has to SET the header rather than append to it: appending
+    # would leave a client-supplied value in the list, which is the forgery
+    # this whole arrangement is supposed to close.
+    assert "header_up X-Forwarded-For {remote_host}" in CADDYFILE.read_text(encoding="utf-8"), \
+        "Caddy does not overwrite X-Forwarded-For with the real peer"

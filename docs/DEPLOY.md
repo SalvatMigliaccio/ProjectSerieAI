@@ -64,6 +64,19 @@ it, so take a dump first:
 docker compose -f compose.prod.yaml exec db pg_dump -U ainaples ainaples > backup.sql
 ```
 
+**If the network settings change, use `down` and then `up`, not `up -d`.** This
+is a one-off for the release that pinned the subnet, and it is worth knowing
+because of how it fails. `up -d` rebuilt the network and REWIRED the running
+containers into it instead of recreating them, which drops their service
+aliases: `db` stopped resolving, while the API still reported healthy — the
+healthcheck hits `/api/health`, which does not touch the database. The visible
+symptom was sign-in answering 500 with "failed to resolve host 'db'".
+
+```bash
+docker compose -f compose.prod.yaml down        # keeps the volumes
+docker compose -f compose.prod.yaml up -d --build
+```
+
 ## The pipeline, on the host
 
 Unchanged, and deliberately outside Docker:
@@ -81,22 +94,27 @@ HTTP can write either.
 - **One API worker.** The rate limiter counts in process memory, so two workers
   means two independent limiters and twice the configured limit. Raising it
   needs the limiter moved to Redis first; `backend/auth/ratelimit.py` says so.
-- **`X-Forwarded-For` is not trusted.** Caddy sets it, but the application
-  reads the socket address, so audit rows record the proxy. Fixing it properly
-  means an explicit "trusted proxy" setting rather than believing a header
-  anyone can send.
-- **`goalmodel`'s base dependencies are wider than the API needs**, and the
-  image no longer honours them. `pip install ".[api,auth]"` reached
-  `soccerdata -> seleniumbase -> PyAutoGUI`: synthetic input and screen
-  capture, inside an internet-facing container. It also brought LightGBM,
-  matplotlib, scikit-learn and statsmodels, none of which the API imports.
+- **The proxy is trusted by address, and only one address.** Caddy overwrites
+  `X-Forwarded-For` with the real peer, and uvicorn believes that header only
+  from `FORWARDED_ALLOW_IPS` — set to the web container's pinned address. Both
+  values and the subnet they live in are in `compose.prod.yaml`, and
+  `tests/test_deploy.py` fails if they stop agreeing.
 
-  The image now installs 13 named packages and adds `goalmodel` with
-  `--no-deps`, and the build fails if any of those four can be imported. 41
-  packages, 672 MB.
+  **The limit that remains**: this trusts whoever holds that address on the
+  compose network. That is Caddy today, and the API publishes no port, so
+  nothing outside the network can reach it to lie — but a second service added
+  to this stack is a service that could forge a caller's address. If that ever
+  happens, put the API on a network of its own with Caddy.
+- **The image is 726 MB, 46 packages, and that is close to the floor.** What
+  is left is pandas, numpy, scipy, pyarrow and scikit-learn, all of which the
+  API imports on the path that answers a request. Browser automation is gone —
+  `soccerdata -> seleniumbase -> PyAutoGUI` used to be installed here, which
+  put synthetic input and screen capture inside an internet-facing container —
+  and the build fails if any of it comes back.
 
-  **The proper fix is still open**: move ingestion and modelling out of
-  `goalmodel`'s base dependencies into extras, so nothing has to opt out of
-  them. That changes what `pip install goalmodel` gives every consumer,
-  including CI and the repo split, so it is a decision rather than a
-  Dockerfile edit.
+  It went away by splitting `goalmodel`'s dependencies rather than by opting
+  out of them: modelling is in `[ml]`, ingestion in `[ingest]`, and the image
+  installs `.[api,auth]`. An earlier version listed the packages by hand with
+  `--no-deps`, which was smaller and wrong: the list missed scikit-learn, the
+  build passed, and `/api/health` answered 500 because a route reaches
+  `models/baseline.py` through a lazy import.

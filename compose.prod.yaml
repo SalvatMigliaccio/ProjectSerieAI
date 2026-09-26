@@ -61,6 +61,18 @@ services:
       AI_NAPLES_SMTP_PASSWORD: ${AI_NAPLES_SMTP_PASSWORD:-}
       AI_NAPLES_SMTP_SECURITY: ${AI_NAPLES_SMTP_SECURITY:-starttls}
       AI_NAPLES_SMTP_FROM: ${AI_NAPLES_SMTP_FROM:?the From address}
+      # WHO IS ALLOWED TO SAY WHERE A REQUEST CAME FROM. uvicorn reads
+      # X-Forwarded-For only from an address in this list, and its default is
+      # 127.0.0.1 — which behind Caddy is nobody, so the header was being
+      # dropped and every caller looked like the proxy. That is not cosmetic:
+      # `auth_events.ip` recorded Caddy for every sign-in, and the per-address
+      # rate limiter put all users in ONE bucket, so twenty sign-in attempts in
+      # five minutes locked out everybody rather than one address.
+      #
+      # It is the web container's fixed address and nothing else. Trusting the
+      # whole subnet would also trust the database, and `*` would trust anyone
+      # who ever reaches port 8000 directly.
+      FORWARDED_ALLOW_IPS: ${WEB_ADDRESS:-172.31.240.10}
     volumes:
       # READ-ONLY, both of them, and for different reasons.
       #
@@ -108,6 +120,32 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+    networks:
+      # FIXED, because FORWARDED_ALLOW_IPS above has to name it. Docker hands
+      # out addresses in creation order, so without this it changes the day a
+      # service is added — and the symptom would be audit rows quietly going
+      # back to recording the proxy. It sits BELOW the dynamic range declared
+      # under `networks`, so no other container can be given it first; pinning
+      # an address inside that range fails to start with "Address already in
+      # use", which names the port layer and not the real conflict.
+      default:
+        ipv4_address: ${WEB_ADDRESS:-172.31.240.10}
+
+networks:
+  # The default network with a pinned subnet rather than a second network: one
+  # network is all this stack needs, and pinning it is what makes a fixed
+  # address possible. Deliberately outside Docker's default pool
+  # (172.17-172.20) so it does not collide with networks already on the host;
+  # override both this and WEB_ADDRESS together if it still clashes.
+  default:
+    ipam:
+      config:
+        - subnet: ${COMPOSE_SUBNET:-172.31.240.0/24}
+          # Dynamic addresses come from the upper half only, which leaves the
+          # lower half for the pinned one above. Without this split Docker
+          # allocates from the bottom in start order and hands a new service
+          # the address Caddy is supposed to keep.
+          ip_range: ${COMPOSE_IP_RANGE:-172.31.240.128/25}
 
 volumes:
   db_data:
