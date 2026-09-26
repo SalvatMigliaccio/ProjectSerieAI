@@ -15,19 +15,16 @@ percorso al momento della chiamata invece che dal default di `load_log`.
     python -m tests.test_report
 """
 
-import sys
 import tempfile
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src import predict as predict_mod  # noqa: E402
-from src import report  # noqa: E402
-from src.models.baseline import predictions_from_lambdas  # noqa: E402
+from goalmodel import config
+from goalmodel.models.baseline import predictions_from_lambdas
+from goalmodel.prediction import predict as predict_mod
+from goalmodel.reporting import report
 
 rng = np.random.default_rng(11)
 

@@ -1,0 +1,77 @@
+# CI: gira su ogni push e su ogni pull request, SENZA RETE verso le fonti dati
+# e senza `data/`, che non e' versionata. I test che hanno bisogno del dataset
+# vero sono marcati `richiede_dati` e si saltano da soli con un messaggio: e'
+# la differenza fra "qui non puo' girare" e "e' rotto".
+name: CI
+
+on:
+  push:
+    branches: [main, "refactor/**", "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+# Un push che arriva mentre la CI precedente gira la annulla: su un branch di
+# refactoring i push sono fitti e non serve tenere in coda run superate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Due sistemi operativi perche' il progetto si sviluppa su entrambi: uno
+    # su Linux, uno su Windows. Un test che passa solo su uno dei due e' un
+    # test che blocca meta' del team, e finora non c'era modo di accorgersene.
+    name: test ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,  python: "3.12" }   # il minimo dichiarato
+          - { os: ubuntu-latest,  python: "3.14" }   # l'ambiente di sviluppo
+          - { os: windows-latest, python: "3.14" }
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: installa uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: requirements.lock
+
+      - name: python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      # Dal lock, non da pyproject: e' il punto di A2. Installare risolvendo
+      # di nuovo vanificherebbe il lock e rimetterebbe in gioco la deriva di
+      # versione che fa fallire i confronti bit a bit.
+      - name: dipendenze dal lock
+        run: |
+          uv venv --python ${{ matrix.python }}
+          uv pip install -r requirements.lock
+          uv pip install -e . --no-deps
+
+      - name: lint
+        run: uv run ruff check .
+
+      - name: test
+        run: uv run pytest -q
+
+  lock-aggiornato:
+    # Se qualcuno cambia le dipendenze in pyproject e dimentica di
+    # ricompilare il lock, i due divergono in silenzio e l'ambiente
+    # riproducibile smette di esserlo. E' lo stesso difetto di B2 — uno stato
+    # condiviso che invecchia senza che niente lo segnali — quindi si verifica.
+    name: il lock corrisponde a pyproject
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: ricompila e confronta
+        run: |
+          uv pip compile pyproject.toml --universal --extra dev --extra api -o /tmp/atteso.lock --quiet
+          if ! diff -u requirements.lock /tmp/atteso.lock; then
+            echo "::error::requirements.lock non corrisponde a pyproject.toml."
+            echo "::error::Rigeneralo: uv pip compile pyproject.toml --universal --extra dev --extra api -o requirements.lock"
+            exit 1
+          fi

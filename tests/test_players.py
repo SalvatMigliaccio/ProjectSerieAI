@@ -12,16 +12,12 @@ Qui si conta a mano su una rosa di tre giocatori.
     python -m tests.test_players
 """
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src.features import players  # noqa: E402
+from goalmodel.features import players
 
 
 def rosa() -> pd.DataFrame:
@@ -106,7 +102,7 @@ def test_nomi_fra_fonti() -> None:
                                            "Ciro Immobile"]))
     b = players.normalizza_nome(pd.Series(["Rafael Leao", "Franco Vazquez",
                                            "Ciro  Immobile "]))
-    assert list(a) == list(b), list(zip(a, b))
+    assert list(a) == list(b), list(zip(a, b, strict=True))
     print("  accenti e spazi normalizzati fra le due fonti        ok")
 
 

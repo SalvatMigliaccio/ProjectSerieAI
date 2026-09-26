@@ -32,6 +32,6 @@ scelto guardando quelle stagioni. Non sono un track record e non sono
 versionate.
 
 `report.html` sta in questa cartella perche' e' la lettura del registro — lo
-scrive `python -m src.weekly` e lo rigenera `python -m src.report` — ma **non
+scrive `python -m goalmodel.prediction.weekly` e lo rigenera `goalmodel report` — ma **non
 e' versionato**: si ricostruisce dal CSV in due secondi, e una copia nuova a
 ogni settimana renderebbe illeggibile la storia del file che conta.

@@ -1,0 +1,2226 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Naples — track record API",
+    "description": "\nRead-only view over the Serie A prediction track record.\n\n**The production model is M1**: the bookmaker's opening line with the margin\nremoved. Fair odds and overround are exposed because they are descriptive;\nexpected value, stakes and betting advice are not exposed at all — an EV\ncomputed from M1's probabilities against the very odds they come from is\ncircular by construction, and measured to be negative on every single bet.\n\nWriting happens only from local scheduled commands, never over HTTP.\n",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/season/{season}": {
+      "get": {
+        "summary": "Season headline figures",
+        "operationId": "get_season_api_season__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeasonSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rounds/{season}": {
+      "get": {
+        "summary": "Every round with its state and archived RPS",
+        "operationId": "get_rounds_api_rounds__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Round"
+                  },
+                  "title": "Response Get Rounds Api Rounds  Season  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/rounds/{season}/{matchday}": {
+      "get": {
+        "summary": "Matches of one round",
+        "operationId": "get_round_api_rounds__season___matchday__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Match"
+                  },
+                  "title": "Response Get Round Api Rounds  Season   Matchday  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/matches/{season}": {
+      "get": {
+        "summary": "All matches of a season, filterable",
+        "operationId": "get_matches_api_matches__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "team",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Home or away, exact name",
+              "title": "Team"
+            },
+            "description": "Home or away, exact name"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "predicted | resolved | invalid",
+              "title": "Status"
+            },
+            "description": "predicted | resolved | invalid"
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD, inclusive",
+              "title": "From"
+            },
+            "description": "YYYY-MM-DD, inclusive"
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "YYYY-MM-DD, inclusive",
+              "title": "To"
+            },
+            "description": "YYYY-MM-DD, inclusive"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Match"
+                  },
+                  "title": "Response Get Matches Api Matches  Season  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/track-record/{season}": {
+      "get": {
+        "summary": "Cumulative RPS series and calibration",
+        "operationId": "get_track_record_api_track_record__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrackRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/standings/{season}": {
+      "get": {
+        "summary": "League table from played matches",
+        "description": "The table, computed from results — a fact, not a forecast.\n\nTied teams are separated head-to-head first, as Serie A does, and not by\ngoal difference: the shortcut produces a table that looks right and is\nwrong exactly when the standings matter.",
+        "operationId": "get_standings_api_standings__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Standings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/picks/{season}": {
+      "get": {
+        "summary": "The canonical M1 selections — no threshold to move",
+        "description": "The main line, and it takes no odds parameter on purpose.\n\nThese are the selections `predict_round` prints on Friday and the weekly\nreport shows, with `config.QUOTA_MINIMA_SELEZIONE` as the declared floor.\nThe band explorer (`/api/selections`) sits beside them as an adjustable\nsecond reading: if a threshold chosen in the interface could redefine the\nmain line, the track record would be measuring one thing while the\ndashboard advertised another.",
+        "operationId": "get_picks_api_picks__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Picks"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/selections/{season}": {
+      "get": {
+        "summary": "Markets priced under a ceiling on the odds",
+        "operationId": "get_selections_api_selections__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "max_odds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "maximum": 100.0,
+              "exclusiveMinimum": 1.0,
+              "description": "Ceiling on the FAIR odds, 1/p",
+              "default": 1.4,
+              "title": "Max Odds"
+            },
+            "description": "Ceiling on the FAIR odds, 1/p"
+          },
+          {
+            "name": "min_odds",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 100.0,
+                  "exclusiveMinimum": 1.0
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Floor on the fair odds. Below it the market pays too little to be worth a bet; the band is the useful filter",
+              "default": 1.3,
+              "title": "Min Odds"
+            },
+            "description": "Floor on the fair odds. Below it the market pays too little to be worth a bet; the band is the useful filter"
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Selections"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Last scheduler runs, current round, snapshot age",
+        "operationId": "get_status_api_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Liveness and data freshness",
+        "operationId": "get_health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CalibrationBin": {
+        "properties": {
+          "bin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bin"
+          },
+          "n": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N"
+          },
+          "expected": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected"
+          },
+          "observed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Low"
+          },
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          }
+        },
+        "type": "object",
+        "title": "CalibrationBin"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "ok | degraded"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "seasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Seasons",
+            "default": []
+          },
+          "predictions_log_exists": {
+            "type": "boolean",
+            "title": "Predictions Log Exists"
+          },
+          "matches_logged": {
+            "type": "integer",
+            "title": "Matches Logged"
+          },
+          "rounds_closed": {
+            "type": "integer",
+            "title": "Rounds Closed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "predictions_log_exists",
+          "matches_logged",
+          "rounds_closed"
+        ],
+        "title": "Health"
+      },
+      "LastRun": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ok"
+          },
+          "log": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log"
+          }
+        },
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "LastRun"
+      },
+      "Match": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season",
+            "description": "Public form, e.g. 2026-27"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc",
+            "description": "ISO 8601 UTC. Null when the match is not in the calendar"
+          },
+          "match_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Date",
+            "description": "ISO 8601 UTC midnight of the scheduled day, as logged"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "predicted | resolved | invalid"
+          },
+          "p_home": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Home"
+          },
+          "p_draw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Draw"
+          },
+          "p_away": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Away"
+          },
+          "p_over25": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Over25"
+          },
+          "p_btts": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Btts"
+          },
+          "lambda_home": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lambda Home"
+          },
+          "lambda_away": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lambda Away"
+          },
+          "predicted_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Predicted Outcome",
+            "description": "H, D or A"
+          },
+          "odds_home": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds Home"
+          },
+          "odds_draw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds Draw"
+          },
+          "odds_away": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds Away"
+          },
+          "odds_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Odds Source",
+            "description": "Book and provenance, e.g. B365-fixtures"
+          },
+          "fair_odds_home": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds Home",
+            "description": "1/p, descriptive only"
+          },
+          "fair_odds_draw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds Draw"
+          },
+          "fair_odds_away": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds Away"
+          },
+          "overround": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Overround",
+            "description": "Book margin: sum of implied probabilities minus one"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "actual_outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual Outcome"
+          },
+          "correct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Correct"
+          },
+          "rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps",
+            "description": "Ranked Probability Score, lower is better. Null if the match is unplayed or the row is invalid"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid",
+            "description": "False if written after kickoff"
+          },
+          "invalid_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid Reason"
+          },
+          "timestamp_prediction": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Prediction"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matchday",
+          "home_team",
+          "away_team",
+          "status",
+          "valid"
+        ],
+        "title": "Match",
+        "description": "One prediction, with its result when there is one.\n\n`status` is the field to branch on:\n  predicted  in the log, not played yet          -> every result field null\n  resolved   played, archived, metrics computed  -> everything valued\n  invalid    played, but written after kickoff   -> result yes, metrics null\n\n`invalid` is not a bug to hide: the log is append-only and keeps its own\nmistakes. `valid` and `invalid_reason` exist so the frontend can say why a\nplayed match has no RPS instead of showing an unexplained hole."
+      },
+      "MatchPoint": {
+        "properties": {
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc"
+          },
+          "match_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Date"
+          },
+          "home_team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Team"
+          },
+          "away_team": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Away Team"
+          },
+          "rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps"
+          },
+          "cumulative_rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Rps"
+          }
+        },
+        "type": "object",
+        "title": "MatchPoint"
+      },
+      "NextAction": {
+        "properties": {
+          "command": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Command",
+            "description": "predict_round | close_round | null when idle"
+          },
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "NextAction"
+      },
+      "OddsSnapshot": {
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "title": "Exists"
+          },
+          "empty": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Empty"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "downloaded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Downloaded At"
+          },
+          "age_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Hours"
+          }
+        },
+        "type": "object",
+        "required": [
+          "exists"
+        ],
+        "title": "OddsSnapshot",
+        "description": "The upcoming-odds file. An EMPTY snapshot is a normal state between rounds,\nnot a failure: football-data answers but has not published the round yet."
+      },
+      "Picks": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "min_odds": {
+            "type": "number",
+            "title": "Min Odds",
+            "description": "The declared floor, config.QUOTA_MINIMA_SELEZIONE. Not a request parameter: the main line cannot be re-cut per call"
+          },
+          "matches_total": {
+            "type": "integer",
+            "title": "Matches Total",
+            "default": 0
+          },
+          "most_probable": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Most Probable",
+            "default": []
+          },
+          "most_probable_resolved": {
+            "type": "integer",
+            "title": "Most Probable Resolved",
+            "default": 0
+          },
+          "most_probable_won": {
+            "type": "integer",
+            "title": "Most Probable Won",
+            "default": 0
+          },
+          "with_min_odds": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "With Min Odds",
+            "default": []
+          },
+          "with_min_odds_resolved": {
+            "type": "integer",
+            "title": "With Min Odds Resolved",
+            "default": 0
+          },
+          "with_min_odds_won": {
+            "type": "integer",
+            "title": "With Min Odds Won",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "min_odds"
+        ],
+        "title": "Picks",
+        "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
+      },
+      "Round": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "first_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Date"
+          },
+          "last_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Date"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches"
+          },
+          "matches_with_odds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches With Odds"
+          },
+          "matches_predicted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Predicted"
+          },
+          "matches_played": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Played"
+          },
+          "matches_resolved": {
+            "type": "integer",
+            "title": "Matches Resolved",
+            "default": 0
+          },
+          "rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps",
+            "description": "Archived RPS, null unless closed"
+          },
+          "rps_market": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Market"
+          },
+          "closed": {
+            "type": "boolean",
+            "title": "Closed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matchday",
+          "closed"
+        ],
+        "title": "Round",
+        "description": "A matchday and where it stands.\n\n`status` is translated from the project's single state machine\n(`rounds.stato_giornate`), never recomputed here: future, open, predicted,\npartially_predicted, played, closed."
+      },
+      "RoundPoint": {
+        "properties": {
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "matches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches"
+          },
+          "matches_valid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matches Valid"
+          },
+          "rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps"
+          },
+          "rps_market": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Market"
+          },
+          "accuracy": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
+          "cumulative_matches": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Matches"
+          },
+          "cumulative_rps": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cumulative Rps"
+          }
+        },
+        "type": "object",
+        "title": "RoundPoint"
+      },
+      "SeasonSummary": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "rounds_total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounds Total"
+          },
+          "rounds_closed": {
+            "type": "integer",
+            "title": "Rounds Closed",
+            "default": 0
+          },
+          "matches_predicted": {
+            "type": "integer",
+            "title": "Matches Predicted",
+            "default": 0
+          },
+          "matches_resolved": {
+            "type": "integer",
+            "title": "Matches Resolved",
+            "default": 0
+          },
+          "matches_invalid": {
+            "type": "integer",
+            "title": "Matches Invalid",
+            "default": 0
+          },
+          "rps_production": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Production"
+          },
+          "rps_backtest_reference": {
+            "type": "number",
+            "title": "Rps Backtest Reference"
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits",
+            "default": 0
+          },
+          "hits_denominator": {
+            "type": "integer",
+            "title": "Hits Denominator",
+            "default": 0
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "sample_significant": {
+            "type": "boolean",
+            "title": "Sample Significant"
+          },
+          "significance": {
+            "$ref": "#/components/schemas/Significance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "model_version",
+          "rps_backtest_reference",
+          "sample_significant",
+          "significance"
+        ],
+        "title": "SeasonSummary",
+        "description": "Headline figures. Hits keep numerator and denominator apart on purpose: a\nbare rate hides how thin the sample is, and right now it is very thin.\n\n`rps_backtest_reference` is 0.1881, the market's RPS on the test set. A\npersistent gap from it would not be a model getting things wrong — the\nmodel *is* the opening line — it would be the production pipeline behaving\ndifferently from the backtest."
+      },
+      "Selection": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market",
+            "description": "Raw market name, e.g. 1X, over 2.5, casa segna"
+          },
+          "market_label": {
+            "type": "string",
+            "title": "Market Label",
+            "description": "Readable label, e.g. '1X (Como o pari)'"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          },
+          "fair_odds": {
+            "type": "number",
+            "title": "Fair Odds"
+          },
+          "book_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Book Odds",
+            "description": "Registered bookmaker price. Only 1X2 has one"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won",
+            "description": "Null while the match is unplayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "home_team",
+          "away_team",
+          "market",
+          "market_label",
+          "probability",
+          "fair_odds",
+          "status",
+          "valid"
+        ],
+        "title": "Selection",
+        "description": "One market of one match, priced by the model.\n\n`fair_odds` is 1/p — the price at which the bet would break even. It exists\nfor every market. `book_odds` exists only for 1X2, because that is all the\nregister stores: for double chance, over/under and goal markets the price\nhas to come from the reader's own bookmaker, and estimating it by applying\nan average margin would be a made-up number that looks measured."
+      },
+      "Selections": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "max_odds": {
+            "type": "number",
+            "title": "Max Odds"
+          },
+          "min_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Odds"
+          },
+          "matchday": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matchday"
+          },
+          "excluded_markets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Excluded Markets",
+            "description": "Near-certainties never returned: no book prices them high enough to be a bet, and at a low ceiling they would crowd out everything else",
+            "default": []
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "matches_total": {
+            "type": "integer",
+            "title": "Matches Total",
+            "description": "Matches with a prediction in the requested scope",
+            "default": 0
+          },
+          "matches_covered": {
+            "type": "integer",
+            "title": "Matches Covered",
+            "description": "Of those, how many have at least one market inside the band. A narrow band leaves matches uncovered, and the gap is reported rather than hidden",
+            "default": 0
+          },
+          "best_resolved": {
+            "type": "integer",
+            "title": "Best Resolved",
+            "default": 0
+          },
+          "best_won": {
+            "type": "integer",
+            "title": "Best Won",
+            "default": 0
+          },
+          "selections": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Selections",
+            "default": []
+          },
+          "best_per_match": {
+            "items": {
+              "$ref": "#/components/schemas/Selection"
+            },
+            "type": "array",
+            "title": "Best Per Match",
+            "description": "One selection per match: the most probable inside the band, highest odds breaking a tie. Recomputed from the stored lambdas, never frozen into the register",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "max_odds",
+          "count",
+          "resolved",
+          "won"
+        ],
+        "title": "Selections",
+        "description": "Selections inside an odds band, with hits and their denominator.\n\nThe numbers travel together on purpose: \"10 su 11\" says what \"91%\" hides,\nwhich is that eleven bets decide nothing. Filtering by odds moves variance,\nnot edge — M1's probabilities are the book's own line with the margin\nremoved, so expected value is minus the margin at every threshold."
+      },
+      "Significance": {
+        "properties": {
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method",
+            "description": "cluster-bootstrap | insufficient-rounds"
+          },
+          "rounds": {
+            "type": "integer",
+            "title": "Rounds"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "tolerance": {
+            "type": "number",
+            "title": "Tolerance",
+            "description": "RPS gap from the backtest worth detecting (config.TRACK_TOLERANCE_RPS)"
+          },
+          "half_width": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Width"
+          },
+          "rounds_needed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounds Needed"
+          },
+          "rounds_missing": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rounds Missing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rounds",
+          "matches",
+          "tolerance"
+        ],
+        "title": "Significance",
+        "description": "How far the track record is from meaning something.\n\nThe bootstrap resamples ROUNDS, not matches: the ten matches of a round are\npredicted by the same fit, and treating them as independent would shrink\nthe interval by about sqrt(10) and make anything look significant.\nUnder four rounds there is nothing to resample, and the method says so."
+      },
+      "StandingRow": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "played": {
+            "type": "integer",
+            "title": "Played"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "drawn": {
+            "type": "integer",
+            "title": "Drawn"
+          },
+          "lost": {
+            "type": "integer",
+            "title": "Lost"
+          },
+          "goals_for": {
+            "type": "integer",
+            "title": "Goals For"
+          },
+          "goals_against": {
+            "type": "integer",
+            "title": "Goals Against"
+          },
+          "goal_difference": {
+            "type": "integer",
+            "title": "Goal Difference"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "form": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Form",
+            "description": "Ultimi risultati in ordine di data, dal piu' vecchio: W, D, L. Dai totali non si ricava — la sequenza e' proprio l'informazione che interessa",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "team",
+          "played",
+          "won",
+          "drawn",
+          "lost",
+          "goals_for",
+          "goals_against",
+          "goal_difference",
+          "points"
+        ],
+        "title": "StandingRow"
+      },
+      "Standings": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches_played": {
+            "type": "integer",
+            "title": "Matches Played"
+          },
+          "teams": {
+            "type": "integer",
+            "title": "Teams"
+          },
+          "last_match_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Match Date"
+          },
+          "tie_break": {
+            "type": "string",
+            "title": "Tie Break"
+          },
+          "table": {
+            "items": {
+              "$ref": "#/components/schemas/StandingRow"
+            },
+            "type": "array",
+            "title": "Table",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches_played",
+          "teams",
+          "tie_break"
+        ],
+        "title": "Standings",
+        "description": "La classifica: aritmetica sui risultati, non una previsione.\n\n`tie_break` dichiara come sono separate le squadre a pari punti, perche' in\nSerie A contano prima gli scontri diretti e non la differenza reti — una\ntabella ordinata nel modo sbagliato sembra giusta proprio nelle settimane\nin cui qualcuno la guarda."
+      },
+      "Status": {
+        "properties": {
+          "season": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Season"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "current_round": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Round"
+          },
+          "current_round_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Round Status"
+          },
+          "last_runs": {
+            "items": {
+              "$ref": "#/components/schemas/LastRun"
+            },
+            "type": "array",
+            "title": "Last Runs",
+            "default": []
+          },
+          "odds_snapshot": {
+            "$ref": "#/components/schemas/OddsSnapshot"
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/NextAction"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "odds_snapshot",
+          "next_action"
+        ],
+        "title": "Status",
+        "description": "Enough for a frontend to show that the system is alive — and no way to\ncommand it. Writing happens only from local processes."
+      },
+      "TrackRecord": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          },
+          "rps_backtest_reference": {
+            "type": "number",
+            "title": "Rps Backtest Reference"
+          },
+          "by_round": {
+            "items": {
+              "$ref": "#/components/schemas/RoundPoint"
+            },
+            "type": "array",
+            "title": "By Round",
+            "default": []
+          },
+          "by_match": {
+            "items": {
+              "$ref": "#/components/schemas/MatchPoint"
+            },
+            "type": "array",
+            "title": "By Match",
+            "default": []
+          },
+          "calibration": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CalibrationBin"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration",
+            "description": "Null below 50 resolved predictions: fewer points make a curve that is noise drawn nicely"
+          },
+          "calibration_unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibration Unavailable Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "rps_backtest_reference"
+        ],
+        "title": "TrackRecord"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

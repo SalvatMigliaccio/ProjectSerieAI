@@ -44,15 +44,14 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-from src import config  # noqa: E402
-from src.features import market  # noqa: E402
-from src.models.baseline import PRED_COLS, MarketOnly, all_markets  # noqa: E402
+from goalmodel import config
+from goalmodel.features import market
+from goalmodel.models.baseline import PRED_COLS, MarketOnly, all_markets
 
 GOLDEN = Path(__file__).resolve().parent / "golden" / "m1_riferimento.parquet"
-KEYS = ["league", "season", "home_team", "away_team"]
+KEYS = config.JOIN_KEYS
 PER_STAGIONE = 8
 PER_FONTE = 4
 FONTI = ["mkt_1x2_source", "mkt_ou_source"]
@@ -168,7 +167,6 @@ def verifica(master: pd.DataFrame) -> int:
     chiavi = rif[KEYS]
     corrente = assembla(master, calcola(master), chiavi)
 
-    mancanti = corrente["mkt_lambda_home"].isna() & rif["mkt_lambda_home"].notna()
     presenti = chiavi.merge(master.assign(season=master["season"].astype(str))[KEYS],
                             on=KEYS, how="inner")
     if len(presenti) < len(chiavi):
@@ -182,12 +180,28 @@ def verifica(master: pd.DataFrame) -> int:
     quote = [c for c in colonne_quote(master) if c in rif.columns]
     cambiate = [c for c in quote if not _uguali(rif[c], corrente[c])]
     if cambiate:
-        print(f"2. quote di ingresso identiche                 FALLITO")
+        print("2. quote di ingresso identiche                 FALLITO")
         print(f"   colonne cambiate: {cambiate}")
         print("   Sono cambiati i DATI, non il codice: football-data ha "
               "corretto lo storico.\n   Verifica e poi rigenera con --rigenera.")
         return 1
     print(f"2. quote di ingresso identiche ({len(quote)} colonne)   ok")
+
+    # UN LAMBDA SPARITO NON E' UN LAMBDA DIVERSO, e i confronti sotto non lo
+    # vedrebbero: `_uguali` mette NaN e NaN d'accordo, quindi un de-vigging
+    # che smette di produrre un valore dove il riferimento ce l'aveva passa
+    # come "identico". E' una regressione che non cambia i numeri, li fa
+    # scomparire. Il controllo era scritto e lasciato scollegato (audit B14).
+    mancanti = corrente["mkt_lambda_home"].isna() & rif["mkt_lambda_home"].notna()
+    if mancanti.any():
+        persi = chiavi[mancanti.to_numpy()]
+        print("2b. lambda di mercato non piu' calcolati       FALLITO")
+        print(f"   {int(mancanti.sum())} partite hanno perso mkt_lambda_home, "
+              f"es. {persi.head(3).to_dict('records')}")
+        print("   Le quote di ingresso sono identiche (passo 2), quindi e' il "
+              "de-vigging che ha smesso di produrre un valore.")
+        return 1
+    print("2b. nessun lambda di mercato sparito           ok")
 
     esito = 0
     gruppi = [
@@ -269,6 +283,27 @@ def sensibilita(master: pd.DataFrame) -> int:
         return 0
     print("\nLA RETE NON SCATTA: il test di non regressione non protegge niente")
     return 1
+
+
+@pytest.mark.richiede_dati
+def test_produzione_invariata() -> None:
+    """
+    Il punto d'ingresso per pytest della rete di sicurezza della produzione.
+
+    ERA INVISIBILE AL RUNNER. Questo file non aveva nessuna funzione `test_`,
+    quindi `pytest` lo raccoglieva a zero e la suite risultava verde senza mai
+    confrontare M1 con il riferimento. E' lo stesso difetto che il file
+    esiste per impedire — qualcosa che sembra misurare e non misura — capitato
+    al misuratore.
+    """
+    import logging
+    logging.getLogger("market").setLevel(logging.WARNING)
+    master = pd.read_parquet(config.INTERIM / "matches_master.parquet")
+    assert verifica(master) == 0, (
+        "M1, le quote di ingresso o i lambda di mercato sono cambiati rispetto "
+        "al riferimento. Se il cambiamento e' voluto e dichiarato, rigenera con "
+        "`python -m tests.test_production_unchanged --rigenera`."
+    )
 
 
 def main() -> None:
