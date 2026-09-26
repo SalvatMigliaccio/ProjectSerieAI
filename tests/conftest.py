@@ -92,7 +92,15 @@ def db():
 
     conn = engine().connect()
     trans = conn.begin()
-    s = SASession(bind=conn, expire_on_commit=False)
+    # `create_savepoint` is what lets the code under test COMMIT. Production
+    # commits on the way out of every request and on a refused sign-in, so a
+    # harness where commit is impossible cannot reproduce production - and did
+    # not: the transaction ended up deassociated from the connection and the
+    # rows survived the rollback. With a savepoint the session's commit reaches
+    # only as far as that savepoint, and `trans.rollback()` below still
+    # discards everything.
+    s = SASession(bind=conn, expire_on_commit=False,
+                  join_transaction_mode="create_savepoint")
     try:
         yield s
     finally:

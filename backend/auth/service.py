@@ -65,6 +65,33 @@ def record_event(db: Session, kind: str, outcome: str, *,
     ))
 
 
+def keep_on_refusal(db: Session) -> None:
+    """
+    Commit what a refusal has just recorded, because the caller is about to
+    raise and the raise would otherwise erase it.
+
+    THE BUG THIS CLOSES, MEASURED ON A RUNNING STACK. The request runs inside
+    one transaction, and `db.session_scope` rolls that transaction back on any
+    exception — correctly, for a half-written change. But a rejected sign-in
+    writes two things that must SURVIVE the rejection: the audit row, and the
+    failed-attempt counter that eventually locks the account. Raising took both
+    away. Seven wrong passwords through the deployed API left
+    `users.failed_attempts` at 0, `locked_until` null and not one `ko` row in
+    `auth_events`: the account lockout that `ratelimit.py` calls "the real
+    defence" did not exist, and the audit log recorded only successes.
+
+    It survived 220 tests because the HTTP tests replaced the session
+    dependency with the bare fixture session, which has no rollback-on-error —
+    the override dropped the exact behaviour that caused the loss. The harness
+    now reproduces it.
+
+    Not a second connection on purpose. Writing the counter in its own
+    transaction would look tidier and cannot work here: the caller's `user` may
+    still be uncommitted, and another connection cannot see it.
+    """
+    db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Reads
 # ---------------------------------------------------------------------------
@@ -180,11 +207,13 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
         pwd.dummy_verify()
         record_event(db, "sign_in", "ko", ip=ip, user_agent=user_agent,
                      details={"cause": "unknown_email"})
+        keep_on_refusal(db)
         raise AccessDenied("invalid credentials", "unknown_email")
 
     if user.locked_until is not None and at < user.locked_until:
         record_event(db, "sign_in", "ko", user_id=user.id, ip=ip,
                      user_agent=user_agent, details={"cause": "locked"})
+        keep_on_refusal(db)
         raise AccessDenied("too many failed attempts: try again in a few minutes", "locked")
 
     if not pwd.verify(user.password_hash, clear):
@@ -194,6 +223,7 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
     if user.status != "active":
         record_event(db, "sign_in", "ko", user_id=user.id, ip=ip,
                      user_agent=user_agent, details={"cause": f"status_{user.status}"})
+        keep_on_refusal(db)
         message = ("confirm your address before signing in"
                    if user.status == "pending" else "account is not active")
         raise AccessDenied(message, f"status_{user.status}")
@@ -220,6 +250,9 @@ def _count_failure(db: Session, user: User, cfg: Settings,
         details["locked_for_minutes"] = cfg.lockout_minutes
     record_event(db, "sign_in", "ko", user_id=user.id, ip=ip,
                  user_agent=user_agent, details=details)
+    # The counter is the point: it is what the lockout counts, so it has to
+    # outlive the exception the caller raises next.
+    keep_on_refusal(db)
 
 
 def open_session(db: Session, user: User, cfg: Settings, *, ip: str | None = None,
@@ -358,6 +391,7 @@ def change_password(db: Session, user: User, current: str, new: str, *,
     if not pwd.verify(user.password_hash, current):
         record_event(db, "change_password", "ko", user_id=user.id,
                      details={"cause": "wrong_current"})
+        keep_on_refusal(db)
         raise AccessDenied("the current password is not correct", "wrong_current")
 
     pwd.check_strength(new)
