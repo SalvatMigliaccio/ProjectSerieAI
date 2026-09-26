@@ -13,8 +13,12 @@ worse than none: this counter lives in **this process's memory**.
   - Two workers mean two independent counters, so the effective limit is the
     configured one times the number of workers.
   - A restart forgets everything.
-  - It keys on the address `client_ip` reports, which behind a proxy is the
-    proxy unless phase 3 configures forwarded headers.
+  - It keys on the address `client_ip` reports. Behind a reverse proxy that is
+    the proxy itself unless the deployment declares which proxy to believe:
+    `compose.prod.yaml` sets `FORWARDED_ALLOW_IPS` to the Caddy container for
+    exactly this reason. Get that wrong and this stops being a per-address
+    limit and becomes a global one — every user sharing one bucket, which locks
+    out everybody at the twentieth attempt from anybody.
 
 It is the right size for today — one process, a handful of users — and the
 wrong size the moment the API is scaled out. At that point this moves to Redis

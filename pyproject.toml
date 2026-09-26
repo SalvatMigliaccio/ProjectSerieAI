@@ -22,25 +22,64 @@ license-files = ["LICENSE"]
 authors = [{ name = "andrew21111" }]
 keywords = ["football", "poisson", "dixon-coles", "forecasting", "betting-markets"]
 
+# THE BASE SET IS WHAT `import goalmodel` NEEDS, AND NOTHING MORE.
+#
+# It was everything, until building a deployment image showed what "everything"
+# reached: `soccerdata` -> `seleniumbase` -> `PyAutoGUI`, which injects mouse
+# and keyboard events and captures the screen. That is the ingestion pipeline's
+# business - it drives a real browser against WhoScored - and it was being
+# installed into an internet-facing container that only reads parquet and
+# answers JSON.
+#
+# The split follows module-level imports, verified rather than guessed:
+#   scipy         normalize, market, baseline, dixon_coles, power_analysis
+#   scikit-learn  models/baseline.py  (PoissonRegressor)
+#   lightgbm      models/gbm.py only              -> [ml]
+#   soccerdata    ingest.py only                  -> [ingest]
+#   statsmodels   inside one function in evaluate  -> [ml]
+#   matplotlib    inside functions only            -> [ml]
+#   joblib        inside taratura only             -> [ml]
 dependencies = [
     "pandas>=3.0,<4",
     "numpy>=2.5,<3",
     "pyarrow>=25,<26",
     "scipy>=1.18,<2",
     "scikit-learn>=1.9,<2",
-    "statsmodels>=0.15,<0.16",
+]
+
+[project.optional-dependencies]
+# `ingest` REPLACES THE NOTE THAT SAID AN EXTRA WOULD BE POINTLESS. That note
+# argued a `scraping` extra would be a no-op, because soccerdata already pulls
+# seleniumbase and selenium. The observation was right and the conclusion was
+# backwards: since soccerdata drags the whole browser stack in, the thing worth
+# making optional is soccerdata itself.
+ml = [
+    # Modelling and tuning. Only `models/gbm.py` imports lightgbm, and the API
+    # never reaches it - `tests/test_api.py` asserts it stays out of
+    # sys.modules.
     "lightgbm>=4.7,<5",
+    # Used inside one function of evaluate.py, which the API does not call.
+    "statsmodels>=0.15,<0.16",
+    # Parallel search in evaluation/taratura.py.
     "joblib>=1.6,<2",
+    # Plots, all inside functions.
     "matplotlib>=3.11,<4",
+]
+
+ingest = [
+    # Brings seleniumbase, selenium and PyAutoGUI with it. That is correct for
+    # the pipeline, which needs a real browser for WhoScored, and exactly what
+    # must not reach a web-facing image.
     "soccerdata>=1.9.1,<2",
     "tqdm>=4.67,<5",
 ]
 
-[project.optional-dependencies]
-# NIENTE EXTRA `scraping`. Sembrava servisse per lo stage `missing`, che guida
-# un browser vero su WhoScored, ma il lock dice che `soccerdata` dipende gia'
-# da `seleniumbase`, che a sua volta tira `selenium`: l'extra sarebbe stato un
-# no-op che faceva credere il contrario. Selenium arriva comunque.
+# Everything, for a development machine or CI. `pip install -e ".[all]"` is the
+# one-liner that behaves the way `pip install -e .` used to.
+all = [
+    "goalmodel[ml,ingest,api,auth]",
+]
+
 dev = [
     "pytest>=9.0,<10",
     "pytest-cov>=6.0",

@@ -1,13 +1,13 @@
 # Le fasi
 
-Stato al 25 settembre 2026. Una fase si chiude quando il suo criterio e'
+Stato al 26 settembre 2026. Una fase si chiude quando il suo criterio e'
 verificato, non quando "sembra fatta".
 
 | # | fase | chi | stato |
 |---|---|---|---|
 | 1 | motore: modello e feature | noi | **chiusa**, con un rinvio dichiarato |
 | 2 | harness enterprise: auth, authz, modelli dati | noi | **fatta** (25 set 2026) |
-| 3 | infrastruttura: separazione, Docker, deploy | misto | dopo la 2 |
+| 3 | infrastruttura: separazione, Docker, deploy | misto | **Docker e deploy fatti** (26 set 2026); separazione al collega |
 | 4 | modello di business | noi | da aprire |
 | 5 | frontend: porting e build | collega | dipende dalla 3 |
 | 6 | feature nuove | noi | da aprire |
@@ -86,6 +86,38 @@ silenzioso renderebbe indistinguibile una regressione da un cambio di libreria.
 
 **Criterio di chiusura**: l'immagine parte da zero su una macchina pulita, la
 suite passa dentro il container, e nessun segreto compare in `docker history`.
+
+**Come si mette in produzione**: `docs/DEPLOY.md`.
+
+### Dockerization e deploy — FATTI, 26 settembre 2026
+
+Verificato sullo stack vero, non sulla carta: `/api/health` a 200 leggendo il
+`data/` montato, una rotta dati a **401** da anonimo e **200** da autenticato,
+cookie con `Secure` su HTTPS, header di sicurezza presenti, e i due montaggi che
+rifiutano la scrittura **nel kernel** (`OSError`), non nelle guardie
+dell'applicazione. Immagine 726 MB, 46 pacchetti, senza browser automation:
+`pyautogui`, `seleniumbase`, `lightgbm` e `matplotlib` non sono installabili e
+la build fallisce se rientrano. `tests/test_deploy.py` copre 22 invarianti del
+deploy.
+
+**Quattro difetti che solo un container ha mostrato**, tutti chiusi: l'immagine
+installava PyAutoGUI attraverso `soccerdata`; `config.ROOT` dedotta da
+`__file__` puntava dentro site-packages e l'API accusava i dati invece del
+percorso; il `mkdir` all'import uccideva ogni import da non-root su filesystem
+in sola lettura; e l'elenco di pacchetti scritto a mano dimenticava
+scikit-learn, con `/api/health` a 500 e la build verde.
+
+**Due difetti di sicurezza trovati provando lo stack**, non leggendo il codice:
+uvicorn scartava `X-Forwarded-For` perche' non sapeva quale proxy credere — ogni
+riga di audit registrava Caddy e il limite per indirizzo diventava globale — e
+una richiesta di accesso rifiutata annullava per rollback il contatore che
+l'aveva rifiutata, quindi **il blocco dell'account non esisteva** e l'audit
+conteneva solo successi. Dettagli nei due commit; il secondo spiega anche
+perche' 220 test non lo vedevano.
+
+**Resta aperto e non e' nostro**: la separazione backend/frontend e l'ADR 0003
+che la motiva. L'ADR va scritto quando il collega decide i tempi: scriverlo
+adesso vincolerebbe una decisione che non prendiamo noi.
 
 ## Fase 4 — modello di business
 

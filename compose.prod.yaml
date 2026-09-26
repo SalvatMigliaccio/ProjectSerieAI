@@ -1,0 +1,153 @@
+# The full stack for a VPS you control.
+#
+# HOW IT DIFFERS FROM `compose.yaml`. That file runs the two services a
+# developer needs beside their own processes — Postgres and a mail catcher.
+# This one runs the product: the API, the dashboard behind Caddy, the database,
+# and nothing that catches mail, because in production mail must actually leave.
+#
+#   docker compose -f compose.prod.yaml up -d --build
+#
+# WHAT IS DELIBERATELY NOT HERE: the pipeline. `predict_round` and
+# `close_round` write the track record, and a prediction is worth something
+# only if a local process wrote it before kick-off. They stay on the host,
+# under cron or run by hand; this stack only ever READS what they produce.
+
+name: ai-naples-prod
+
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set it in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set it in .env}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    # NO PORTS. The database is reachable only from the compose network. A
+    # Postgres published on a public VPS is found by scanners within hours, and
+    # a mapped port is the single most common way that happens by accident.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    environment:
+      # WITHOUT THIS THE MOUNTS ARE INVISIBLE. goalmodel derives its paths from
+      # its own __file__, which works from a checkout and not from an installed
+      # package: in the image it resolves to the Python directory, so DATA
+      # pointed at /opt/venv/lib/python3.14/data while the files sat in
+      # /srv/data. The API then reported a missing dataset, which accuses the
+      # data instead of the path.
+      AI_NAPLES_ROOT: /srv
+      # Inside the network the host is the service name, never 127.0.0.1 —
+      # which in a container is the container itself.
+      AI_NAPLES_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      AI_NAPLES_SECRET_KEY: ${AI_NAPLES_SECRET_KEY:?generate one, do not reuse the example}
+      # Behind Caddy the connection is HTTPS, so the cookie must carry Secure.
+      AI_NAPLES_COOKIE_SECURE: "1"
+      AI_NAPLES_PUBLIC_URL: ${AI_NAPLES_PUBLIC_URL:?the address that goes into emailed links}
+      AI_NAPLES_CORS_ORIGINS: ${AI_NAPLES_PUBLIC_URL}
+      AI_NAPLES_SMTP_HOST: ${AI_NAPLES_SMTP_HOST:?a real provider, not Mailpit}
+      AI_NAPLES_SMTP_PORT: ${AI_NAPLES_SMTP_PORT:-587}
+      AI_NAPLES_SMTP_USER: ${AI_NAPLES_SMTP_USER:-}
+      AI_NAPLES_SMTP_PASSWORD: ${AI_NAPLES_SMTP_PASSWORD:-}
+      AI_NAPLES_SMTP_SECURITY: ${AI_NAPLES_SMTP_SECURITY:-starttls}
+      AI_NAPLES_SMTP_FROM: ${AI_NAPLES_SMTP_FROM:?the From address}
+      # WHO IS ALLOWED TO SAY WHERE A REQUEST CAME FROM. uvicorn reads
+      # X-Forwarded-For only from an address in this list, and its default is
+      # 127.0.0.1 — which behind Caddy is nobody, so the header was being
+      # dropped and every caller looked like the proxy. That is not cosmetic:
+      # `auth_events.ip` recorded Caddy for every sign-in, and the per-address
+      # rate limiter put all users in ONE bucket, so twenty sign-in attempts in
+      # five minutes locked out everybody rather than one address.
+      #
+      # It is the web container's fixed address and nothing else. Trusting the
+      # whole subnet would also trust the database, and `*` would trust anyone
+      # who ever reaches port 8000 directly.
+      FORWARDED_ALLOW_IPS: ${WEB_ADDRESS:-172.31.240.10}
+    volumes:
+      # READ-ONLY, both of them, and for different reasons.
+      #
+      # `track_record/` is the one thing in this project that does not
+      # regenerate: a prediction has to be written before kick-off by a process
+      # that did not know the result. `:ro` makes "no HTTP route can write the
+      # registry" true at the kernel, not only in the application guards.
+      #
+      # `data/` is regenerable, but the API has no business writing it either —
+      # the pipeline on the host owns it.
+      - ${TRACK_RECORD_DIR:-./track_record}:/srv/track_record:ro
+      - ${DATA_DIR:-./data}:/srv/data:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    # No ports either: only Caddy talks to it.
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    environment:
+      DOMAIN: ${DOMAIN:?the hostname Caddy should get a certificate for}
+    ports:
+      # Configurable on the HOST side only: the container always listens on 80
+      # and 443, which is what Caddy's certificate flow expects. A VPS that
+      # already serves something on 80 sets HTTP_PORT rather than editing this
+      # file — and a port clash otherwise shows up as a container that will not
+      # start, with an error about the address being in use rather than about
+      # the thing actually in the way.
+      #
+      # Anything other than 80/443 breaks the Let's Encrypt HTTP-01 challenge,
+      # so a real deployment leaves these alone; the override exists for local
+      # verification, where Caddy issues its own certificate anyway.
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      # Certificates survive a rebuild. Without this, every deploy asks
+      # Let's Encrypt again and runs into the rate limit after a few tries.
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      # FIXED, because FORWARDED_ALLOW_IPS above has to name it. Docker hands
+      # out addresses in creation order, so without this it changes the day a
+      # service is added — and the symptom would be audit rows quietly going
+      # back to recording the proxy. It sits BELOW the dynamic range declared
+      # under `networks`, so no other container can be given it first; pinning
+      # an address inside that range fails to start with "Address already in
+      # use", which names the port layer and not the real conflict.
+      default:
+        ipv4_address: ${WEB_ADDRESS:-172.31.240.10}
+
+networks:
+  # The default network with a pinned subnet rather than a second network: one
+  # network is all this stack needs, and pinning it is what makes a fixed
+  # address possible. Deliberately outside Docker's default pool
+  # (172.17-172.20) so it does not collide with networks already on the host;
+  # override both this and WEB_ADDRESS together if it still clashes.
+  default:
+    ipam:
+      config:
+        - subnet: ${COMPOSE_SUBNET:-172.31.240.0/24}
+          # Dynamic addresses come from the upper half only, which leaves the
+          # lower half for the pinned one above. Without this split Docker
+          # allocates from the bottom in start order and hands a new service
+          # the address Caddy is supposed to keep.
+          ip_range: ${COMPOSE_IP_RANGE:-172.31.240.128/25}
+
+volumes:
+  db_data:
+  caddy_data:
+  caddy_config:

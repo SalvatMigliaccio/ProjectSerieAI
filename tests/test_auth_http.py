@@ -38,6 +38,18 @@ def client(db, post):
     Overriding `request_session` is what keeps these tests from leaving rows
     behind: the route gets the same transaction the test holds, and the
     fixture rolls it back.
+
+    IT COMMITS AND ROLLS BACK LIKE PRODUCTION DOES, AND THAT IS NOT A DETAIL.
+    The override used to yield the session bare, so a request that raised kept
+    everything it had written — which production's `session_scope` throws away.
+    The difference hid a real bug for as long as it existed: the failed-attempt
+    counter and the audit row of a rejected sign-in were being erased by the
+    rejection, so the account lockout never locked and the audit log only ever
+    recorded successes. Every test passed.
+
+    The session is joined to the fixture's outer transaction through a
+    savepoint, so `commit()` here persists only as far as that savepoint and
+    the fixture still discards the lot.
     """
     # Every limiter is per-process and shared, so a previous test's attempts
     # would otherwise count against this one and produce a 429 that looks like
@@ -45,7 +57,15 @@ def client(db, post):
     for limiter in (sign_in_limiter, signup_limiter, reset_limiter):
         limiter.reset()
 
-    app.dependency_overrides[request_session] = lambda: db
+    def scoped():
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+    app.dependency_overrides[request_session] = scoped
     app.dependency_overrides[mail_sender] = lambda: post
     try:
         yield TestClient(app)
@@ -287,3 +307,63 @@ def test_forgot_password_is_rate_limited(client) -> None:
                          json={"email": "target@example.com"}).status_code
              for _ in range(reset_limiter.limit + 2)]
     assert 429 in codes, f"no rate limiting on forgot-password: {codes}"
+
+
+# --- what a refusal has to leave behind -------------------------------------
+
+def test_the_lockout_survives_the_rejection_it_causes(client, db) -> None:
+    """
+    THE COUNTER HAS TO OUTLIVE THE 401, and it did not.
+
+    A rejected sign-in raises, the request transaction rolls back, and both the
+    failed-attempt counter and the audit row went with it. Measured on the
+    deployed stack: seven wrong passwords left `failed_attempts` at 0 and
+    `locked_until` null, so the account lockout — the defence `ratelimit.py`
+    calls the real one — never triggered however many attempts were made.
+
+    Nothing about it is visible in a response: every attempt correctly answers
+    401 whether or not it was counted. Hence this test, and hence it counts the
+    rows rather than reading the status code.
+    """
+    from backend.auth.settings import settings
+
+    email = "lockout@example.com"
+    _register_and_verify(client, db, email)
+    limit = settings().max_attempts
+
+    for _ in range(limit):
+        r = client.post("/api/auth/sign-in", json={"email": email, "password": "wrong"})
+        assert r.status_code == 401
+
+    db.expire_all()   # the counter was written by the request, not by this session
+    user = service.by_email(db, email)
+    assert user.failed_attempts >= limit, \
+        f"after {limit} wrong passwords the counter is {user.failed_attempts}"
+    assert user.locked_until is not None, "the account never locked"
+
+    # And the lock is enforced: the RIGHT password is now refused too.
+    r = client.post("/api/auth/sign-in", json={"email": email, "password": GOOD})
+    assert r.status_code == 401
+    assert "too many" in r.json()["detail"].lower(), \
+        "the refusal does not say the account is locked"
+
+
+def test_a_refused_sign_in_is_audited(client, db) -> None:
+    """
+    An audit log with only successes in it is worse than none: it reads like
+    nobody ever tried. Credential stuffing is exactly a run of failures.
+    """
+    from backend.auth.models import AuthEvent
+
+    email = "audit@example.com"
+    _register_and_verify(client, db, email)
+    before = db.query(AuthEvent).filter_by(kind="sign_in", outcome="ko").count()
+
+    assert client.post("/api/auth/sign-in",
+                       json={"email": email, "password": "wrong"}).status_code == 401
+    assert client.post("/api/auth/sign-in",
+                       json={"email": "nobody@example.com", "password": "wrong"}).status_code == 401
+
+    after = db.query(AuthEvent).filter_by(kind="sign_in", outcome="ko").count()
+    assert after == before + 2, \
+        f"two refusals produced {after - before} audit rows"

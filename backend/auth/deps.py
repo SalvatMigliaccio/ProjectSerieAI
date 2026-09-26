@@ -49,11 +49,18 @@ def client_ip(request: Request) -> str | None:
     Best-effort context must never be load-bearing: if it is not an address,
     it is `None` and the event is still recorded.
 
-    `X-Forwarded-For` is deliberately NOT read here. It is trivially forged by
-    the client, so trusting it without a proxy in front is a way to poison the
-    audit log and dodge any per-address limit. Reading it is a deployment
-    decision, and phase 3 will make it an explicit setting rather than
-    something this function guesses.
+    `X-Forwarded-For` IS NOT READ HERE, AND STILL SHOULD NOT BE. Whether that
+    header can be believed depends on what is in front of the process, which is
+    a deployment fact and not something this function can know: read
+    unconditionally it is a way to poison the audit log and dodge every
+    per-address limit, since any client can send it.
+
+    The trust lives one layer down, where it belongs. uvicorn's proxy-headers
+    middleware rewrites the socket address from the header, but only for the
+    addresses in `FORWARDED_ALLOW_IPS` — set in `compose.prod.yaml` to the
+    Caddy container and nothing else. So `request.client.host` here is the real
+    caller behind a configured proxy, and the raw socket peer everywhere else,
+    with no branch in this file.
     """
     if request.client is None:
         return None

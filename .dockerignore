@@ -1,0 +1,40 @@
+# Keep the build context small and free of anything secret.
+#
+# WHY THIS MATTERS MORE THAN IT LOOKS: everything sent to the daemon can end up
+# in a layer, and a layer is readable by anyone who can pull the image. `.env`
+# is the obvious one, but `.git` carries every value ever committed, which is
+# worse: deleting a secret from the working tree does not delete it from
+# history.
+
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+
+# Not versioned, mounted at run time instead (see compose.prod.yaml).
+data/
+logs/
+experiments/output/
+
+# The track record is mounted read-only, never copied in: it must stay the one
+# on the host, written by the local commands.
+track_record/
+
+.venv/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+frontend/node_modules/
+frontend/dist/
+
+notebooks/
+scratchpad/
+downloaded_files/
+*.md
+!README.md

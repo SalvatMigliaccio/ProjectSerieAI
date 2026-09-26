@@ -52,3 +52,6 @@ downloaded_files/
 
 # Alembic compila i template qui dentro.
 backend/auth/migrations/__pycache__/
+
+# Local verification of the production stack: generated, never committed.
+.env.prodtest

@@ -3,6 +3,8 @@ Configurazione centrale. Ogni modulo importa da qui: nessun path hardcoded
 sparso per il codice.
 """
 
+import contextlib
+import os
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -12,7 +14,21 @@ from pathlib import Path
 # src/goalmodel/config.py -> src/goalmodel -> src -> radice del repository.
 # Con il layout src/ il pacchetto sta due livelli sotto la radice: se un
 # giorno il pacchetto si sposta, QUESTA riga e' l'unica da cambiare.
-ROOT = Path(__file__).resolve().parents[2]
+#
+# VALE SOLO SE SI GIRA DAL REPOSITORY, e per due anni e' stato sempre vero.
+# In un pacchetto INSTALLATO non lo e': `goalmodel` finisce in
+# `site-packages/goalmodel/`, quindi `parents[2]` diventa la cartella di
+# Python e `DATA` punta a `/opt/venv/lib/python3.14/data`, che non esiste.
+#
+# Il sintomo non assomiglia alla causa. Nel container di produzione i file
+# erano montati in `/srv/data`, il mount era corretto, e l'API rispondeva
+# "matches_master.parquet is missing: run 'goalmodel normalize --build'" —
+# cioe' accusava un dato mancante mentre il dato c'era e il percorso era
+# sbagliato.
+#
+# `AI_NAPLES_ROOT` rimedia, e non cambia niente per chi lavora dal repository:
+# se la variabile non c'e', il calcolo resta quello di prima.
+ROOT = Path(os.environ.get("AI_NAPLES_ROOT") or Path(__file__).resolve().parents[2])
 
 DATA = ROOT / "data"
 RAW = DATA / "raw"
@@ -32,8 +48,24 @@ TEAM_NAME_MAP_SUGGESTED = MANUAL / "team_name_map_suggested.json"
 COACH_CHANGES = MANUAL / "coach_changes.csv"
 DERBIES = MANUAL / "derbies.csv"
 
+# Le cartelle si creano all'import, ed e' una comodita': dopo un clone i
+# comandi funzionano senza `mkdir` preliminari.
+#
+# NON PUO' ESSERE FATALE, e lo e' stata. In un container che gira come utente
+# non privilegiato con la radice montata in sola lettura, `mkdir` solleva
+# `PermissionError` — e siccome succede all'IMPORT di `config`, si porta via
+# tutto cio' che importa `goalmodel`, compresa un'API che quelle cartelle le
+# vuole solo leggere. Il processo non partiva affatto: `PermissionError:
+# '/srv/manual'` mentre l'unica cosa che serviva era leggere un file dentro.
+#
+# Chi ha bisogno di scrivere davvero in una di queste cartelle fallira' al
+# momento della scrittura, dove l'errore nomina l'operazione vera invece di
+# fermare l'avvio.
 for _d in (RAW, INTERIM, PROCESSED, MANUAL, TRACK_RECORD):
-    _d.mkdir(parents=True, exist_ok=True)
+    # Sola lettura o permessi mancanti: chi legge sta bene, chi scrive lo
+    # scoprira' scrivendo.
+    with contextlib.suppress(OSError):
+        _d.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Perimetro dati
