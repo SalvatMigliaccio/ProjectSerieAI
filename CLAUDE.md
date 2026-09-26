@@ -6,6 +6,7 @@ Contesto operativo per Claude Code.
 |---|---|
 | `README.md` | cos'e' il progetto, installazione, architettura, contribuzione |
 | `docs/PROGETTO_SERIE_A.md` | progettazione completa e razionale di fondo |
+| `docs/I_DUE_MODELLI.md` | come sono costruiti M1 e il modello ML, passo per passo |
 | `docs/AUDIT_TECNICO.md` | debiti architetturali e difetti noti, con stato |
 | `docs/ROADMAP.md` | le fasi del progetto, chi le fa, quando si chiudono |
 | `docs/adr/` | decisioni di architettura, una per file |
