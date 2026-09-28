@@ -135,15 +135,45 @@ partite del Napoli in Serie A.
 
 ## Stato attuale — verificato sui dati reali (2 settembre 2026)
 
-### Dataset costruito
+### Dataset costruito — BIG 5 dal 28 settembre 2026
 
-`data/interim/matches_master.parquet`: **4580 righe, 222 colonne**.
-Serie A, stagioni 1415-2627. Dodici stagioni complete a 380 partite piu' 20
-partite della 2026/27 in corso (prime due giornate). Copertura del join con
-Understat: **100%**.
+`data/interim/matches_master.parquet`: **21839 righe, 223 colonne**.
+Tutti e cinque i campionati, stagioni 1415-2627, con la 2026/27 in corso:
 
-`data/processed/features_form.parquet`: 4580 righe, 58 colonne.
-380 righe marcate `is_burn_in` (stagione 1415, priva di media di riferimento).
+| lega | partite |
+|---|---|
+| ITA-Serie A | 4610 |
+| ENG-Premier League | 4610 |
+| ESP-La Liga | 4629 |
+| FRA-Ligue 1 | 4282 |
+| GER-Bundesliga | 3708 |
+
+Copertura del join con Understat: **100% su ogni lega**. Duplicati sulla
+quadrupla: **zero** — la regola n.5 regge anche a cinque campionati.
+
+`features_form.parquet` e `features_market.parquet`: 21839 righe ciascuno,
+58 e 35 colonne. 1826 righe marcate `is_burn_in` (la 1415 di ogni lega, priva
+di media di riferimento).
+
+**I DATI SONO CINQUE LEGHE, LA PRODUZIONE E' UNA.** `config.LEAGUES` e' il
+perimetro dei dati; `config.LEAGUES_PRODUZIONE` e' quello che `predict_round`,
+`close_round`, i risultati e il registro guardano, e vale `["ITA-Serie A"]`.
+Non e' timidezza: una **giornata** esiste dentro un campionato, e con cinque
+leghe la giornata 1 sono 48 partite in quattro paesi che non condividono ne'
+la data ne' lo stato. Il track record e' Serie A e solo Serie A, e mescolarlo
+renderebbe incomparabile l'unica serie storica che esiste. Allargare la
+produzione vuol dire una giornata, un registro e un archivio **per lega**.
+
+**Due difetti trovati dal primo run sui Big 5**, entrambi silenziosi e
+entrambi impossibili da vedere sulla sola Serie A:
+- `E0_2122.csv` ha un BOM che soccerdata non si aspetta prima della 2425, e
+  quella stagione di Premier League arrivava **senza lega**: una chiave nulla
+  sparisce da ogni merge. Lo ha intercettato `schema.py`;
+- fbref, per un campionato straniero, scrive DUE orari (`17:30 (18:30)`):
+  quello dello stadio e quello di chi guarda la pagina. Il parser non capiva
+  la stringa e ripiegava su mezzanotte, cioe' **quattro leghe su cinque senza
+  orario di calcio d'inizio**. Accordo fra le fonti: 81% prima, **99.46%** dopo
+  (9923 partite).
 
 ### Nomi di colonna reali — usare questi, non inventarne
 
