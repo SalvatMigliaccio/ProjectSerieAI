@@ -735,3 +735,34 @@ def test_a_subscriber_sees_more_than_an_anonymous_caller(monkeypatch) -> None:
     assert len(free) == 1, "the unplayed match reached an anonymous caller"
     assert free[0]["goals_home"] is not None
     assert free[0]["home_team"] != "Monza"
+
+
+def test_the_free_window_is_the_last_month_with_a_floor(monkeypatch) -> None:
+    """
+    Recent and played is free; older needs a session.
+
+    THE FLOOR IS THE PART WORTH TESTING. Serie A stops for three months, and a
+    bare 30-day window would empty the public pages exactly when someone has
+    time to read them. The most recent matchday stays free however old it is,
+    so the second case here uses a match from a year ago and still expects it.
+    """
+    from backend.api.routes import FREE_WINDOW_DAYS
+
+    base = client.get(f"/api/matches/{SEASON}").json()[0]
+    recent = dict(base, matchday=5, kickoff_utc="2026-09-20T18:00:00+00:00")
+    old = dict(base, home_team="Vecchia", matchday=1,
+               kickoff_utc="2026-06-01T18:00:00+00:00")
+    monkeypatch.setattr(store, "matches", lambda *a, **k: [old, recent])
+
+    anon = _anonymous()
+    try:
+        free = anon.get(f"/api/matches/{SEASON}").json()
+        assert [m["matchday"] for m in free] == [5], \
+            f"a match older than {FREE_WINDOW_DAYS} days is free"
+
+        # Nothing recent at all: the newest matchday is still public.
+        monkeypatch.setattr(store, "matches", lambda *a, **k: [old])
+        assert len(anon.get(f"/api/matches/{SEASON}").json()) == 1, \
+            "the public pages went empty during the summer break"
+    finally:
+        app.dependency_overrides.clear()

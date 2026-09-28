@@ -18,6 +18,7 @@ ERROR CODES, AND WHY NOT "NEVER 500"
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -82,9 +83,48 @@ def played(match: dict) -> bool:
     return match.get("goals_home") is not None
 
 
+# The free window, in days. Everything played inside it is public; older
+# matches need a session, and so does anything not yet played.
+#
+# THE FLOOR IS NOT OPTIONAL. Serie A stops for three months in summer, and a
+# bare 30-day window would empty the public pages exactly when a visitor has
+# time to read them — an empty site is a broken site to anyone who does not
+# know the calendar. So the most recent played matchday is always free, however
+# long ago it was.
+FREE_WINDOW_DAYS = 30
+
+
+def _free_from(matches: list[dict]) -> tuple[dt.datetime | None, int | None]:
+    """The window's start, and the matchday that stays free regardless."""
+    kickoffs = [m["kickoff_utc"] for m in matches if played(m) and m.get("kickoff_utc")]
+    if not kickoffs:
+        return None, None
+    last = max(kickoffs)
+    newest = max((m["matchday"] for m in matches
+                  if m.get("kickoff_utc") == last and m.get("matchday") is not None),
+                 default=None)
+    return dt.datetime.fromisoformat(last) - dt.timedelta(days=FREE_WINDOW_DAYS), newest
+
+
 def only_played(matches: list[dict], user) -> list[dict]:
-    """The same list for a subscriber, the played part of it for everyone else."""
-    return matches if may_see_upcoming(user) else [m for m in matches if played(m)]
+    """
+    Everything for a subscriber; the recent, played part for everyone else.
+
+    The window counts back from the LAST MATCH IN THE DATA, not from now. Two
+    reasons, and the second is the one that bites: a window anchored to the
+    clock makes the response change without the data changing, which no cache
+    and no test can reason about — and during the summer break it would tick
+    the whole season out of view one matchday at a time.
+    """
+    if may_see_upcoming(user):
+        return matches
+    start, newest = _free_from(matches)
+    if start is None:
+        return [m for m in matches if played(m)]
+    return [m for m in matches
+            if played(m)
+            and (m.get("matchday") == newest
+                 or (m.get("kickoff_utc") or "") >= start.isoformat())]
 
 
 # The selection payloads carry their matches in named lists rather than being
@@ -100,7 +140,7 @@ def _visible(payload: dict, user) -> dict:
     out = dict(payload)
     for key in SELECTION_LISTS:
         if isinstance(out.get(key), list):
-            out[key] = [s for s in out[key] if played(s)]
+            out[key] = only_played(out[key], user)
     # `hits` and `hits_denominator` need no adjustment, and that is a property
     # rather than an oversight: both count RESOLVED rows, which are exactly the
     # ones kept above. A match with no result cannot be a hit and is not in the
