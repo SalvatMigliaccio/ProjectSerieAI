@@ -69,6 +69,25 @@ class ChangePayload(BaseModel):
     new_password: str = Field(min_length=MIN_LENGTH, max_length=1024)
 
 
+class SessionRow(BaseModel):
+    """
+    One active session, as its owner sees it.
+
+    NO TOKEN AND NO HASH. The point of storing only the digest is that reading
+    the table does not let anyone impersonate anyone; putting either on the
+    wire would give that back. `current` is what the page needs instead —
+    enough to say "this is the one you are using now" without naming it.
+    """
+
+    id: str
+    created_at: str
+    last_seen_at: str
+    expires_at: str
+    ip: str | None = None
+    user_agent: str | None = None
+    current: bool
+
+
 class Identity(BaseModel):
     """What the frontend needs to draw the interface. Never anything secret."""
 
@@ -212,6 +231,46 @@ def reset_password(payload: ResetPayload, request: Request,
     except WeakPassword as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     return {"detail": "password changed: sign in again"}
+
+
+# --- sessions ---------------------------------------------------------------
+
+@router.get("/sessions")
+def sessions(row: CurrentSession, db: Db) -> list[SessionRow]:
+    """
+    Where this account is signed in.
+
+    IT IS THE ONLY WAY A USER CAN SEE A STOLEN COOKIE. The session is HttpOnly
+    and revocable server-side, which protects it from a script on the page but
+    says nothing to the person whose laptop was borrowed. A list with a time, a
+    place and a device is the thing they can actually read an intrusion out of.
+    """
+    rows = service.active_sessions(db, row.user)
+    return [SessionRow(
+        id=str(r.id),
+        created_at=r.created_at.isoformat(),
+        last_seen_at=r.last_seen_at.isoformat(),
+        expires_at=r.expires_at.isoformat(),
+        ip=str(r.ip) if r.ip else None,
+        user_agent=r.user_agent,
+        current=r.id == row.id,
+    ) for r in rows]
+
+
+@router.post("/sessions/revoke-others")
+def revoke_other_sessions(row: CurrentSession, request: Request, db: Db) -> dict[str, int]:
+    """
+    Sign out everywhere else, keeping the session asking.
+
+    KEEPING THE CURRENT ONE IS THE POINT. Signing the user out of the page they
+    are using to secure their account is how a security action becomes one
+    nobody completes: they land on a login form and assume it failed.
+    """
+    count = service.revoke_all(db, row.user, keep=row.id)
+    service.record_event(db, "sessions_revoked", "ok", user_id=row.user.id,
+                         ip=client_ip(request), user_agent=request.headers.get("user-agent"),
+                         details={"revoked": count})
+    return {"revoked": count}
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

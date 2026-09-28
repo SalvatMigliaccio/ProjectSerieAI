@@ -300,6 +300,24 @@ def sign_out(db: Session, token: str) -> None:
         record_event(db, "sign_out", "ok", user_id=row.user_id)
 
 
+def active_sessions(db: Session, user: User) -> list[UserSession]:
+    """
+    The sessions that would still let someone in, newest first.
+
+    Not revoked and not expired: a row that can no longer be used is noise on a
+    page whose job is to make an intrusion visible. Idle timeout is deliberately
+    NOT applied here — an idle session is still usable until it lapses, so
+    hiding it would hide exactly the one someone should revoke.
+    """
+    at = now()
+    rows = db.scalars(select(UserSession).where(
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None),
+        UserSession.expires_at > at,
+    )).all()
+    return sorted(rows, key=lambda r: r.last_seen_at, reverse=True)
+
+
 def revoke_all(db: Session, user: User, *, keep: uuid.UUID | None = None) -> int:
     at = now()
     rows = db.scalars(select(UserSession).where(

@@ -18,6 +18,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import * as authApi from "../api/auth";
 import { ApiError } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { Colophon, Masthead } from "../components/Layout";
 
 const MIN_PASSWORD = 12;
 
@@ -37,14 +38,22 @@ function Shell({
   lead?: string;
   children: ReactNode;
 }) {
+  // TESTATA E PIEDE ANCHE QUI. Senza, la scheda galleggia su una pagina vuota:
+  // niente marchio, niente modo di tornare indietro, e l'aria di un errore di
+  // caricamento invece di un passaggio previsto. E' anche il punto in cui una
+  // persona decide se questo sito merita la sua password.
   return (
-    <main id="contenuto" className="account" tabIndex={-1}>
-      <section className="account-card">
-        <h1>{title}</h1>
-        {lead ? <p className="lead">{lead}</p> : null}
-        {children}
-      </section>
-    </main>
+    <>
+      <Masthead current="hero" />
+      <main id="contenuto" className="account" tabIndex={-1}>
+        <section className="account-card">
+          <h1>{title}</h1>
+          {lead ? <p className="lead">{lead}</p> : null}
+          {children}
+        </section>
+      </main>
+      <Colophon modelVersion={null} />
+    </>
   );
 }
 

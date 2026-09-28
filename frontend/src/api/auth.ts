@@ -113,6 +113,31 @@ export const forgotPassword = (email: string) =>
 export const resetPassword = (token: string, password: string) =>
   post<{ detail: string }>("/api/auth/reset-password", { token, password });
 
+export interface SessionRow {
+  id: string;
+  created_at: string;
+  last_seen_at: string;
+  expires_at: string;
+  ip: string | null;
+  user_agent: string | null;
+  current: boolean;
+}
+
+/** Where this account is signed in. Never carries the token, by design. */
+export async function sessions(): Promise<SessionRow[]> {
+  const r = await fetch(`${baseUrl()}/api/auth/sessions`, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (!r.ok) throw new ApiError("non riesco a leggere le sessioni", {
+    status: r.status, url: "/api/auth/sessions", hint: null,
+  });
+  return (await r.json()) as SessionRow[];
+}
+
+export const revokeOtherSessions = () =>
+  post<{ revoked: number }>("/api/auth/sessions/revoke-others");
+
 export const changePassword = (currentPassword: string, newPassword: string) =>
   post<void>("/api/auth/change-password", {
     current_password: currentPassword,

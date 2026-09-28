@@ -507,6 +507,55 @@ export function Hero() {
           </div>
         </section>
 
+        {/* DUE LETTORI, UN SOLO PRODOTTO. Chi legge questa pagina o vuole
+            numeri verificabili o vuole giocarci: sono due aspettative diverse
+            sullo stesso dato, e nasconderne una fa perdere l'altro. Quello
+            che NON cambia fra le due colonne e' il contenuto — probabilita',
+            quota equa, errore misurato — perche' un prodotto che promette
+            valore atteso a chi scommette mentirebbe sui propri numeri: su
+            1140 partite fuori campione le giocate a valore positivo contro
+            B365 sono zero su 3420. */}
+        <section className="section" id="per-chi" style={{ paddingTop: 0 }}>
+          <Eyebrow>per chi e'</Eyebrow>
+          <h2>Due modi di leggerlo.</h2>
+
+          <div className="audience">
+            <article className="audience__card">
+              <h3>Se ti interessano i numeri</h3>
+              <p>
+                Ogni previsione e' registrata prima del calcio d'inizio e non si
+                riscrive mai. Trovi l'RPS giornata per giornata, il confronto
+                con il mercato sulle stesse partite, e il metodo scritto per
+                intero: de-vigging di Shin sulle quote di apertura, matrice dei
+                risultati esatti, walk-forward per giornata.
+              </p>
+              <ul className="audience__list">
+                <li>Track record pubblico, errori compresi</li>
+                <li>Il riferimento e' il mercato, non una baseline comoda</li>
+                <li>Quando il campione e' troppo piccolo, lo diciamo</li>
+              </ul>
+            </article>
+
+            <article className="audience__card">
+              <h3>Se ci giochi</h3>
+              <p>
+                Per ogni partita trovi la probabilita' di ogni mercato e la{" "}
+                <strong>quota equa</strong>, cioe' il prezzo a cui la giocata
+                andrebbe in pari. Serve a confrontarla con quella del tuo book:
+                se paga meno, stai pagando margine.
+              </p>
+              <ul className="audience__list">
+                <li>1X2, doppia chance, Over/Under, Goal/No Goal</li>
+                <li>Quota equa accanto a ogni selezione</li>
+                <li>
+                  Nessun valore atteso, nessuno stake consigliato: misurato, non
+                  c'e' vantaggio da vendere
+                </li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
         <section className="section" id="faq" style={{ paddingTop: 0 }}>
           <Eyebrow>domande</Eyebrow>
           <h2>Quello che conviene sapere</h2>

@@ -385,3 +385,49 @@ def test_a_refused_sign_in_is_audited(client, db) -> None:
     after = db.query(AuthEvent).filter_by(kind="sign_in", outcome="ko").count()
     assert after == before + 2, \
         f"two refusals produced {after - before} audit rows"
+
+
+# --- the account's own view of itself ---------------------------------------
+
+def test_sessions_lists_this_device_and_marks_it_current(client, db) -> None:
+    """
+    The only way a user can notice a stolen cookie.
+
+    HttpOnly and server-side revocation protect the session from a script on
+    the page; neither says anything to the person whose laptop was borrowed.
+    A list with a time and a device is what an intrusion is actually read out
+    of, so it has to include the current one AND say which it is.
+    """
+    email = "sessioni@example.com"
+    _register_and_verify(client, db, email)
+    assert client.post("/api/auth/sign-in",
+                       json={"email": email, "password": GOOD}).status_code == 200
+
+    rows = client.get("/api/auth/sessions").json()
+    assert len(rows) >= 1
+    assert sum(1 for r in rows if r["current"]) == 1, \
+        "exactly one session is the one making the request"
+    assert all("token" not in key for r in rows for key in r), \
+        "a session row must never carry the token or its hash"
+
+
+def test_revoking_the_others_keeps_the_one_that_asked(client, db) -> None:
+    """
+    Signing the user out of the page they are securing their account from is
+    how a security action becomes one nobody completes: they land on a login
+    form and assume it failed.
+    """
+    email = "revoca@example.com"
+    _register_and_verify(client, db, email)
+    client.post("/api/auth/sign-in", json={"email": email, "password": GOOD})
+
+    r = client.post("/api/auth/sessions/revoke-others")
+    assert r.status_code == 200
+    assert client.get("/api/auth/me").status_code == 200, \
+        "the caller was signed out of its own session"
+    assert all(row["current"] for row in client.get("/api/auth/sessions").json())
+
+
+def test_sessions_need_a_session(client) -> None:
+    assert client.get("/api/auth/sessions").status_code == 401
+    assert client.post("/api/auth/sessions/revoke-others").status_code == 401

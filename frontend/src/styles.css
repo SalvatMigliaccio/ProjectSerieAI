@@ -2087,3 +2087,305 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 .gate__cta:hover { background: var(--mint-2); }
 .gate__cta:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+
+/* --- credenziali e account -----------------------------------------------
+   MANCAVANO DEL TUTTO. Le schermate di accesso, registrazione, verifica e
+   reset sono arrivate con la fase 2 citando `.account`, `.account-card`,
+   `.btn` e `.nav__account`: nessuna di queste classi esisteva in questo
+   foglio, quindi l'intero imbuto di ingresso girava con lo stile predefinito
+   del browser — pulsanti grigi di sistema su fondo scuro. Non si vedeva nella
+   dashboard, che e' l'unica cosa che si guardava. */
+
+.account {
+  min-height: 70vh;
+  display: grid;
+  place-items: center;
+  padding: var(--s7) var(--s4);
+}
+
+.account-card {
+  width: 100%;
+  max-width: 27rem;
+  padding: var(--s6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+}
+
+.account-card h1 {
+  font-family: var(--display);
+  font-size: 1.5rem;
+  margin: 0 0 var(--s2);
+}
+
+.account-card .lead { margin: 0 0 var(--s5); }
+
+/* Etichetta sempre visibile, mai un placeholder al suo posto: il placeholder
+   sparisce appena si scrive, e resta un campo senza nome davanti a chi torna
+   a controllare quello che ha inserito. */
+.account-card label,
+.profilo__form label {
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  margin-bottom: var(--s2);
+}
+
+.account-card input,
+.profilo__form input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s3) var(--s4);
+  margin-bottom: var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1rem;   /* 16px: sotto, iOS ingrandisce la pagina al focus */
+}
+
+.account-card input:focus-visible,
+.profilo__form input:focus-visible {
+  outline: 2px solid var(--mint);
+  outline-offset: 1px;
+  border-color: var(--mint);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 44px;
+  padding-inline: var(--s5);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--mint-ink);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.btn:hover:not(:disabled) { background: var(--mint-2); }
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.btn--ghost:hover:not(:disabled) {
+  border-color: var(--mint);
+  color: var(--mint);
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+/* Il messaggio d'errore sta SOPRA il pulsante e vicino al campo, non in cima
+   alla scheda: chi ha appena premuto invio guarda li'. */
+.account-error {
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  border-left: 3px solid var(--ko);
+  border-radius: var(--radius-sm);
+  background: var(--ko-wash);
+  color: var(--fg);
+  font-size: 0.9375rem;
+}
+
+.account-links {
+  margin-top: var(--s5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s4);
+  font-size: 0.875rem;
+}
+
+.nav__account {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--muted);
+  padding-block: 4px var(--s1);
+  border-bottom: 2px solid transparent;
+  background: none;
+  border-inline: 0;
+  border-top: 0;
+}
+
+.nav__account:hover { color: var(--fg); }
+
+/* --- area account --------------------------------------------------------- */
+
+.profilo { padding-block: var(--s7) var(--s8); }
+
+.profilo h1 {
+  font-family: var(--display);
+  font-size: 1.85rem;
+  margin: 0 auto var(--s6);
+  max-width: 44rem;
+}
+
+.profilo__blocco {
+  padding: var(--s6);
+  /* Centrata e non a filo sinistro: a 1440 una colonna di 44rem appoggiata al
+     bordo lascia meta' schermo vuoto e sembra un'impaginazione rotta. */
+  margin: 0 auto var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  max-width: 44rem;
+}
+
+.profilo__blocco h2 {
+  font-family: var(--display);
+  font-size: 1.125rem;
+  margin: 0 0 var(--s5);
+}
+
+.profilo__dati {
+  display: grid;
+  grid-template-columns: 10rem 1fr;
+  gap: var(--s3) var(--s5);
+  margin: 0 0 var(--s5);
+  font-size: 0.9375rem;
+}
+
+.profilo__dati dt { color: var(--faint); }
+.profilo__dati dd { margin: 0; }
+
+.profilo__form { max-width: 24rem; }
+
+.profilo__hint {
+  margin: calc(var(--s2) * -1) 0 var(--s4);
+  color: var(--faint);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 46ch;
+}
+
+.profilo__ok {
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  border-left: 3px solid var(--ok);
+  border-radius: var(--radius-sm);
+  background: var(--ok-wash);
+  font-size: 0.9375rem;
+}
+
+.sessioni {
+  list-style: none;
+  margin: 0 0 var(--s5);
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+
+.sessioni__riga {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+
+.sessioni__riga.is-current { border-color: rgba(var(--accent-rgb), 0.45); }
+
+.sessioni__device {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+/* "questa" e non un pallino colorato: il colore da solo non e' un'indicazione
+   per chi non lo distingue. */
+.sessioni__badge {
+  font-style: normal;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mint);
+  border: 1px solid rgba(var(--accent-rgb), 0.45);
+  border-radius: 999px;
+  padding: 2px var(--s2);
+}
+
+.sessioni__meta {
+  color: var(--faint);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .profilo__dati { grid-template-columns: 1fr; gap: var(--s1) 0; }
+  .profilo__dati dd { margin-bottom: var(--s3); }
+  .profilo__blocco { padding: var(--s5); }
+}
+
+/* --- le due letture ------------------------------------------------------- */
+.audience {
+  margin-top: var(--s5);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s5);
+}
+
+.audience__card {
+  padding: var(--s6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.audience__card h3 {
+  font-family: var(--display);
+  font-size: 1.1875rem;
+  margin: 0 0 var(--s3);
+}
+
+.audience__card p {
+  margin: 0 0 var(--s4);
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 54ch;
+}
+
+.audience__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--s2);
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
+/* Il segno di spunta e' decorativo: sta in ::before e non nel testo, cosi' un
+   lettore di schermo legge la voce e non "segno di spunta" venti volte. */
+.audience__list li {
+  padding-left: var(--s5);
+  position: relative;
+  line-height: 1.55;
+}
+
+.audience__list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--mint);
+}
+
+@media (max-width: 900px) {
+  .audience { grid-template-columns: 1fr; }
+}

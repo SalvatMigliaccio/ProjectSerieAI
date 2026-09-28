@@ -11,6 +11,7 @@ import {
 } from "./pages/Account";
 import { Dashboard } from "./pages/Dashboard";
 import { Hero } from "./pages/Hero";
+import { Profile } from "./pages/Profile";
 
 const TITOLI: Record<string, string> = {
   "/": "MatchPoint — previsioni Serie A",
@@ -76,6 +77,7 @@ export function App() {
           {/* The landing page stays open: it sells the thing. */}
           <Route path="/" element={<Hero />} />
 
+          <Route path="/account" element={<Profile />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

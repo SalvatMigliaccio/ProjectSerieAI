@@ -484,24 +484,6 @@
         }
       }
     },
-    "/api/status": {
-      "get": {
-        "summary": "Last scheduler runs, current round, snapshot age",
-        "operationId": "get_status_api_status_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Status"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/health": {
       "get": {
         "summary": "Liveness and data freshness",
@@ -513,6 +495,24 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/status": {
+      "get": {
+        "summary": "Last scheduler runs, current round, snapshot age",
+        "operationId": "get_status_api_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
                 }
               }
             }
@@ -765,6 +765,58 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sessions",
+        "description": "Where this account is signed in.\n\nIT IS THE ONLY WAY A USER CAN SEE A STOLEN COOKIE. The session is HttpOnly\nand revocable server-side, which protects it from a script on the page but\nsays nothing to the person whose laptop was borrowed. A list with a time, a\nplace and a device is the thing they can actually read an intrusion out of.",
+        "operationId": "sessions_api_auth_sessions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SessionRow"
+                  },
+                  "type": "array",
+                  "title": "Response Sessions Api Auth Sessions Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions/revoke-others": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke Other Sessions",
+        "description": "Sign out everywhere else, keeping the session asking.\n\nKEEPING THE CURRENT ONE IS THE POINT. Signing the user out of the page they\nare using to secure their account is how a security action becomes one\nnobody completes: they land on a login form and assume it failed.",
+        "operationId": "revoke_other_sessions_api_auth_sessions_revoke_others_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "type": "object",
+                  "title": "Response Revoke Other Sessions Api Auth Sessions Revoke Others Post"
                 }
               }
             }
@@ -2254,6 +2306,62 @@
         ],
         "title": "Selections",
         "description": "Selections inside an odds band, with hits and their denominator.\n\nThe numbers travel together on purpose: \"10 su 11\" says what \"91%\" hides,\nwhich is that eleven bets decide nothing. Filtering by odds moves variance,\nnot edge — M1's probabilities are the book's own line with the margin\nremoved, so expected value is minus the margin at every threshold."
+      },
+      "SessionRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "title": "Last Seen At"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "current": {
+            "type": "boolean",
+            "title": "Current"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_seen_at",
+          "expires_at",
+          "current"
+        ],
+        "title": "SessionRow",
+        "description": "One active session, as its owner sees it.\n\nNO TOKEN AND NO HASH. The point of storing only the digest is that reading\nthe table does not let anyone impersonate anyone; putting either on the\nwire would give that back. `current` is what the page needs instead —\nenough to say \"this is the one you are using now\" without naming it."
       },
       "Significance": {
         "properties": {
