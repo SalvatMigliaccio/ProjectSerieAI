@@ -32,10 +32,18 @@ REM  in last_run.json. Only the two PRODUCTION commands are: /api/status speaks
 REM  about the track record, and M5 does not write to it — an entry there would
 REM  suggest the registry had been touched. `last_run.py` would refuse it
 REM  anyway, its --command has a fixed list of choices.
-set "MODULE=src.%TASK%"
+REM
+REM  THE PREFIX IS `goalmodel.prediction.`, NOT `src.`. The package moved to
+REM  src/goalmodel/ with a sub-package per layer, and `src.predict_round` no
+REM  longer exists. This file was not updated with the rest, and the failure
+REM  was quiet in the worst way: the scheduled run would die with "No module
+REM  named 'src'", last_run.py would never be reached, and /api/status would
+REM  simply keep saying the scheduler had not run — the same silent failure
+REM  the popd comment below describes, from the other end.
+set "MODULE=goalmodel.prediction.%TASK%"
 set "RECORD=1"
 if /i "%TASK%"=="predict_m5" (
-    set "MODULE=src.experiments.predici_gbm"
+    set "MODULE=goalmodel.experiments.predici_gbm"
     set "RECORD="
 )
 
@@ -59,6 +67,20 @@ REM  so the only visible symptom was /api/status insisting the scheduler had
 REM  never run — a silent failure of exactly the component whose job is to say
 REM  whether something failed.
 pushd "%REPO%"
+
+REM  SRC-LAYOUT: `goalmodel` sits under src/ and is importable only once the
+REM  package is installed in the venv. Running from the repo root is no longer
+REM  enough, which is the one thing about the new layout that bites a machine
+REM  that used to work. Checked here so the log says what to run instead of
+REM  holding a ModuleNotFoundError traceback nobody reads on a Friday evening.
+"%PY%" -c "import goalmodel" 2>nul
+if errorlevel 1 (
+    echo [ERROR] goalmodel non installato nel venv. Rimedio: >> "%LOG%"
+    echo         %PY% -m pip install -e . >> "%LOG%"
+    popd
+    exit /b 3
+)
+
 "%PY%" -m %MODULE% %1 %2 %3 >> "%LOG%" 2>&1
 set "CODE=%ERRORLEVEL%"
 
