@@ -503,8 +503,16 @@ def test_writes_are_refused() -> None:
 
 
 def test_cache_headers() -> None:
+    """
+    The ETag and the 304, which survive `no-store`.
+
+    This used to assert `max-age`, back when the API was public and the header
+    was `public, max-age=300`. The header is now `private, no-store` — see
+    `test_no_shared_cache_may_hold_a_signed_in_response` for why — so what is
+    checked here is the part that still has to work: a client holding a tag and
+    revalidating deliberately gets a 304 with an empty body.
+    """
     response = client.get(f"/api/season/{SEASON}")
-    assert "max-age" in response.headers.get("cache-control", "")
     etag = response.headers.get("etag")
     assert etag
     again = client.get(f"/api/season/{SEASON}", headers={"If-None-Match": etag})
@@ -578,3 +586,29 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def test_no_shared_cache_may_hold_a_signed_in_response() -> None:
+    """
+    `public` WAS THE HEADER, AND IT STOPPED BEING TRUE IN PHASE 2.
+
+    Every route here needs a session. `Cache-Control: public` is an instruction
+    to shared caches, so a CDN or a company proxy in front of this API was
+    allowed to store one caller's answer and hand it to the next — and
+    `stale-while-revalidate=3600` let it keep doing so for an hour after
+    expiry. Nothing in a response shows it: the leak happens in a machine
+    nobody here controls.
+
+    The reason HTTP did not save us is worth naming, because it is the usual
+    one: the protections for authenticated responses key on the
+    `Authorization` header, and this API authenticates with a cookie.
+    """
+    client = TestClient(app)
+    for path in (f"/api/season/{SEASON}", f"/api/rounds/{SEASON}",
+                 f"/api/track-record/{SEASON}", f"/api/picks/{SEASON}",
+                 f"/api/selections/{SEASON}", "/api/health"):
+        header = client.get(path).headers.get("cache-control", "")
+        assert "public" not in header, \
+            f"{path} tells shared caches they may keep it: {header!r}"
+        assert "no-store" in header, \
+            f"{path} does not forbid storing the response: {header!r}"

@@ -17,10 +17,21 @@ THE GUARANTEE IS ENFORCED, NOT PROMISED
   - no model is ever loaded: heavy imports live inside functions, and
     `tests/test_api.py` asserts `lightgbm` is absent from `sys.modules`.
 
-CACHING. The data changes twice a week, when `predict_round` and `close_round`
-run. Responses carry `Cache-Control: public, max-age=300` plus an ETag derived
-from the source files' mtimes, so a polling frontend gets 304s and the server
-does no work.
+CACHING. `private, no-store`, plus an ETag derived from the source files'
+mtimes. It used to be `public, max-age=300, stale-while-revalidate=3600`, which
+was right while the API was public and became a leak the moment phase 2 put a
+session in front of it: `public` is an instruction to SHARED caches, so a CDN or
+a corporate proxy was authorised to keep a signed-in caller's response for five
+minutes and serve it stale for an hour — to anyone. The session is a cookie
+rather than an `Authorization` header, so none of the protections HTTP gives
+authenticated responses applied.
+
+The ETag stays. It costs nothing, it still identifies the resource, and the
+free public tier in `docs/MODELLO_DI_BUSINESS.md` — closed matchdays, visible
+to everyone — is where `public, max-age` belongs when it exists: per route,
+decided with the gate in view. What was measured: the whole dashboard is about
+60 KB across seven responses before Caddy compresses it, so the revalidation
+this gives up is worth less than the mistake it prevents.
 
 Start it with:
     python -m backend.api --port 8000
@@ -68,7 +79,10 @@ CORS_ENV = "AI_NAPLES_CORS_ORIGINS"
 DEFAULT_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173",
                    "http://localhost:3000", "http://127.0.0.1:3000")
 
-CACHE_CONTROL = "public, max-age=300, stale-while-revalidate=3600"
+# `private` keeps it out of shared caches, `no-store` out of disk as well. Both
+# are needed: `private` alone still lets the browser keep paid data after a
+# sign-out, and `no-store` alone is silent about proxies.
+CACHE_CONTROL = "private, no-store"
 
 PROTECTED = (config.TRACK_RECORD.resolve(), config.DATA.resolve())
 
@@ -255,9 +269,12 @@ def create_app() -> FastAPI:
         """
         Cache-Control plus a content-derived ETag.
 
-        The data changes twice a week, when `predict_round` and `close_round`
-        write, so a polling frontend gets 304 on nearly every request in
-        between and the server does no work.
+        The header is the same on every route, including the public
+        `/api/health`: a monitor has to see the current state, not one from
+        five minutes ago. The 304 path below still answers a client that
+        revalidates deliberately, which is what `tests/test_api.py` does; a
+        browser told `no-store` has nothing to revalidate with, and that is
+        the intended trade.
         """
         tag = etag_for(request)
 
