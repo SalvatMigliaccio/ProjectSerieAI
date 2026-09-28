@@ -612,3 +612,12 @@ def test_no_shared_cache_may_hold_a_signed_in_response() -> None:
             f"{path} tells shared caches they may keep it: {header!r}"
         assert "no-store" in header, \
             f"{path} does not forbid storing the response: {header!r}"
+        assert "cookie" in client.get(path).headers.get("vary", "").lower(), \
+            f"{path} does not declare that its body depends on the session"
+
+    # The ETag does not know who is asking, which is correct while every
+    # signed-in caller gets the same body and wrong the day a subscription
+    # tier filters it. `docs/MODELLO_DI_BUSINESS.md` names that as the next
+    # step; `Vary: Cookie` above is what keeps a cache honest in the meantime.
+    assert client.get(f"/api/picks/{SEASON}").headers["etag"] == \
+        client.get(f"/api/picks/{SEASON}").headers["etag"]

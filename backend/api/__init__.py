@@ -286,11 +286,18 @@ def create_app() -> FastAPI:
             # enforce that rule, so this only ever failed against the real
             # server: hence the empty-body assertion in tests/test_api.py.
             return Response(status_code=304,
-                            headers={"ETag": tag, "Cache-Control": CACHE_CONTROL})
+                            headers={"ETag": tag, "Cache-Control": CACHE_CONTROL,
+                                     "Vary": "Cookie"})
 
         response = await call_next(request)
         if request.method in ("GET", "HEAD") and response.status_code == 200:
             response.headers["Cache-Control"] = CACHE_CONTROL
+            # `Vary: Cookie` says out loud that the answer depends on the
+            # session. It changes nothing today — every signed-in caller gets
+            # the same body — and it is the piece that a subscription tier
+            # breaks first: the moment a tier filters the response, one URL has
+            # two bodies, and a cache without this would hand one to the other.
+            response.headers["Vary"] = "Cookie"
             if tag:
                 response.headers["ETag"] = tag
         return response
