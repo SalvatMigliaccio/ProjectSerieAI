@@ -2040,3 +2040,50 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .showcase { flex-direction: column; }
   .showcase > .matchcard, .showcase > .side-card { flex: 1 1 auto; }
 }
+
+
+/* --- il confine del gratuito ---------------------------------------------
+   Scheda, non muro: sta in fondo alla colonna delle selezioni, dove l'assenza
+   si nota, e non copre niente di quello che e' pubblico. Il bordo e' menta
+   tenue — e' un invito, non un errore, e il rosso qui direbbe che qualcosa e'
+   andato storto. */
+.gate {
+  margin-top: var(--s5);
+  padding: var(--s5);
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--mint);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.gate__title {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  margin: 0 0 var(--s2);
+}
+
+.gate__body {
+  margin: 0 0 var(--s4);
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.gate__cta {
+  display: inline-flex;
+  align-items: center;
+  /* 44px di area toccabile: sotto, su telefono, si sbaglia bersaglio. */
+  min-height: 44px;
+  padding-inline: var(--s5);
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--mint-ink);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  transition: background 180ms ease;
+}
+
+.gate__cta:hover { background: var(--mint-2); }
+.gate__cta:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }

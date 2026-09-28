@@ -20,7 +20,22 @@ import type {
   TrackRecord,
 } from "./types";
 
-const FALLBACK_BASE = "http://127.0.0.1:8000";
+/**
+ * Stessa origine della pagina, sempre: il proxy di Vite gira `/api` all'API
+ * locale (vite.config.ts) e in produzione Caddy fa la stessa cosa.
+ *
+ * ERA `http://127.0.0.1:8000`, E DALLA FASE 2 NON PUO' PIU' FUNZIONARE. La
+ * sessione e' un cookie `SameSite=Lax`: fra `localhost:5173` e
+ * `127.0.0.1:8000` il browser vede due siti diversi e quel cookie non lo
+ * manda. Il risultato era che l'accesso rispondeva 200, la pagina si diceva
+ * autenticata, e ogni richiesta successiva tornava 401 — che l'interfaccia
+ * mostra come "non riesco a contattare l'API", cioe' accusando un server che
+ * era acceso e rispondeva.
+ *
+ * Chi ha davvero l'API altrove continua a dirlo con `?api=` o con
+ * VITE_API_BASE_URL, che hanno la precedenza qui sotto.
+ */
+const FALLBACK_BASE = "";
 
 export class ApiError extends Error {
   readonly status: number | null;
@@ -68,14 +83,13 @@ export function baseUrl(): string {
   const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
   if (stored || configured) return (stored ?? configured ?? "").replace(/\/$/, "");
 
-  // FUORI DA LOCALHOST, `127.0.0.1:8000` E' IL COMPUTER DI CHI GUARDA.
-  // Quando la pagina arriva da un tunnel o da un altro host, quell'indirizzo
-  // non e' "quasi giusto": e' certamente sbagliato, e l'unico errore possibile
-  // sarebbe interrogare l'API di qualcun altro. Si chiede alla stessa origine
-  // della pagina, che il proxy di Vite (vedi vite.config.ts) gira all'API
-  // locale — un solo tunnel, e nessun problema di CORS.
-  const locale = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
-  return locale ? FALLBACK_BASE : window.location.origin;
+  // SEMPRE LA STESSA ORIGINE DELLA PAGINA. Da un tunnel o da un altro host,
+  // `127.0.0.1:8000` e' il computer di CHI GUARDA: non "quasi giusto",
+  // certamente sbagliato. In locale e' un sito diverso da quello della pagina,
+  // e il cookie di sessione non parte. In entrambi i casi la risposta e' la
+  // stessa, e c'e' gia' chi la gira all'API: il proxy di Vite in sviluppo
+  // (vite.config.ts), Caddy in produzione.
+  return FALLBACK_BASE;
 }
 
 export function season(): string {

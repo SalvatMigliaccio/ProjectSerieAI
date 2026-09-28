@@ -115,6 +115,38 @@ def current_user(row: CurrentSession) -> User:
 CurrentUser = Annotated[User, Depends(current_user)]
 
 
+def viewer(request: Request, db: Db, cfg: Cfg) -> User | None:
+    """
+    The signed-in user, or `None` — never a 401.
+
+    THE FREE TIER NEEDS A THIRD ANSWER. `current_user` knows two: signed in, or
+    refused. A route that is public but shows MORE to a subscriber needs to ask
+    who is there without turning "nobody" into an error, which is exactly the
+    shape of the tiers in `docs/MODELLO_DI_BUSINESS.md`: played matches are
+    everyone's, the round that has not kicked off yet is the product.
+
+    It deliberately swallows only the 401 that `current_session` raises for an
+    absent or dead session. Anything else — a database that is down, a broken
+    cookie parser — still propagates, because answering "you are anonymous"
+    when the truth is "the session store is unreachable" would silently
+    downgrade every subscriber to the free tier.
+    """
+    try:
+        return current_session(request, db, cfg).user
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
+            return None
+        raise
+
+
+Viewer = Annotated["User | None", Depends(viewer)]
+
+
+def may_see_upcoming(user: User | None) -> bool:
+    """Whether this viewer gets matches that have not been played yet."""
+    return user is not None and service.has_permission(user, "picks:read")
+
+
 def require_permission(name: str) -> Callable[..., User]:
     """
     A dependency that lets the request through only with that permission.

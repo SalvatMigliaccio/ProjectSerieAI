@@ -46,3 +46,28 @@ export function EmptyState({ children }: { children: ReactNode }) {
 export function Skeleton({ width = "5rem" }: { width?: string }) {
   return <span className="skeleton" style={{ width }} aria-hidden="true" />;
 }
+
+/**
+ * Il confine fra quello che e' pubblico e quello che non lo e'.
+ *
+ * Non e' un muro davanti alla pagina: la pagina c'e' tutta, con le partite
+ * giocate, le probabilita' scritte prima del fischio e il risultato accanto.
+ * Manca solo la giornata che deve ancora giocarsi, e questa scheda sta dove
+ * quella mancanza si vede, senza promettere niente che i numeri non dicano.
+ */
+export function SoloAbbonati() {
+  return (
+    <div className="gate">
+      <p className="gate__title">La giornata in arrivo e' per chi ha un accesso.</p>
+      <p className="gate__body">
+        Tutto quello che si e' gia' giocato resta visibile a chiunque, con la
+        previsione registrata prima del calcio d'inizio e l'errore accanto: e'
+        la prova, ed e' pubblica. Le probabilita' della giornata non ancora
+        giocata si vedono entrando.
+      </p>
+      <a className="gate__cta" href="#/sign-in">
+        Accedi
+      </a>
+    </div>
+  );
+}

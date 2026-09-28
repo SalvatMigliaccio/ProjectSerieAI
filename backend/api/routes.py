@@ -22,7 +22,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.auth.deps import require_permission
+from backend.auth.deps import Viewer, may_see_upcoming, require_permission
 
 from . import (
     schemas,
@@ -40,27 +40,72 @@ from . import (
 
 log = logging.getLogger("api.routes")
 
-# EVERY DATA ROUTE REQUIRES A PERMISSION, declared here once rather than
-# repeated on each decorator: a router-level dependency cannot be forgotten
-# when a route is added, and forgetting it is the whole risk.
+# TWO ROUTERS, AND THE LINE BETWEEN THEM IS THE PRODUCT.
 #
-# `data:read` covers results, standings and the track record. `picks:read`
-# covers the model's selections, declared separately on those two routes so
-# phase 4 can sell them without touching anything else.
+# `router` still requires `data:read` and now holds only `/api/status`: the
+# scheduler's last runs and the snapshot's age are operational detail, not
+# content. A router-level dependency is used rather than one decorator per
+# route because it cannot be forgotten when a route is added, and forgetting
+# it is the whole risk.
 #
-# /api/health is the exception and lives on its own router below: a monitor
-# that has to authenticate is a monitor that reports the wrong thing when
-# authentication breaks.
+# `public` answers without a session. It carries the history — a season's
+# figures, the rounds, the track record, the table — plus the four routes that
+# can contain matches which have NOT been played, which they filter per viewer.
+#
+# WHY THE HISTORY IS FREE. Everything on it already happened: the result is in
+# the newspaper, and what the project adds is the prediction written before
+# kick-off next to it. That is the proof, and proof withheld convinces nobody
+# (`docs/MODELLO_DI_BUSINESS.md`, section 5). What is worth money is the round
+# that has not kicked off yet, and that is exactly what `picks:read` now gates.
 router = APIRouter(
     prefix="/api",
     dependencies=[Depends(require_permission("data:read"))],
 )
 
-# Unauthenticated on purpose, and it must stay dull: liveness only, nothing
-# about the data it serves.
 public = APIRouter(prefix="/api")
 
 VALID_STATUS = (store.STATUS_PREDICTED, store.STATUS_RESOLVED, store.STATUS_INVALID)
+
+
+def played(match: dict) -> bool:
+    """
+    Whether the match has a result, which is the whole free/paid boundary.
+
+    Deliberately the RESULT and not the round's state. A round stays open while
+    one match is postponed, and under a rule keyed on the round those nine
+    played matches would stay behind the paywall for weeks — while the
+    postponed one, which is the only thing still worth paying for, would come
+    out with them the moment the round closed. The result per match is the
+    honest line: once it is known, the prediction can only be checked, and
+    checking it is what the free tier is for.
+    """
+    return match.get("goals_home") is not None
+
+
+def only_played(matches: list[dict], user) -> list[dict]:
+    """The same list for a subscriber, the played part of it for everyone else."""
+    return matches if may_see_upcoming(user) else [m for m in matches if played(m)]
+
+
+# The selection payloads carry their matches in named lists rather than being
+# one. Filtering by key rather than by walking the dict keeps an added key OUT
+# of the free tier by default: a new list of selections that nobody remembered
+# to name here simply does not reach an anonymous caller.
+SELECTION_LISTS = ("most_probable", "with_min_odds", "selections")
+
+
+def _visible(payload: dict, user) -> dict:
+    if may_see_upcoming(user):
+        return payload
+    out = dict(payload)
+    for key in SELECTION_LISTS:
+        if isinstance(out.get(key), list):
+            out[key] = [s for s in out[key] if played(s)]
+    # `hits` and `hits_denominator` need no adjustment, and that is a property
+    # rather than an oversight: both count RESOLVED rows, which are exactly the
+    # ones kept above. A match with no result cannot be a hit and is not in the
+    # denominator, so the figures still describe the list that ships.
+    return out
 
 
 def _known_season(season: str) -> str:
@@ -82,7 +127,7 @@ def _known_season(season: str) -> str:
     )
 
 
-@router.get("/season/{season}", response_model=schemas.SeasonSummary,
+@public.get("/season/{season}", response_model=schemas.SeasonSummary,
             summary="Season headline figures")
 def get_season(season: str) -> dict:
     _known_season(season)
@@ -92,16 +137,16 @@ def get_season(season: str) -> dict:
     return summary
 
 
-@router.get("/rounds/{season}", response_model=list[schemas.Round],
+@public.get("/rounds/{season}", response_model=list[schemas.Round],
             summary="Every round with its state and archived RPS")
 def get_rounds(season: str) -> list[dict]:
     _known_season(season)
     return store.rounds(season)
 
 
-@router.get("/rounds/{season}/{matchday}", response_model=list[schemas.Match],
+@public.get("/rounds/{season}/{matchday}", response_model=list[schemas.Match],
             summary="Matches of one round")
-def get_round(season: str, matchday: int) -> list[dict]:
+def get_round(season: str, matchday: int, user: Viewer = None) -> list[dict]:
     _known_season(season)
     matches = store.round_matches(season, matchday)
     if not matches:
@@ -113,13 +158,14 @@ def get_round(season: str, matchday: int) -> list[dict]:
                     f"predictions. Rounds with predictions: "
                     f"{', '.join(map(str, known)) if known else 'none yet'}"),
         )
-    return matches
+    return only_played(matches, user)
 
 
-@router.get("/matches/{season}", response_model=list[schemas.Match],
+@public.get("/matches/{season}", response_model=list[schemas.Match],
             summary="All matches of a season, filterable")
 def get_matches(
     season: str,
+    user: Viewer = None,
     team: str | None = Query(None, description="Home or away, exact name"),
     status: str | None = Query(None, description="predicted | resolved | invalid"),
     date_from: str | None = Query(None, alias="from", description="YYYY-MM-DD, inclusive"),
@@ -131,11 +177,13 @@ def get_matches(
             status_code=404,
             detail=f"unknown status '{status}'. Valid values: {', '.join(VALID_STATUS)}",
         )
-    return store.matches(season, team=team, status=status,
-                         date_from=date_from, date_to=date_to)
+    return only_played(
+        store.matches(season, team=team, status=status,
+                      date_from=date_from, date_to=date_to),
+        user)
 
 
-@router.get("/track-record/{season}", response_model=schemas.TrackRecord,
+@public.get("/track-record/{season}", response_model=schemas.TrackRecord,
             summary="Cumulative RPS series and calibration")
 def get_track_record(season: str) -> dict:
     _known_season(season)
@@ -145,7 +193,7 @@ def get_track_record(season: str) -> dict:
     return record
 
 
-@router.get("/standings/{season}", response_model=schemas.Standings,
+@public.get("/standings/{season}", response_model=schemas.Standings,
             summary="League table from played matches")
 def get_standings(season: str) -> dict:
     """
@@ -164,10 +212,10 @@ def get_standings(season: str) -> dict:
     return table
 
 
-@router.get("/picks/{season}", response_model=schemas.Picks,
-            dependencies=[Depends(require_permission("picks:read"))],
+@public.get("/picks/{season}", response_model=schemas.Picks,
             summary="The canonical M1 selections — no threshold to move")
-def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> dict:
+def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38),
+              user: Viewer = None) -> dict:
     """
     The main line, and it takes no odds parameter on purpose.
 
@@ -179,14 +227,14 @@ def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> d
     dashboard advertised another.
     """
     _known_season(season)
-    return selections_mod.picks(season, matchday=matchday)
+    return _visible(selections_mod.picks(season, matchday=matchday), user)
 
 
-@router.get("/selections/{season}", response_model=schemas.Selections,
-            dependencies=[Depends(require_permission("picks:read"))],
+@public.get("/selections/{season}", response_model=schemas.Selections,
             summary="Markets priced under a ceiling on the odds")
 def get_selections(
     season: str,
+    user: Viewer = None,
     max_odds: float = Query(1.40, gt=1.0, le=100.0,
                             description="Ceiling on the FAIR odds, 1/p"),
     min_odds: float | None = Query(
@@ -202,8 +250,10 @@ def get_selections(
             detail=f"min_odds ({min_odds}) is above max_odds ({max_odds}): "
                    f"that band is empty",
         )
-    return selections_mod.selections(
-        season, max_odds=max_odds, min_odds=min_odds, matchday=matchday)
+    return _visible(
+        selections_mod.selections(
+            season, max_odds=max_odds, min_odds=min_odds, matchday=matchday),
+        user)
 
 
 @router.get("/status", response_model=schemas.Status,

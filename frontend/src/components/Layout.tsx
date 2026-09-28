@@ -263,7 +263,13 @@ export function Colophon({
             <em>M5 ancorato al mercato · in valutazione</em>
           </span>
 
-          {showApi && <span className="colophon__api">API {baseUrl()}</span>}
+          {/* `baseUrl()` e' vuota quando l'API sta sulla stessa origine della
+              pagina, che dalla fase 4 e' il caso normale: senza questo il
+              piede mostrava "API" e basta. L'indirizzo che serve a chi
+              verifica e' comunque quello da cui parte la richiesta. */}
+          {showApi && (
+            <span className="colophon__api">API {baseUrl() || window.location.origin}</span>
+          )}
         </div>
       </div>
 

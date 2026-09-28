@@ -108,10 +108,28 @@ def test_health_stays_public(client) -> None:
     "/api/picks/2026-27",
     "/api/selections/2026-27",
     "/api/rounds/2026-27",
-    "/api/status",
+    "/api/matches/2026-27",
 ])
-def test_data_routes_refuse_anonymous_callers(client, path: str) -> None:
-    assert client.get(path).status_code == 401
+def test_the_history_answers_without_a_session(client, path: str) -> None:
+    """
+    THIS TEST USED TO ASSERT THE OPPOSITE, and the change is deliberate.
+
+    Phase 2 gated every data route, which was right while there was no product
+    decision to express. The free tier is that decision: everything already
+    played is public, because the result is public and what this project adds
+    is the prediction written before kick-off beside it — the proof, and proof
+    withheld convinces nobody.
+
+    The line these routes must hold is in `tests/test_api.py`: what is filtered
+    out for an anonymous caller is the match that has not been played.
+    """
+    assert client.get(path).status_code in (200, 404, 503), \
+        f"{path} must answer an anonymous caller"
+
+
+def test_status_still_refuses_anonymous_callers(client) -> None:
+    """Scheduler runs and snapshot age are operational detail, not content."""
+    assert client.get("/api/status").status_code == 401
 
 
 def test_me_requires_a_session(client) -> None:

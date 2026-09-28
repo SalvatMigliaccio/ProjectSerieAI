@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import type { Match, Round, SeasonSummary, Selection, TrackRecord } from "../api/types";
 import { AsideSelections } from "../components/AsideSelections";
 import { ErrorBoundary } from "../components/ErrorBoundary";
@@ -9,7 +10,7 @@ import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
 import { ModelPicks } from "../components/ModelPicks";
 import { StandingsPanel } from "../components/StandingsPanel";
-import { EmptyState, ErrorState, Loading } from "../components/States";
+import { EmptyState, ErrorState, Loading, SoloAbbonati } from "../components/States";
 import { TrackRecordPanel } from "../components/TrackRecordPanel";
 import { useApi } from "../hooks/useApi";
 import { ROUND_LABELS, localDateTime } from "../lib/format";
@@ -70,7 +71,17 @@ export function Dashboard() {
   const [soglia, setSoglia] = useState<number>(1.2);
   const track = useRef<HTMLDivElement>(null);
 
-  const status = useApi(() => api.status(), []);
+  // CHI PUO' LEGGERE LO STATO, non chiunque sia entrato. `/api/status` dice
+  // quando ha girato lo scheduler e quanto e' vecchio lo snapshot: e'
+  // manutenzione, non contenuto, e finiva in pagina come "Nessuna esecuzione
+  // registrata di predict_round" — una frase che parla al manutentore e a un
+  // cliente dice solo che qualcosa non va.
+  const { phase, can } = useAuth();
+  const operatore = can("system:manage");
+  const status = useApi(
+    () => (operatore ? api.status() : Promise.resolve(null)),
+    [operatore],
+  );
   const rounds = useApi(() => api.rounds(), []);
   const record = useApi<{ record: TrackRecord; summary: SeasonSummary }>(
     () =>
@@ -186,7 +197,7 @@ export function Dashboard() {
           </div>
         </section>
 
-        {(status.data?.warnings ?? []).length > 0 && (
+        {operatore && (status.data?.warnings ?? []).length > 0 && (
           <ul className="notes">
             {status.data?.warnings.map((nota) => (
               <li key={nota}>{nota}</li>
@@ -290,6 +301,13 @@ export function Dashboard() {
             >
               <ModelPicks matchday={selected} />
             </ErrorBoundary>
+
+            {/* Detto una volta sola e nel punto in cui si nota l'assenza. Le
+                partite gia' giocate sono tutte qui sopra: quello che manca a
+                chi non e' entrato e' la giornata non ancora giocata, ed e'
+                l'unica cosa che manca. Dirlo dove il vuoto si vede evita sia
+                il banner che accompagna ogni schermata sia il silenzio. */}
+            {phase === "anonymous" && <SoloAbbonati />}
           </div>
 
           <aside>

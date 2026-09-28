@@ -58,7 +58,7 @@ def _signed_in():
     permission names are the real ones, so a route asking for a permission
     that does not exist here still fails.
     """
-    from backend.auth.deps import current_user
+    from backend.auth.deps import current_user, viewer
     from backend.auth.models import Permission, Role, User
 
     everything = Role(
@@ -69,11 +69,18 @@ def _signed_in():
     stub = User(email="test@example.com", password_hash="unused", status="active")
     stub.roles = [everything]
 
+    # BOTH SEAMS, because there are now two. `current_user` is the one
+    # `require_permission` uses to refuse; `viewer` is the one the public
+    # routes use to decide how much to show. Overriding only the first leaves
+    # every free-tier route treating these tests as anonymous, which shows up
+    # as matches quietly missing from a payload rather than as a 401.
     app.dependency_overrides[current_user] = lambda: stub
+    app.dependency_overrides[viewer] = lambda: stub
     try:
         yield stub
     finally:
         app.dependency_overrides.pop(current_user, None)
+        app.dependency_overrides.pop(viewer, None)
 
 SEASON = "2026-27"
 
@@ -621,3 +628,110 @@ def test_no_shared_cache_may_hold_a_signed_in_response() -> None:
     # step; `Vary: Cookie` above is what keeps a cache honest in the meantime.
     assert client.get(f"/api/picks/{SEASON}").headers["etag"] == \
         client.get(f"/api/picks/{SEASON}").headers["etag"]
+
+
+def test_the_browser_preflight_passes_with_the_headers_the_dashboard_sends() -> None:
+    """
+    A PREFLIGHT THAT FAILS LOOKS LIKE A SERVER THAT IS DOWN.
+
+    `allow_headers` listed only `content-type`. That is a CORS safelisted
+    header, so sign-in worked and looked like proof the whole thing worked —
+    but `ngrok-skip-browser-warning`, which `frontend/src/api/client.ts` puts on
+    every data request, is not safelisted, and Starlette answers a preflight
+    asking for an unlisted header with 400. Every dashboard GET failed before
+    it was sent, and the interface said "non riesco a contattare l'API" about a
+    server that was up and answering that very request over curl.
+
+    Same origin hides it, which is why production never showed it and the repo
+    split would have.
+    """
+    client = TestClient(app)
+    origin = "http://localhost:5173"
+    for asked in ("accept, ngrok-skip-browser-warning", "content-type", "if-none-match"):
+        r = client.options(f"/api/picks/{SEASON}", headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": asked,
+        })
+        assert r.status_code == 200, \
+            f"preflight refused for {asked!r}: {r.status_code}"
+        assert r.headers["access-control-allow-origin"] == origin
+
+
+# --- the free tier ----------------------------------------------------------
+
+def _anonymous() -> TestClient:
+    """A client with the signed-in override removed, i.e. nobody."""
+    from backend.auth.deps import current_session, current_user, viewer
+    for dep in (current_user, current_session):
+        app.dependency_overrides[dep] = _refuse
+    app.dependency_overrides[viewer] = lambda: None
+    return TestClient(app)
+
+
+def _refuse():
+    from fastapi import HTTPException, status
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not signed in")
+
+
+def test_the_history_is_free_and_the_upcoming_round_is_not() -> None:
+    """
+    THE FREE/PAID LINE, WHICH IS THE PRODUCT.
+
+    Everything already played is public: the result is in the newspaper, and
+    what this project adds is the prediction written before kick-off beside it.
+    Proof withheld convinces nobody. What is worth money is the round that has
+    not kicked off, so an anonymous caller must see the played matches and
+    none of the others.
+    """
+    anon = _anonymous()
+    try:
+        for path in (f"/api/season/{SEASON}", f"/api/rounds/{SEASON}",
+                     f"/api/track-record/{SEASON}", f"/api/standings/{SEASON}",
+                     f"/api/matches/{SEASON}", f"/api/picks/{SEASON}",
+                     f"/api/selections/{SEASON}", "/api/health"):
+            assert anon.get(path).status_code == 200, f"{path} must be public"
+
+        for match in anon.get(f"/api/matches/{SEASON}").json():
+            assert match["goals_home"] is not None, \
+                f"an unplayed match reached an anonymous caller: {match['home_team']}"
+
+        picks = anon.get(f"/api/picks/{SEASON}").json()
+        for key in ("most_probable", "with_min_odds"):
+            for sel in picks[key]:
+                assert sel["goals_home"] is not None, \
+                    f"an unplayed selection reached an anonymous caller in {key}"
+
+        # Operational detail is not content and stays behind the session.
+        assert anon.get("/api/status").status_code == 401
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_a_subscriber_sees_more_than_an_anonymous_caller(monkeypatch) -> None:
+    """
+    The filter has to BITE, and on the real track record it cannot.
+
+    Every match in it has been played, so free and paid lists are identical and
+    a test comparing them would pass with the paywall deleted — green, and
+    proving nothing. The unplayed match is therefore injected, the same trick
+    `test_unplayed_match_is_null_not_zero` uses for the same reason.
+    """
+    resolved = client.get(f"/api/matches/{SEASON}").json()[0]
+    upcoming = dict(resolved, home_team="Monza", away_team="Sassuolo", matchday=38,
+                    goals_home=None, goals_away=None, actual_outcome=None,
+                    rps=None, correct=None, status=store.STATUS_PREDICTED)
+    monkeypatch.setattr(store, "matches", lambda *a, **k: [resolved, upcoming])
+
+    paid = client.get(f"/api/matches/{SEASON}").json()
+    assert len(paid) == 2, "a signed-in caller sees the round that has not been played"
+
+    anon = _anonymous()
+    try:
+        free = anon.get(f"/api/matches/{SEASON}").json()
+    finally:
+        app.dependency_overrides.clear()
+
+    assert len(free) == 1, "the unplayed match reached an anonymous caller"
+    assert free[0]["goals_home"] is not None
+    assert free[0]["home_team"] != "Monza"

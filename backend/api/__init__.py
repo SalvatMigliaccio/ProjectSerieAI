@@ -227,7 +227,25 @@ def create_app() -> FastAPI:
         # POST for /api/auth only. Every other route still rejects it at
         # startup, via _assert_read_only_routes.
         allow_methods=["GET", "POST"],
-        allow_headers=["content-type"],
+        # EVERY HEADER THE DASHBOARD ACTUALLY SENDS, and it was not the whole
+        # list. `content-type` alone let sign-in through — it is a CORS
+        # safelisted header, as are `accept` and the language ones — while
+        # `ngrok-skip-browser-warning`, which `frontend/src/api/client.ts` puts
+        # on every data request, is not. Starlette answers a preflight asking
+        # for an unlisted header with **400**, so every GET from the dashboard
+        # failed before it was sent, and the interface reported "non riesco a
+        # contattare l'API" about a server that was up and answering.
+        #
+        # It is invisible in production, where Caddy serves both from one
+        # origin and no preflight happens. It breaks exactly two things: local
+        # development against a separate API port, and any deployment that
+        # splits the two hosts — which is what phase 3's repo separation leads
+        # to.
+        allow_headers=["content-type", "accept", "if-none-match",
+                       "ngrok-skip-browser-warning"],
+        # Without this a cross-origin caller cannot read the ETag, so the
+        # conditional request it is meant to enable is impossible to make.
+        expose_headers=["ETag"],
     )
 
     # The schema digest is part of every ETag, so a change to a payload's shape
