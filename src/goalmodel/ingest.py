@@ -83,6 +83,42 @@ def save(df: pd.DataFrame, name: str) -> None:
 # Stage 1 - Risultati e quote (football-data.co.uk)
 # ---------------------------------------------------------------------------
 
+BOM = b"\xef\xbb\xbf"
+
+
+def _togli_bom(cartella: Path) -> int:
+    """
+    Toglie il BOM dai CSV di football-data gia' in cache.
+
+    PERCHE' SERVE, ED E' UN CASO SOLO MA NON UN CASO ISOLATO. soccerdata
+    decide l'encoding dalla STAGIONE: da `2425` in poi legge `UTF-8-SIG`,
+    prima `latin-1` (`match_history._parse_csv`). E' vero per quasi tutti i
+    file, e `E0_2122.csv` e' l'eccezione: ha il BOM pur essendo del 2021/22,
+    quindi viene letto in latin-1 e la prima colonna si chiama `ï»¿Div`
+    invece di `Div`.
+
+    Il danno non e' una colonna con un nome buffo. soccerdata rinomina
+    `Div` in `league`: se `Div` non c'e', quelle 380 righe restano SENZA
+    LEGA, e una chiave nulla sparisce da ogni merge senza un errore. E'
+    successo al primo run sui Big 5: una stagione intera di Premier League.
+
+    Togliere il BOM dal file rende la decisione sull'encoding irrilevante,
+    invece di sperare che la soglia di soccerdata resti giusta. Idempotente:
+    un file senza BOM non viene riscritto.
+    """
+    if not cartella.exists():
+        return 0
+    puliti = 0
+    for csv in sorted(cartella.glob("*.csv")):
+        dati = csv.read_bytes()
+        if dati.startswith(BOM):
+            csv.write_bytes(dati[len(BOM):])
+            puliti += 1
+    if puliti:
+        log.info("BOM rimosso da %d file in %s", puliti, cartella)
+    return puliti
+
+
 def ingest_matches() -> pd.DataFrame:
     """
     Base del dataset: risultato finale e primo tempo, statistiche di partita
@@ -99,7 +135,23 @@ def ingest_matches() -> pd.DataFrame:
     solo come benchmark.
     """
     mh = sd.MatchHistory(leagues=LEAGUE, seasons=SEASONS)
+    _togli_bom(mh.data_dir)
     df = mh.read_games()
+
+    # LA LEGA NON PUO' MANCARE, e questo controllo e' qui perche' e' mancata.
+    # Senza, il file esce scritto e il problema si manifesta piu' tardi come
+    # righe che spariscono da ogni merge — che e' esattamente cio' che la
+    # chiave di join deve impedire. `schema.py` lo intercetta comunque alla
+    # lettura, ma li' il messaggio dice "valori nulli nella chiave" e non
+    # quale stagione, che e' l'unica cosa che serve per rimediare.
+    mancanti = df.index.get_level_values("league").isna()
+    if mancanti.any():
+        stagioni = sorted(set(df.index.get_level_values("season")[mancanti]))
+        raise ValueError(
+            f"{int(mancanti.sum())} partite senza lega, stagioni {stagioni}: "
+            f"football-data ha cambiato l'intestazione del file. "
+            f"Controllare la colonna 'Div' nei CSV in {mh.data_dir}")
+
     save(df, "matches")
     return df
 
