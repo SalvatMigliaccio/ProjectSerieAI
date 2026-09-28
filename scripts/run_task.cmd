@@ -73,12 +73,36 @@ REM  package is installed in the venv. Running from the repo root is no longer
 REM  enough, which is the one thing about the new layout that bites a machine
 REM  that used to work. Checked here so the log says what to run instead of
 REM  holding a ModuleNotFoundError traceback nobody reads on a Friday evening.
-"%PY%" -c "import goalmodel" 2>nul
+REM
+REM  IT IMPORTS THE TASK'S OWN MODULE, NOT `goalmodel`. Since 26 September 2026
+REM  the base dependencies are only what `import goalmodel` needs: ingestion
+REM  moved to the `ingest` extra and LightGBM to `ml`. `import goalmodel` would
+REM  therefore succeed on a venv that cannot run either task, and the run would
+REM  die further in — past the check that exists to keep that from happening.
+REM
+REM  `goalmodel.ingest` IS CHECKED SEPARATELY, and that is not belt and braces.
+REM  Importing predict_round does NOT pull soccerdata: the ingestion stages are
+REM  imported inside the functions that use them, so a venv without the
+REM  `ingest` extra passes the first check and fails minutes later, on the
+REM  network step, where the log reads like the site was down. Only the two
+REM  production tasks need it — predict_m5 reads what is already on disk — so
+REM  it is checked only when RECORD is set, which is exactly those two.
+"%PY%" -c "import %MODULE%" 2>nul
 if errorlevel 1 (
-    echo [ERROR] goalmodel non installato nel venv. Rimedio: >> "%LOG%"
-    echo         %PY% -m pip install -e . >> "%LOG%"
+    echo [ERROR] %MODULE% non importabile nel venv. Rimedio: >> "%LOG%"
+    echo         %PY% -m pip install -r requirements.lock >> "%LOG%"
+    echo         %PY% -m pip install -e ".[all]" --no-deps >> "%LOG%"
     popd
     exit /b 3
+)
+if defined RECORD (
+    "%PY%" -c "import goalmodel.ingest" 2>nul
+    if errorlevel 1 (
+        echo [ERROR] extra `ingest` mancante: %TASK% scarica dati. Rimedio: >> "%LOG%"
+        echo         %PY% -m pip install -e ".[all]" --no-deps >> "%LOG%"
+        popd
+        exit /b 3
+    )
 )
 
 "%PY%" -m %MODULE% %1 %2 %3 >> "%LOG%" 2>&1

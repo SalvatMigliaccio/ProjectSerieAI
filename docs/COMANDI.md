@@ -227,7 +227,11 @@ track record.
 ## 2. Primo avvio, da zero
 
 ```bash
-python -m pip install -r pyproject.toml
+# Lo stesso ambiente descritto sopra: il lock decide le versioni, il pacchetto
+# entra senza risolverle di nuovo. `[all]` perche' l'ingestion vive nell'extra
+# `ingest` e i modelli in `ml`, e il primo avvio ha bisogno di entrambi.
+python -m pip install -r requirements.lock
+python -m pip install -e ".[all]" --no-deps
 
 goalmodel ingest --stage matches
 goalmodel ingest --stage understat
