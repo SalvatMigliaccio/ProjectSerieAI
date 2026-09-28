@@ -92,7 +92,7 @@ def _secondaria(nome: str) -> pd.DataFrame | None:
         return None
     d = nz.normalize_season(nz.apply_name_map(grezzo, nz.load_name_map()))
     d["season"] = d["season"].astype(str)
-    return d[d["league"].isin(config.LEAGUES)]
+    return d[d["league"].isin(config.LEAGUES_PRODUZIONE)]
 
 
 def _da_understat() -> pd.DataFrame:

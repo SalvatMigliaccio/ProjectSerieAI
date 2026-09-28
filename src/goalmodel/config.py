@@ -94,6 +94,22 @@ SEASONS = [
 # (bypassa la cache), quindi non va toccata a mano dopo ogni giornata.
 CURRENT_SEASON = "2627"
 
+# QUELLO CHE SI SERVE, che non e' quello che si ha. `LEAGUES` e' il perimetro
+# dei DATI: ingestion, dataset, addestramento e misure girano su tutti e cinque
+# i campionati, ed e' il motivo per cui il modello e' addestrato sui Big 5.
+#
+# La PRODUZIONE e' un'altra cosa. `predict_round` e `close_round` lavorano su
+# una giornata per volta, e "la giornata" esiste dentro un campionato: con
+# cinque leghe la giornata 1 sono 48 partite in quattro paesi, che non hanno
+# ne' la stessa data ne' lo stesso stato. Il track record, poi, e' Serie A e
+# solo Serie A: mescolarlo renderebbe incomparabile l'unica serie storica che
+# abbiamo.
+#
+# Allargare la produzione significa una giornata per lega, un registro per
+# lega e un archivio per lega — e va fatto di proposito, non ereditato
+# dall'aver scaricato altri dati.
+LEAGUES_PRODUZIONE = ["ITA-Serie A"]
+
 SQUADRA_TARGET = "Napoli"
 
 # ---------------------------------------------------------------------------
