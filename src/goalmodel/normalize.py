@@ -49,7 +49,18 @@ JOIN_KEYS = config.JOIN_KEYS
 # Tabella base e fonti da agganciare. La base definisce lo spazio dei nomi
 # canonico e il numero di righe atteso.
 BASE_SOURCE = "matches"
-SECONDARY_SOURCES = ["understat_team_match"]
+
+# OGNI FONTE CHE VIENE POI UNITA, non solo Understat. `fbref_schedule` mancava,
+# e la mappa per la Serie A ne portava comunque i nomi — `Juventus FC`,
+# `Parma Calcio 1913`, `SPAL 2013`, `Hellas Verona FC` — aggiunti a mano da
+# qualcuno che si era accorto del problema su un campionato solo.
+#
+# Quella fonte porta `week`, cioe' la GIORNATA: senza aggancio non c'e' ne'
+# walk-forward ne' ciclo di produzione. Al primo run sui Big 5 sono rimaste
+# 5353 partite senza giornata, tutte fuori dall'Italia, e l'errore parlava di
+# una voce mancante nella mappa senza poter dire quale — perche' lo strumento
+# che le propone non guardava quella fonte.
+SECONDARY_SOURCES = ["understat_team_match", "fbref_schedule"]
 
 
 # ---------------------------------------------------------------------------
