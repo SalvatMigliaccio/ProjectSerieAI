@@ -207,7 +207,7 @@ def calendario() -> pd.DataFrame:
     from ..normalize import apply_name_map, load_name_map, load_raw, normalize_season
 
     sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), load_name_map()))
-    sched = sched[sched["league"].isin(config.LEAGUES)].dropna(subset=["week"]).copy()
+    sched = sched[sched["league"].isin(config.LEAGUES_PRODUZIONE)].dropna(subset=["week"]).copy()
     sched["matchday"] = sched["week"].astype(int)
     sched["kickoff"] = predict_mod.kickoff(sched)
     sched["date"] = pd.to_datetime(sched["date"])

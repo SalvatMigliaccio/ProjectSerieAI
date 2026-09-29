@@ -103,7 +103,7 @@ def flag_post_kickoff(preds: pd.DataFrame) -> pd.DataFrame:
         log.warning("calendario assente: salto il controllo sul calcio d'inizio")
         return out
 
-    sched = sched[sched["league"].isin(config.LEAGUES)].dropna(subset=["time"])
+    sched = sched[sched["league"].isin(config.LEAGUES_PRODUZIONE)].dropna(subset=["time"])
     if sched.empty:
         return out
     sched["kickoff"] = kickoff(sched)

@@ -128,7 +128,25 @@ def kickoff(df: pd.DataFrame) -> pd.Series:
     """
     date = pd.to_datetime(df["date"]).dt.normalize()
     time = df["time"] if "time" in df.columns else pd.Series(pd.NA, index=df.index)
-    delta = pd.to_timedelta(time.astype("string") + ":00", errors="coerce").fillna(
+
+    # DUE ORARI IN UNA CELLA, FUORI DALL'ITALIA. Per un campionato straniero
+    # fbref scrive `17:30 (18:30)`: il primo e' l'ora dello STADIO, il secondo
+    # la stessa ora nel fuso di chi sta guardando la pagina — cioe' il nostro,
+    # visto che si scarica da qui. Per la Serie A i due coincidono e la
+    # parentesi non compare, che e' il motivo per cui non si era mai visto.
+    #
+    # Senza questa riga `to_timedelta` non capisce la stringa, restituisce NaT
+    # e il `fillna` sotto la trasforma in mezzanotte: quattro campionati su
+    # cinque si ritrovano SENZA orario, in silenzio. Mezzanotte e' prudente per
+    # filtrare le partite future, e qui non lo e' affatto — sposta il fischio
+    # d'inizio indietro di ore, quindi previsioni scritte in tempo
+    # risulterebbero scritte dopo e uscirebbero dal track record.
+    #
+    # Si prende il PRIMO orario perche' e' quello dello stadio, ed e' il fuso
+    # che `config.LEAGUE_TIMEZONE` dichiara per quella lega.
+    time = time.astype("string").str.extract(r"(\d{1,2}:\d{2})", expand=False)
+
+    delta = pd.to_timedelta(time + ":00", errors="coerce").fillna(
         pd.Timedelta(0)
     )
     locale = date + delta
@@ -154,7 +172,7 @@ def load_fixtures(as_of: pd.Timestamp) -> pd.DataFrame:
     """Calendario normalizzato, con giornata e orario, solo partite future."""
     mapping = load_name_map()
     sched = normalize_season(apply_name_map(load_raw("fbref_schedule"), mapping))
-    sched = sched[sched["league"].isin(config.LEAGUES)].copy()
+    sched = sched[sched["league"].isin(config.LEAGUES_PRODUZIONE)].copy()
     sched = sched.dropna(subset=["week"])
 
     sched["matchday"] = sched["week"].astype(int)

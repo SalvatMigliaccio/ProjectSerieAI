@@ -10,7 +10,7 @@ verificato, non quando "sembra fatta".
 | 3 | infrastruttura: separazione, Docker, deploy | misto | **Docker e deploy fatti** (26 set 2026); separazione al collega |
 | 4 | modello di business | noi | da aprire |
 | 5 | frontend: porting e build | collega | dipende dalla 3 |
-| 6 | feature nuove | noi | da aprire |
+| 6 | allargamento Big 5 e feature nuove | noi | **dati fatti** (28 set 2026); produzione da decidere |
 
 ---
 
@@ -140,7 +140,39 @@ promettesse il contrario mentirebbe sui propri numeri.
 La fa il collega, dopo la separazione. I tipi in `frontend/src/api/types.ts`
 ricalcano `web/openapi.json`, che e' il contratto.
 
-## Fase 6 — feature nuove
+## Fase 6 — allargamento e feature nuove
 
-Da aprire. Il primo candidato e' il seguito del blocco B: sostituire gol+assist
-con l'xG di Understat, ora che `--stage shots` funziona.
+### Big 5 — dati e storico: FATTI, 28 settembre 2026
+
+Deciso di allargare il perimetro. **Stage 1 chiuso**: ingestion, mappa dei nomi
+e dataset per tutti e cinque i campionati. 21839 partite, 100% di copertura del
+join su ogni lega, zero duplicati sulla quadrupla, `test_production_unchanged`
+verde bit a bit.
+
+Il codice era gia' scritto per i Big 5 — `LEAGUES` era una lista con quattro
+righe commentate e ogni modulo filtra su quella — quindi non e' servito
+riscrivere niente per l'ingestion. Sono servite due correzioni, entrambe di
+difetti veri che la sola Serie A non poteva mostrare: il BOM che toglieva la
+lega a una stagione intera di Premier League, e i due orari di fbref che
+lasciavano quattro leghe su cinque senza calcio d'inizio. Dettagli in
+`CLAUDE.md`.
+
+**Quello che NON e' fatto, ed e' la parte grossa.** La produzione resta Serie A
+(`config.LEAGUES_PRODUZIONE`). Servono, e vanno decisi uno per uno:
+- una giornata per lega in `rounds.py` — oggi "la prima giornata predicibile"
+  non e' definita con cinque calendari;
+- un registro e un archivio per lega, o una colonna lega nel registro con tutti
+  i consumatori che la rispettano;
+- l'API e la dashboard con una lega selezionabile (`store.DEFAULT_LEAGUE`);
+- e la cosa da dire ai clienti: per gli altri quattro campionati il track
+  record **parte da zero**, perche' una previsione vale solo se e' stata
+  scritta prima del fischio e per quelle partite non e' stata scritta.
+
+Il guadagno atteso e' misurato, non sperato: l'analisi di potenza dice che i
+Big 5 valgono **2.2x** sul minimo rilevabile, e servono per i sottoinsiemi
+troppo piccoli in Serie A — il derby all'11% non arriva alla soglia.
+
+### Blocco B, seguito
+
+Sostituire gol+assist con l'xG di Understat, ora che `--stage shots` funziona.
+Resta dietro allo scrape di WhoScored, rinviato.

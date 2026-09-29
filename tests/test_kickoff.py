@@ -93,11 +93,17 @@ def test_contro_football_data(soglia: float = 0.98) -> None:
     # Il criterio robusto e' strutturale: una stagione in cui TUTTE le partite
     # hanno la stessa ora sull'orologio non porta informazione di orario,
     # qualunque sia quell'ora.
-    ore = j.groupby("season")["fd"].transform(
+    # PER (LEGA, STAGIONE), non per stagione. football-data ha cominciato a
+    # pubblicare l'orario in momenti diversi nei vari campionati: raggruppando
+    # per sola stagione, le righe segnaposto di una lega restano nel confronto
+    # insieme a quelle vere di un'altra, e il test accusa il fuso orario — che
+    # e' esattamente l'errore che questa esclusione esiste per evitare.
+    ore = j.groupby(["league", "season"])["fd"].transform(
         lambda s: s.dt.strftime("%H:%M").nunique())
-    scartate = sorted(j.loc[ore <= 1, "season"].unique())
+    scartate = sorted(set(map(tuple, j.loc[ore <= 1, ["league", "season"]].values)))
     if scartate:
-        print(f"   (stagioni senza orario vero, escluse: {', '.join(scartate)})")
+        quante = len(scartate)
+        print(f"   ({quante} coppie lega-stagione senza orario vero, escluse)")
     j = j[ore > 1]
     if len(j) < 100:
         print(f"   (saltato: solo {len(j)} partite con orario su entrambe)")
