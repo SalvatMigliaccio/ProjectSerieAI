@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
@@ -16,7 +16,15 @@ import { scorrimento } from "../lib/motion";
  * prima e si scorre dopo, quando il nodo esiste davvero: due `rAF` perche' al
  * primo la landing e' montata ma non ancora impaginata.
  */
-function SectionLink({ id, children }: { id: string; children: ReactNode }) {
+function SectionLink({
+  id,
+  children,
+  on = false,
+}: {
+  id: string;
+  children: ReactNode;
+  on?: boolean;
+}) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -54,10 +62,93 @@ function SectionLink({ id, children }: { id: string; children: ReactNode }) {
   };
 
   return (
-    <a href={`#${id}`} onClick={vai}>
+    <a
+      href={`#${id}`}
+      onClick={vai}
+      className={on ? "on" : undefined}
+      aria-current={on ? "location" : undefined}
+    >
       {children}
     </a>
   );
+}
+
+/**
+ * Le sezioni della landing, nell'ordine in cui compaiono, e la voce di menu
+ * che accendono.
+ *
+ * "Statistiche" e "Partite" puntano alla STESSA sezione (`#statistiche`
+ * contiene la lista delle partite, `#partite` e' il suo titolo): dentro quella
+ * sezione si accende "Partite", che e' il nome di cio' che vi si vede.
+ */
+const SEZIONI: ReadonlyArray<{ elemento: string; voce: string }> = [
+  { elemento: "come-funziona", voce: "come-funziona" },
+  { elemento: "statistiche", voce: "partite" },
+  { elemento: "per-chi", voce: "per-chi" },
+  { elemento: "faq", voce: "faq" },
+];
+
+/**
+ * Quale sezione della landing si sta leggendo: "home" sopra la prima.
+ *
+ * LA LINEA E' IL BORDO BASSO DELLA TESTATA, letto da `scroll-padding-top`
+ * invece che scritto qui: e' lo stesso punto in cui le ancore portano il
+ * titolo di una sezione, quindi cliccare una voce accende proprio quella voce.
+ * Gli 8 pixel di tolleranza coprono gli arrotondamenti dello scorrimento.
+ *
+ * IN FONDO ALLA PAGINA VINCE L'ULTIMA. Le FAQ sono piu' corte dello schermo e
+ * il loro titolo non arriva mai alla linea: senza questa regola "FAQ" non si
+ * accenderebbe mai, nemmeno dopo averla cliccata.
+ *
+ * Ricalcolo su scorrimento, ridimensionamento e cambio di altezza della
+ * pagina: la landing cresce mentre arrivano i dati dall'API, e le sezioni si
+ * spostano senza che nessuno scorra. Un fotogramma per volta, non un calcolo
+ * per evento.
+ */
+function useSezioneAttiva(attivo: boolean): string | null {
+  const [voce, setVoce] = useState<string | null>(attivo ? "home" : null);
+
+  useEffect(() => {
+    if (!attivo) {
+      setVoce(null);
+      return;
+    }
+
+    let fotogramma = 0;
+    const calcola = () => {
+      fotogramma = 0;
+      const radice = document.documentElement;
+      const linea = (parseFloat(getComputedStyle(radice).scrollPaddingTop) || 0) + 8;
+      const inFondo = window.innerHeight + window.scrollY >= radice.scrollHeight - 2;
+
+      let trovata = "home";
+      for (const { elemento, voce: v } of SEZIONI) {
+        const nodo = document.getElementById(elemento);
+        if (!nodo) continue;
+        if (nodo.getBoundingClientRect().top <= linea) trovata = v;
+        if (inFondo) trovata = v;
+      }
+      setVoce(trovata);
+    };
+    const pianifica = () => {
+      if (fotogramma === 0) fotogramma = requestAnimationFrame(calcola);
+    };
+
+    calcola();
+    window.addEventListener("scroll", pianifica, { passive: true });
+    window.addEventListener("resize", pianifica);
+    const osservatore = new ResizeObserver(pianifica);
+    osservatore.observe(document.body);
+
+    return () => {
+      window.removeEventListener("scroll", pianifica);
+      window.removeEventListener("resize", pianifica);
+      osservatore.disconnect();
+      if (fotogramma !== 0) cancelAnimationFrame(fotogramma);
+    };
+  }, [attivo]);
+
+  return voce;
 }
 
 /**
@@ -96,7 +187,11 @@ function SkipLink() {
  * tocca, e `_assert_read_only_routes` lo verifica all'avvio.
  *
  * LE VOCI DEL MENU PUNTANO A SEZIONI CHE ESISTONO. "Come funziona",
- * "Statistiche" e "FAQ" sono ancore della landing; "Partite" e' la dashboard.
+ * "Statistiche", "Partite" e "FAQ" sono ancore della landing. "Partite" porta
+ * alla lista della giornata nella landing e non alla dashboard: dal 9 ottobre
+ * 2026 la dashboard chiede l'accesso, e la voce di menu non deve rimbalzare
+ * chi non e' entrato sulla pagina di login. Alla dashboard porta il bottone a
+ * destra.
  * Una voce che apre il vuoto e' una promessa rotta al primo clic.
  */
 /**
@@ -124,6 +219,30 @@ function AccountLink() {
 }
 
 export function Masthead({ current }: { current: "hero" | "dashboard" }) {
+  // Si guarda il percorso e non `current`: account e accesso passano "hero"
+  // pur non essendo la landing, e li' nessuna sezione e' "quella che leggi".
+  const { pathname } = useLocation();
+  const attiva = useSezioneAttiva(pathname === "/");
+
+  // SU TELEFONO IL MENU SCORRE DI LATO, e la voce accesa puo' stare fuori
+  // dallo schermo: la si porta in vista. Con `scrollTo` sul menu e non con
+  // `scrollIntoView`, che sposterebbe anche la pagina in verticale — cioe'
+  // proprio lo scorrimento che ha acceso la voce.
+  const menu = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const nav = menu.current;
+    const voce = nav?.querySelector<HTMLElement>("a.on");
+    if (!nav || !voce || nav.scrollWidth <= nav.clientWidth) return;
+    const sinistra = voce.offsetLeft - nav.offsetLeft;
+    const fuori = sinistra < nav.scrollLeft || sinistra + voce.offsetWidth > nav.scrollLeft + nav.clientWidth;
+    if (fuori) {
+      nav.scrollTo({
+        left: sinistra - (nav.clientWidth - voce.offsetWidth) / 2,
+        behavior: scorrimento(),
+      });
+    }
+  }, [attiva]);
+
   return (
     <header className="masthead">
       <SkipLink />
@@ -142,26 +261,24 @@ export function Masthead({ current }: { current: "hero" | "dashboard" }) {
           </span>
         </Link>
 
-        <nav className="nav">
-          <Link to="/" className={current === "hero" ? "on" : undefined}
-            aria-current={current === "hero" ? "page" : undefined}>
+        <nav className="nav" ref={menu}>
+          <Link to="/" className={attiva === "home" ? "on" : undefined}
+            aria-current={pathname === "/" ? "page" : undefined}>
             Home
           </Link>
-          <SectionLink id="come-funziona">Come funziona</SectionLink>
+          <SectionLink id="come-funziona" on={attiva === "come-funziona"}>Come funziona</SectionLink>
           <SectionLink id="statistiche">Statistiche</SectionLink>
-          <Link to="/dashboard" className={current === "dashboard" ? "on" : undefined}
-            aria-current={current === "dashboard" ? "page" : undefined}>
-            Partite
-          </Link>
-          <SectionLink id="per-chi">Per chi e'</SectionLink>
-          <SectionLink id="faq">FAQ</SectionLink>
+          <SectionLink id="partite" on={attiva === "partite"}>Partite</SectionLink>
+          <SectionLink id="per-chi" on={attiva === "per-chi"}>Per chi e'</SectionLink>
+          <SectionLink id="faq" on={attiva === "faq"}>FAQ</SectionLink>
           <AccountLink />
         </nav>
 
         {/* L'angolo in alto a destra e' il posto dell'azione, non di un dato:
             una data li' e' informazione che nessuno cerca in quel punto, e la
             stessa informazione e' gia' nel piede della pagina. */}
-        <Link className="nav-cta" to="/dashboard">
+        <Link className="nav-cta" to="/dashboard"
+          aria-current={current === "dashboard" ? "page" : undefined}>
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
             <rect x="3" y="3" width="7" height="9" rx="1.5" />
             <rect x="14" y="3" width="7" height="5" rx="1.5" />
@@ -227,7 +344,7 @@ export function Colophon({
         <nav className="colophon__col" aria-label="pagine">
           <h3>Pagine</h3>
           <Link to="/">Home</Link>
-          <Link to="/dashboard">Partite</Link>
+          <SectionLink id="partite">Partite</SectionLink>
           <SectionLink id="come-funziona">Come funziona</SectionLink>
           <SectionLink id="statistiche">Statistiche</SectionLink>
           <SectionLink id="per-chi">Per chi e'</SectionLink>

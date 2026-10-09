@@ -227,8 +227,13 @@ export function Hero() {
 
   return (
     <>
+      {/* FUORI DA `.hero`, e non per ordine. La testata e' `sticky`, e un
+          elemento sticky resta incollato solo dentro il suo contenitore:
+          dentro la hero (che per di piu' ha `overflow: hidden`) spariva
+          appena la hero usciva dallo schermo. */}
+      <Masthead current="hero" />
+
       <div className="hero">
-        <Masthead current="hero" />
 
         <div className="wrap hero__grid" id="contenuto" tabIndex={-1}>
           <div>
@@ -416,7 +421,7 @@ export function Hero() {
             <ErrorState error={rounds.error} what="I dati non sono raggiungibili." />
           )}
 
-           <div className="showcase__label" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+           <div className="showcase__label" id="partite" aria-hidden="true" style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
               <Eyebrow>partite in evidenza</Eyebrow>
               <h2>{titolo}</h2>
               <p className="lead" style={{ maxWidth: "600px" }}>

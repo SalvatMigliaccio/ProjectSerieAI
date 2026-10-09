@@ -26,3 +26,13 @@ timestamp_prediction,model_version,league,season,matchday,match_date,home_team,a
 2026-09-19T08:53:08Z,M1 market-only (lambda),ITA-Serie A,2627,5,2026-09-20,Parma,Genoa,0.9942,1.1906,0.30518,0.29066,0.40416,0.3732,0.43844,3.1,3.1,2.45,B365-fixtures
 2026-09-19T08:53:08Z,M1 market-only (lambda),ITA-Serie A,2627,5,2026-09-20,Juventus,Atalanta,1.7462,0.9278,0.56667,0.23502,0.19832,0.5,0.49913,1.7,3.9,4.75,B365-fixtures
 2026-09-19T08:53:08Z,M1 market-only (lambda),ITA-Serie A,2627,5,2026-09-20,Milan,Lecce,2.3629,0.6162,0.76446,0.15659,0.07895,0.57211,0.41671,1.27,5.75,11.0,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-10,Genoa,Fiorentina,1.0658,1.4066,0.2853,0.26698,0.44772,0.44908,0.49494,3.3,3.25,2.25,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-10,Inter,Parma,3.0607,0.6206,0.85219,0.10121,0.04661,0.7113,0.44072,1.14,8.0,19.0,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-10,Napoli,Frosinone,2.3301,0.9831,0.67449,0.1816,0.1439,0.64321,0.56497,1.44,4.75,7.0,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Como,Roma,1.4619,1.5173,0.36585,0.24387,0.39028,0.57213,0.59973,2.6,3.5,2.6,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Lazio,Monza,1.892,0.8652,0.61534,0.21846,0.1662,0.52027,0.49172,1.57,4.0,6.0,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Lecce,Bologna,0.8946,1.5778,0.21334,0.25273,0.53393,0.44908,0.46918,4.2,3.3,1.85,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Sassuolo,Milan,1.0288,1.8578,0.20677,0.22549,0.56774,0.55092,0.5423,4.33,3.6,1.75,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Cagliari,Juventus,0.6902,1.9025,0.12753,0.21042,0.66204,0.47973,0.42413,7.0,3.75,1.55,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-12,Atalanta,Venezia,2.1028,1.0417,0.6172,0.20363,0.17917,0.60838,0.56812,1.57,4.2,5.75,B365-fixtures
+2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-12,Torino,Udinese,1.3447,1.1276,0.41697,0.26985,0.31319,0.44908,0.49997,2.3,3.2,3.3,B365-fixtures

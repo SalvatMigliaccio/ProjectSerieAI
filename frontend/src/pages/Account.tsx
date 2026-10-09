@@ -362,7 +362,7 @@ export function ResetPassword() {
       await authApi.resetPassword(token, password);
       // No session is issued by the reset, by design: whoever changed the
       // password proves it by signing in with it.
-      navigate("/accedi", { replace: true });
+      navigate("/sign-in", { replace: true });
     } catch (err) {
       setError(message(err, "reimpostazione non riuscita"));
     } finally {

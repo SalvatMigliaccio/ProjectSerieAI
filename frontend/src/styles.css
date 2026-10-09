@@ -166,7 +166,22 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 
 /* --- testata: marchio a sinistra, menu al centro, azione a destra --------- */
 
-.masthead { position: relative; z-index: 4; }
+/* FISSA IN ALTO, su ogni pagina. Il fondo e' semitrasparente e sfocato perche'
+   sotto scorre di tutto, dalla foto della hero alle tabelle: con un fondo
+   pieno sembrerebbe una banda appoggiata sopra, senza fondo il menu si
+   leggerebbe sopra il testo. Lo z-index sta sopra le schede flottanti della
+   hero, che arrivano a 4. */
+.masthead {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(var(--bg-rgb), 0.82);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Le ancore della landing non devono finire SOTTO la testata: e' alta
+   ~94 pixel su desktop e ~112 su telefono, dove il menu va a capo. */
+html { scroll-padding-top: 104px; }
 
 .masthead__inner {
   display: grid;
@@ -211,7 +226,11 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
 }
 
 .nav a:hover { color: var(--fg); }
-.nav a[aria-current="page"], .nav a.on { color: var(--mint); border-bottom-color: var(--mint); }
+/* SOLO `.on`, non `[aria-current="page"]`. Sulla landing "Home" e' sempre la
+   pagina corrente per lo screen reader, ma la voce accesa e' la sezione che si
+   sta leggendo: con il vecchio selettore Home restava accesa insieme a lei. */
+.nav a { transition: color 0.2s ease, border-color 0.2s ease; }
+.nav a.on { color: var(--mint); border-bottom-color: var(--mint); }
 
 /* Pastiglia in alto a destra. Contorno e non menta piena: il verde pieno e'
    gia' della chiamata principale della hero, e due bottoni pieni nello stesso
@@ -1928,7 +1947,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 @media (max-width: 900px) {
   .colophon__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .colophon__brand { grid-column: 1 / -1; }
-  .masthead__inner { grid-template-columns: auto auto; row-gap: var(--s3); }
+  .masthead__inner { grid-template-columns: auto auto; row-gap: var(--s3); padding-block: var(--s3); }
+  html { scroll-padding-top: 124px; }
   /* IL MENU NON SPARISCE. Prima `display: none`: su telefono restava solo il
      bottone della dashboard, e "Come funziona" o le FAQ si raggiungevano solo
      scorrendo alla cieca. Ora sta su una riga sua sotto il marchio, e scorre

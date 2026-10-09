@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
+import { RequireAuth } from "./auth/RequireAuth";
 import {
   ForgotPassword,
   ResetPassword,
@@ -84,14 +85,19 @@ export function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
 
-          {/* APERTA, dalla fase 4. Le partite gia' giocate sono pubbliche —
-              il risultato lo e' comunque, e quello che questo progetto
-              aggiunge e' la previsione scritta prima del fischio accanto:
-              e' la prova, e una prova che si tiene nascosta non convince
-              nessuno. L'API filtra per conto suo, quindi da qui non passa
-              niente che non sia gia' stato deciso li'. Quello che resta
-              dietro l'accesso e' la giornata non ancora giocata. */}
-          <Route path="/dashboard" element={<Dashboard />} />
+          {/* DIETRO L'ACCESSO, dal 9 ottobre 2026. Dalla fase 4 era aperta,
+              con lo storico pubblico come vetrina; ora la dashboard si vede
+              solo da autenticati. E' una scelta di interfaccia, non di
+              protezione: le rotte pubbliche dell'API (`routes.public`)
+              continuano a servire lo storico a chiunque le chiami. */}
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <Dashboard />
+              </RequireAuth>
+            }
+          />
           <Route path="*" element={<Hero />} />
         </Routes>
       </AuthProvider>
