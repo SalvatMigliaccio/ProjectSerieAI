@@ -49,6 +49,7 @@ from .. import config, experiments
 from ..evaluation.evaluate import load_dataset
 from ..models.baseline import fair_odds, predictions_from_lambdas
 from ..prediction import predict as predict_mod
+from . import report_m5
 from .modelli import M5MediaSemi
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
@@ -146,7 +147,7 @@ def verifica(season: str | None = None, matchday: int | None = None) -> None:
     `evaluate.paired_comparison`, senza il bootstrap: con dieci partite un
     intervallo di confidenza sarebbe un ornamento.
     """
-    from ..evaluate import load_dataset, outcome_index, rps
+    from ..evaluation.evaluate import load_dataset, outcome_index, rps
 
     files = sorted(config.ROOT.glob("experiments/output/previsioni_m5_*.csv"))
     if not files:
@@ -312,7 +313,18 @@ def main() -> None:
 
     tab.to_csv(dst, index=False)
     print(f"\nscritto {dst}")
+
+    # Il report con tutti i mercati, dal file appena unito: copre anche le
+    # partite previste in una passata precedente, non solo quelle di adesso.
+    # Senza risultati: sono partite ancora da giocare, e caricare il dataset
+    # solo per non trovarli costerebbe tempo a ogni lancio dello scheduler.
+    pagina = report_m5.scrivi(str(esito.preds["season"].iloc[0]), esito.matchday,
+                              risultati=False)
+    if pagina is not None:
+        print(f"report     {pagina}")
     print("a risultati usciti:  python -m goalmodel.experiments.predici_gbm --verifica")
+    print(f"                     python -m goalmodel.experiments.report_m5 "
+          f"--matchday {esito.matchday}")
 
 
 if __name__ == "__main__":

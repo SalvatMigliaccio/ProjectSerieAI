@@ -82,6 +82,19 @@ function Result({ match }: { match: Match }) {
   );
 }
 
+/**
+ * La provenienza delle quote, senza il nome del book.
+ *
+ * Il registro scrive `B365-fixtures`, `B365-manual` o il solo codice del book
+ * nelle righe piu' vecchie: in pagina il nome del bookmaker non compare. Resta
+ * l'unica distinzione che serve a chi legge — snapshot pubblicato contro quota
+ * copiata a mano — perche' e' quella che dice quanto fidarsi del prezzo.
+ */
+function fonteQuote(source: string | null): string {
+  if (!source) return "";
+  return source.includes("manual") ? "quote inserite a mano" : "quote di apertura";
+}
+
 function Detail({ match }: { match: Match }) {
   const fair = [match.fair_odds_home, match.fair_odds_draw, match.fair_odds_away];
   const rows: Array<[string, string]> = [
@@ -92,7 +105,7 @@ function Detail({ match }: { match: Match }) {
     ["overround del book", overround(match.overround)],
     ["rps della partita", rps(match.rps)],
     ["previsione scritta", localDateTime(match.timestamp_prediction)],
-    ["fonte delle quote", match.odds_source ?? ""],
+    ["fonte delle quote", fonteQuote(match.odds_source)],
   ];
 
   return (

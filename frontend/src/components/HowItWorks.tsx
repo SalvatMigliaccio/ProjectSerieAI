@@ -70,7 +70,7 @@ function Glifo({ nome }: { nome: "dati" | "analisi" | "probabilita" | "scenari" 
  *  di quattro pastiglie con una parola sola, e riempiono la scheda invece di
  *  lasciarla mezza vuota. */
 const FONTI: Array<[string, string]> = [
-  ["Quote di apertura", "B365, venerdì"],
+  ["Quote di apertura", "il venerdì"],
   ["Copertura", "100% delle partite"],
   ["Risultati", "13 stagioni"],
   ["Forma", "medie mobili"],
@@ -194,7 +194,7 @@ export function HowItWorks({ match }: { match: Match | null }) {
             <div className="step__demo">
               <div className="pipe">
                 <span className="pipe__row">
-                  <span className="pipe__key">Quote B365</span>
+                  <span className="pipe__key">Quote</span>
                   <span className="pipe__val">
                     {fmtOdds(match?.odds_home ?? null)} · {fmtOdds(match?.odds_draw ?? null)} ·{" "}
                     {fmtOdds(match?.odds_away ?? null)}

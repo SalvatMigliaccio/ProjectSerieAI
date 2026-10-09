@@ -328,7 +328,7 @@ export function MatchesGrid({
           </>
         )}
         Sotto ogni percentuale c'è la quota: per l'<strong>1X2</strong> è quella
-        registrata da B365 al momento della previsione, per over/under e gol-gol
+        registrata al momento della previsione, per over/under e gol-gol
         è la <strong>quota equa</strong> (1/p), il prezzo a valore atteso zero.
       </p>
     </>
