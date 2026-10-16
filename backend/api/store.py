@@ -63,6 +63,7 @@ DEFAULT_LEAGUE = "ITA-Serie A"
 # Per-match status. Three values, and no more: a match that has not been
 # predicted yet does not exist in the track record, so there is no "scheduled".
 STATUS_PREDICTED = "predicted"   # in the log, not played yet
+STATUS_PLAYED = "played"         # played, result known, round NOT closed yet
 STATUS_RESOLVED = "resolved"     # played, archived, metrics available
 STATUS_INVALID = "invalid"       # played, archived, but written after kickoff
 
@@ -100,6 +101,7 @@ class Sources:
     schedule: Path
     master: Path
     odds_snapshot: Path
+    understat_schedule: Path
 
     @classmethod
     def at(cls, track_record: Path, data: Path) -> Sources:
@@ -110,6 +112,7 @@ class Sources:
             schedule=data / "raw" / "fbref_schedule.parquet",
             master=data / "interim" / "matches_master.parquet",
             odds_snapshot=data / "raw" / "fixtures_odds.parquet",
+            understat_schedule=data / "raw" / "understat_schedule.parquet",
         )
 
 
@@ -239,7 +242,8 @@ def _fingerprint(src: Sources) -> tuple:
     without touching any existing one.
     """
     items = [_stat(src.predictions_log), _stat(src.rounds_summary),
-             _stat(src.schedule), _stat(src.master), _stat(src.odds_snapshot)]
+             _stat(src.schedule), _stat(src.master), _stat(src.odds_snapshot),
+             _stat(src.understat_schedule)]
     if src.rounds_dir.is_dir():
         items.extend(_stat(p) for p in sorted(src.rounds_dir.glob("round_*.csv")))
     return tuple(items)
@@ -252,6 +256,7 @@ class Snapshot:
     summary: pd.DataFrame       # riepilogo.csv as it is
     kickoffs: dict              # (season, home, away) -> UTC Timestamp
     updated_at: str | None      # newest mtime among track record files
+    results: dict               # (season, home, away) -> result row, unarchived matches
 
 
 def _read_predictions(src: Sources) -> pd.DataFrame:
@@ -346,6 +351,75 @@ def _read_kickoffs(src: Sources) -> dict:
     return out
 
 
+@lru_cache(maxsize=2)
+def _results_frame(fingerprint: tuple, src: Sources) -> pd.DataFrame:
+    """
+    Every known result of the production league, one row per match.
+
+    ONLY THE PRODUCTION LEAGUE. Since 28 September `matches_master` holds the
+    Big 5, and anything here that filtered by season alone mixed five leagues:
+    the "Serie A" table came out with 96 teams and Barcelona on top. The
+    chain's secondary sources already filter on `LEAGUES_PRODUZIONE`;
+    football-data does not, so the filter is applied to the whole output.
+    """
+    from goalmodel import risultati
+
+    found = risultati.catena(
+        read_master(src),
+        understat=(pd.read_parquet(src.understat_schedule)
+                   if src.understat_schedule.exists() else None),
+        fbref=pd.read_parquet(src.schedule) if src.schedule.exists() else None,
+    )
+    found = found[found["league"].isin(config.LEAGUES_PRODUZIONE)].copy()
+    found["season"] = found["season"].astype(str)
+    return found.reset_index(drop=True)
+
+
+def results_frame(src: Sources | None = None) -> pd.DataFrame:
+    """Played matches of the production league, from the results chain."""
+    src = src or default_sources()
+    return _results_frame(_fingerprint(src), src)
+
+
+def _read_results(src: Sources) -> dict:
+    """
+    Results of played matches, before their round is closed.
+
+    WHY. `close_round` archives a round only when EVERY match has a result,
+    and it runs on Tuesday morning. Until then a match played on Saturday
+    showed "result pending" for three days, although Understat had the score
+    the same evening.
+
+    SAME CHAIN AS `close_round`, NOT A SECOND ONE. `goalmodel.risultati` is
+    the chain the archive uses — football-data, then Understat, then FBref —
+    called here on the frames this module reads from its own `Sources`. Two
+    chains would eventually disagree, and a match would show one score on the
+    dashboard and another in the archive.
+
+    WHAT IT DOES NOT DO. No metric comes from here: RPS, hits and calibration
+    still read the archived round files only. A result found here is shown as
+    `played`, i.e. provisional — football-data may still publish an official
+    score that differs (a match awarded 0-3, say), and `close_round` is the
+    step that puts one on record.
+
+    Degrades to "no provisional results", never to an error: the dashboard
+    without them is exactly the dashboard of yesterday.
+    """
+    try:
+        found = results_frame(src)
+    except Exception as exc:
+        log.warning("provisional results unavailable: %s", exc)
+        return {}
+
+    out = {}
+    for row in found.itertuples(index=False):
+        out[(str(row.season), row.home_team, row.away_team)] = {
+            "FTHG": row.FTHG, "FTAG": row.FTAG, "FTR": row.FTR,
+            "fonte_risultato": row.fonte_risultato,
+        }
+    return out
+
+
 @lru_cache(maxsize=4)
 def _load(fingerprint: tuple, src: Sources) -> Snapshot:
     """The fingerprint is an argument on purpose: change a file, miss the cache."""
@@ -353,6 +427,7 @@ def _load(fingerprint: tuple, src: Sources) -> Snapshot:
     closed = _read_closed(src)
     summary = _read_summary(src)
     kickoffs = _read_kickoffs(src)
+    results = _read_results(src)
 
     mtimes = [m for _, m, _ in
               [_stat(src.predictions_log), _stat(src.rounds_summary)]
@@ -361,7 +436,7 @@ def _load(fingerprint: tuple, src: Sources) -> Snapshot:
               if m is not None]
     updated = (_iso(pd.Timestamp(max(mtimes), unit="ns", tz="UTC"))
                if mtimes else None)
-    return Snapshot(predictions, closed, summary, kickoffs, updated)
+    return Snapshot(predictions, closed, summary, kickoffs, updated, results)
 
 
 def load(src: Sources | None = None) -> Snapshot:
@@ -447,8 +522,12 @@ def _record(row: dict, kickoffs: dict, from_closed: bool) -> dict:
     has_result = _opt_str(row.get("FTR")) is not None
     if from_closed and not valid:
         status = STATUS_INVALID
-    elif has_result:
+    elif has_result and from_closed:
         status = STATUS_RESOLVED
+    elif has_result:
+        # A score without an archive behind it. Metrics stay null: they are
+        # computed by `close_round`, and only from the archived file.
+        status = STATUS_PLAYED
     else:
         status = STATUS_PREDICTED
 
@@ -487,6 +566,7 @@ def _record(row: dict, kickoffs: dict, from_closed: bool) -> dict:
         "goals_home": _opt_int(row.get("FTHG")),
         "goals_away": _opt_int(row.get("FTAG")),
         "actual_outcome": _opt_str(row.get("FTR")),
+        "result_source": _opt_str(row.get("fonte_risultato")),
         "correct": _opt_bool(row.get("azzeccato")) if valid else None,
         "rps": _opt_float(row.get("rps")) if valid else None,
         "valid": valid,
@@ -521,6 +601,11 @@ def _all_records(season: str, snap: Snapshot) -> list[dict]:
             key = (row["season"], row["home_team"], row["away_team"])
             if key in seen:
                 continue
+            # Played but not archived yet: the score comes from the results
+            # chain and the match shows as `played`, never as `resolved`.
+            result = snap.results.get(key)
+            if result is not None:
+                row = {**row, **result}
             records.append(_record(row, snap.kickoffs, from_closed=False))
 
     records.sort(key=lambda r: (r["kickoff_utc"] or r["match_date"] or "",

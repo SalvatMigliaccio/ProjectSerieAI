@@ -13,9 +13,11 @@
  * previsione perfetta, cioe' il contrario di "non lo sappiamo ancora".
  */
 
-/** predicted: in registro, non giocata — resolved: giocata e archiviata —
- *  invalid: giocata, ma la previsione fu scritta dopo il fischio. */
-export type MatchStatus = "predicted" | "resolved" | "invalid";
+/** predicted: in registro, non giocata — played: giocata, risultato
+ *  PROVVISORIO, giornata non ancora chiusa (niente metriche) — resolved:
+ *  giocata e archiviata — invalid: giocata, ma la previsione fu scritta dopo
+ *  il fischio. */
+export type MatchStatus = "predicted" | "played" | "resolved" | "invalid";
 
 export type RoundStatus =
   | "future"
@@ -60,6 +62,9 @@ export interface Match {
   goals_home: number | null;
   goals_away: number | null;
   actual_outcome: Outcome | null;
+  /** football-data, understat o fbref. Nullo se non giocata, o se archiviata
+   *  prima che la fonte venisse registrata. */
+  result_source: string | null;
   correct: boolean | null;
   rps: number | null;
 

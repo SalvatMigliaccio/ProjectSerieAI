@@ -36,8 +36,15 @@ class Match(Base):
 
     `status` is the field to branch on:
       predicted  in the log, not played yet          -> every result field null
+      played     played, round not closed yet        -> result yes, metrics null
       resolved   played, archived, metrics computed  -> everything valued
       invalid    played, but written after kickoff   -> result yes, metrics null
+
+    `played` is PROVISIONAL: the score comes from the same source chain
+    `close_round` uses, the evening of the match, but it is not on record
+    until the round is closed. football-data may still publish an official
+    score that differs (a match awarded 0-3), and metrics are computed only
+    from the archive.
 
     `invalid` is not a bug to hide: the log is append-only and keeps its own
     mistakes. `valid` and `invalid_reason` exist so the frontend can say why a
@@ -52,7 +59,7 @@ class Match(Base):
         None, description="ISO 8601 UTC midnight of the scheduled day, as logged")
     home_team: str
     away_team: str
-    status: str = Field(description="predicted | resolved | invalid")
+    status: str = Field(description="predicted | played | resolved | invalid")
 
     p_home: float | None = None
     p_draw: float | None = None
@@ -77,6 +84,9 @@ class Match(Base):
     goals_home: int | None = None
     goals_away: int | None = None
     actual_outcome: str | None = None
+    result_source: str | None = Field(
+        None, description="football-data, understat or fbref. Null when unplayed, "
+                          "or archived before the source was recorded")
     correct: bool | None = None
     rps: float | None = Field(
         None, description="Ranked Probability Score, lower is better. Null if "

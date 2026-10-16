@@ -50,6 +50,8 @@ COMANDI: dict[str, tuple[str, str]] = {
     "predict":       ("goalmodel.prediction.predict", "previsione singola (uso avanzato)"),
     "predict-round": ("goalmodel.prediction.predict_round", "giornata: da aperta a predetta"),
     "close-round":   ("goalmodel.prediction.close_round", "giornata: da giocata a chiusa"),
+    "aggiorna-risultati": ("goalmodel.prediction.aggiorna_risultati",
+                           "risultati appena giocati, senza toccare il registro"),
     "rounds":        ("goalmodel.prediction.rounds", "stato di ogni giornata"),
     "backtest":      ("goalmodel.prediction.backtest_log", "metriche reali dal registro"),
     "report":        ("goalmodel.reporting.report", "rigenera il report HTML"),
@@ -70,9 +72,10 @@ def _aiuto() -> str:
 
 
 # I comandi che possono arrivare a soccerdata, e quindi al resolver di Go.
-# `ingest` direttamente; gli altri tre passano da `rounds.py`, che importa
+# `ingest` direttamente; gli altri passano da `rounds.py`, che importa
 # `ingest` dentro una funzione per aggiornare i dati prima di agire.
-COMANDI_DI_RETE = frozenset({"ingest", "predict-round", "close-round", "rounds"})
+COMANDI_DI_RETE = frozenset({"ingest", "predict-round", "close-round", "rounds",
+                             "aggiorna-risultati"})
 
 
 def _assicura_resolver_go(comando: str, argv: list[str]) -> None:

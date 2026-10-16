@@ -185,10 +185,10 @@
                   "type": "null"
                 }
               ],
-              "description": "predicted | resolved | invalid",
+              "description": "predicted | played | resolved | invalid",
               "title": "Status"
             },
-            "description": "predicted | resolved | invalid"
+            "description": "predicted | played | resolved | invalid"
           },
           {
             "name": "from",
@@ -1207,7 +1207,7 @@
           "status": {
             "type": "string",
             "title": "Status",
-            "description": "predicted | resolved | invalid"
+            "description": "predicted | played | resolved | invalid"
           },
           "p_home": {
             "anyOf": [
@@ -1422,6 +1422,18 @@
             ],
             "title": "Actual Outcome"
           },
+          "result_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Source",
+            "description": "football-data, understat or fbref. Null when unplayed, or archived before the source was recorded"
+          },
           "correct": {
             "anyOf": [
               {
@@ -1494,7 +1506,7 @@
           "valid"
         ],
         "title": "Match",
-        "description": "One prediction, with its result when there is one.\n\n`status` is the field to branch on:\n  predicted  in the log, not played yet          -> every result field null\n  resolved   played, archived, metrics computed  -> everything valued\n  invalid    played, but written after kickoff   -> result yes, metrics null\n\n`invalid` is not a bug to hide: the log is append-only and keeps its own\nmistakes. `valid` and `invalid_reason` exist so the frontend can say why a\nplayed match has no RPS instead of showing an unexplained hole."
+        "description": "One prediction, with its result when there is one.\n\n`status` is the field to branch on:\n  predicted  in the log, not played yet          -> every result field null\n  played     played, round not closed yet        -> result yes, metrics null\n  resolved   played, archived, metrics computed  -> everything valued\n  invalid    played, but written after kickoff   -> result yes, metrics null\n\n`played` is PROVISIONAL: the score comes from the same source chain\n`close_round` uses, the evening of the match, but it is not on record\nuntil the round is closed. football-data may still publish an official\nscore that differs (a match awarded 0-3), and metrics are computed only\nfrom the archive.\n\n`invalid` is not a bug to hide: the log is append-only and keeps its own\nmistakes. `valid` and `invalid_reason` exist so the frontend can say why a\nplayed match has no RPS instead of showing an unexplained hole."
       },
       "MatchPoint": {
         "properties": {

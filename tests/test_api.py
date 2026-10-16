@@ -158,7 +158,12 @@ def test_unplayed_match_is_null_not_zero() -> None:
         log_path = track / "predictions_log.csv"
         log = pd.read_csv(log_path)
         future = log.iloc[-1].copy()
-        future["home_team"], future["away_team"] = "Monza", "Sassuolo"
+        # SQUADRE INVENTATE, non una coppia vera. Il test usava Monza-Sassuolo
+        # contando che non fosse giocata: da quando l'API cerca il risultato
+        # nella catena delle fonti lo trovava — la partita si e' giocata davvero
+        # — e il test misurava i dati, non il codice. Una coppia vera prima o
+        # poi si gioca sempre; questa no.
+        future["home_team"], future["away_team"] = "Squadra Casa", "Squadra Fuori"
         future["matchday"] = 5
         future["match_date"] = "2026-09-18"
         pd.concat([log, future.to_frame().T], ignore_index=True).to_csv(
@@ -166,7 +171,7 @@ def test_unplayed_match_is_null_not_zero() -> None:
 
         sources = store.Sources.at(track, config.DATA)
         matches = store.matches(SEASON, src=sources)
-        pending = [m for m in matches if m["home_team"] == "Monza"]
+        pending = [m for m in matches if m["home_team"] == "Squadra Casa"]
         assert len(pending) == 1
 
         match = pending[0]
@@ -177,6 +182,45 @@ def test_unplayed_match_is_null_not_zero() -> None:
         assert match["actual_outcome"] is None
         assert match["valid"] is True
         assert match["p_home"] is not None, "the prediction itself must be there"
+
+
+def test_played_but_not_closed_shows_a_provisional_result() -> None:
+    """
+    A score found by the results chain makes a match `played`, never `resolved`.
+
+    The difference is the whole point: `resolved` feeds RPS and hits, and those
+    may come only from the archive `close_round` writes. A provisional score in
+    the metrics would let a 2-1 "on the pitch" count before football-data
+    publishes an official 0-3.
+    """
+    row = {
+        "season": "2627", "matchday": 6, "match_date": pd.Timestamp("2026-10-10"),
+        "home_team": "Squadra Casa", "away_team": "Squadra Fuori",
+        "p_home": 0.5, "p_draw": 0.3, "p_away": 0.2,
+        "model_version": store.PRODUCTION_MODEL,
+    }
+    snap = store.Snapshot(
+        predictions=pd.DataFrame([row]), closed=pd.DataFrame(),
+        summary=pd.DataFrame(), kickoffs={}, updated_at=None,
+        results={("2627", "Squadra Casa", "Squadra Fuori"): {
+            "FTHG": 2.0, "FTAG": 1.0, "FTR": "H", "fonte_risultato": "understat"}},
+    )
+    (match,) = store._all_records(SEASON, snap)
+    assert match["status"] == store.STATUS_PLAYED
+    assert (match["goals_home"], match["goals_away"]) == (2, 1)
+    assert match["actual_outcome"] == "H"
+    assert match["result_source"] == "understat"
+    assert match["rps"] is None, "metrics come from the archive only"
+    assert match["correct"] is None, "metrics come from the archive only"
+
+
+def test_standings_hold_the_production_league_only() -> None:
+    """
+    `matches_master` holds the Big 5: a table filtered by season alone came out
+    with 96 teams and Barcelona on top, under the title "Classifica Serie A".
+    """
+    table = client.get(f"/api/standings/{SEASON}").json()
+    assert table["teams"] == 20, f"{table['teams']} teams: leagues are being mixed"
 
 
 def test_season_summary_matches_the_archive() -> None:

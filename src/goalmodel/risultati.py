@@ -63,40 +63,47 @@ def _esito(casa: pd.Series, fuori: pd.Series) -> pd.Series:
     )
 
 
-def _da_football_data() -> pd.DataFrame:
+def _da_football_data(master: pd.DataFrame | None = None) -> pd.DataFrame:
     # Passa da `data.load_master` e non da `read_parquet`: e' li' che il
     # contratto di `schema.py` viene verificato. Leggendo per conto proprio si
     # saltava la verifica, quindi anche i tre modi in cui questo progetto ha
     # gia' perso dati in silenzio — un tipo cambiato, una colonna sparita, una
-    # chiave duplicata.
-    master = data.load_master(columns=[*KEYS, "date", "FTHG", "FTAG", "FTR"])
-    out = master[master["FTR"].notna()].copy()
+    # chiave duplicata. Chi passa `master` lo ha gia' letto e verificato dal
+    # proprio confine (l'API, con `store.read_master`).
+    if master is None:
+        master = data.load_master(columns=[*KEYS, "date", "FTHG", "FTAG", "FTR"])
+    out = master.loc[master["FTR"].notna(), [*KEYS, "date", "FTHG", "FTAG", "FTR"]].copy()
     out["fonte_risultato"] = FOOTBALL_DATA
     return out
 
 
-def _secondaria(nome: str) -> pd.DataFrame | None:
+def _secondaria(nome: str, grezzo: pd.DataFrame | None = None) -> pd.DataFrame | None:
     """
     Una fonte grezza con i nomi tradotti come in matches_master.
 
     Passa da `normalize`, non da una traduzione propria: due mappe dei nomi
     divergono sempre, e una partita che non si aggancia non da' errore — resta
     semplicemente senza risultato, che e' il sintomo peggiore possibile.
+
+    `grezzo` e' il parquet gia' letto da chi chiama, quando lo legge da un
+    percorso suo: l'API ha un confine di lettura proprio (`store.Sources`), e i
+    suoi test lo puntano su una copia invece che su `data/raw`.
     """
     from . import normalize as nz
 
-    try:
-        grezzo = nz.load_raw(nome)
-    except FileNotFoundError:
-        log.warning("fonte di ripiego %s assente: salto", nome)
-        return None
+    if grezzo is None:
+        try:
+            grezzo = nz.load_raw(nome)
+        except FileNotFoundError:
+            log.warning("fonte di ripiego %s assente: salto", nome)
+            return None
     d = nz.normalize_season(nz.apply_name_map(grezzo, nz.load_name_map()))
     d["season"] = d["season"].astype(str)
     return d[d["league"].isin(config.LEAGUES_PRODUZIONE)]
 
 
-def _da_understat() -> pd.DataFrame:
-    d = _secondaria("understat_schedule")
+def _da_understat(grezzo: pd.DataFrame | None = None) -> pd.DataFrame:
+    d = _secondaria("understat_schedule", grezzo)
     if d is None:
         return pd.DataFrame(columns=COLONNE)
     # `is_result` e' vero solo a partita finita: una partita in corso ha gia'
@@ -109,8 +116,8 @@ def _da_understat() -> pd.DataFrame:
     return d[COLONNE]
 
 
-def _da_fbref() -> pd.DataFrame:
-    d = _secondaria("fbref_schedule")
+def _da_fbref(grezzo: pd.DataFrame | None = None) -> pd.DataFrame:
+    d = _secondaria("fbref_schedule", grezzo)
     if d is None:
         return pd.DataFrame(columns=COLONNE)
     # Il punteggio e' una stringa con il trattino lungo (EN DASH, "2-1"): si prendono i
@@ -125,12 +132,39 @@ def _da_fbref() -> pd.DataFrame:
 
 def risultati() -> pd.DataFrame:
     """
-    Un risultato per partita, dalla prima fonte che ce l'ha.
+    Un risultato per partita, dalla prima fonte che ce l'ha, dai file di `data/`.
 
     L'ordine della concatenazione E' la precedenza: `drop_duplicates` tiene la
     prima riga, quindi football-data vince sempre dove c'e'.
     """
-    pezzi = [_da_football_data(), _da_understat(), _da_fbref()]
+    return _combina([_da_football_data(), _da_understat(), _da_fbref()])
+
+
+def catena(
+    master: pd.DataFrame,
+    understat: pd.DataFrame | None = None,
+    fbref: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """
+    La stessa catena, su frame gia' letti da chi chiama.
+
+    E' cosi' che la usa l'API, per mostrare un risultato la sera stessa invece
+    di aspettare la chiusura della giornata: legge i file dal proprio confine
+    (`store.Sources`) e li passa qui. La catena resta una sola, e una partita
+    non puo' avere un risultato in dashboard e un altro nell'archivio.
+
+    `None` vuol dire FONTE ASSENTE, e si salta — non "leggi il percorso
+    predefinito": un test puntato su una copia leggerebbe i dati veri.
+    """
+    pezzi = [_da_football_data(master)]
+    if understat is not None:
+        pezzi.append(_da_understat(understat))
+    if fbref is not None:
+        pezzi.append(_da_fbref(fbref))
+    return _combina(pezzi)
+
+
+def _combina(pezzi: list[pd.DataFrame]) -> pd.DataFrame:
     tutti = pd.concat([p for p in pezzi if not p.empty], ignore_index=True)
     tutti["season"] = tutti["season"].astype(str)
     out = tutti.drop_duplicates(subset=KEYS, keep="first").reset_index(drop=True)

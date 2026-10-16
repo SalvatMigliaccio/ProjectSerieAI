@@ -205,7 +205,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
     # Le giornate gia' chiuse con un risultato di ripiego, confrontate con
     # quello ufficiale se football-data nel frattempo l'ha pubblicato. Solo un
     # avviso: l'archivio non si riscrive.
-    from .risultati import riconcilia
+    from ..risultati import riconcilia
     riconcilia()
 
     tab = rounds.stato_giornate()

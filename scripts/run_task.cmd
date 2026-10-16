@@ -22,7 +22,7 @@ set "REPO=%~dp0.."
 set "PY=%REPO%\.venv\Scripts\python.exe"
 set "TASK=%~1"
 if "%TASK%"=="" (
-    echo usage: run_task.cmd ^<predict_round^|close_round^|predict_m5^> [args]
+    echo usage: run_task.cmd ^<predict_round^|close_round^|predict_m5^|aggiorna_risultati^> [args]
     exit /b 2
 )
 shift
@@ -42,8 +42,16 @@ REM  simply keep saying the scheduler had not run — the same silent failure
 REM  the popd comment below describes, from the other end.
 set "MODULE=goalmodel.prediction.%TASK%"
 set "RECORD=1"
+set "INGEST=1"
 if /i "%TASK%"=="predict_m5" (
     set "MODULE=goalmodel.experiments.predici_gbm"
+    set "RECORD="
+    set "INGEST="
+)
+REM  aggiorna_risultati DOWNLOADS but does not touch the registry: it needs the
+REM  `ingest` extra like the production tasks, and stays out of last_run.json
+REM  like M5. That is why "needs ingestion" and "is recorded" are two flags.
+if /i "%TASK%"=="aggiorna_risultati" (
     set "RECORD="
 )
 
@@ -84,9 +92,9 @@ REM  `goalmodel.ingest` IS CHECKED SEPARATELY, and that is not belt and braces.
 REM  Importing predict_round does NOT pull soccerdata: the ingestion stages are
 REM  imported inside the functions that use them, so a venv without the
 REM  `ingest` extra passes the first check and fails minutes later, on the
-REM  network step, where the log reads like the site was down. Only the two
-REM  production tasks need it — predict_m5 reads what is already on disk — so
-REM  it is checked only when RECORD is set, which is exactly those two.
+REM  network step, where the log reads like the site was down. Every task that
+REM  downloads needs it — predict_m5 reads what is already on disk — so it is
+REM  checked when INGEST is set.
 "%PY%" -c "import %MODULE%" 2>nul
 if errorlevel 1 (
     echo [ERROR] %MODULE% non importabile nel venv. Rimedio: >> "%LOG%"
@@ -95,7 +103,7 @@ if errorlevel 1 (
     popd
     exit /b 3
 )
-if defined RECORD (
+if defined INGEST (
     "%PY%" -c "import goalmodel.ingest" 2>nul
     if errorlevel 1 (
         echo [ERROR] extra `ingest` mancante: %TASK% scarica dati. Rimedio: >> "%LOG%"

@@ -526,7 +526,10 @@ sono bloccate a runtime. Il track record lo scrivono `predict_round` e
 | `GET /api/health` | vivo/degradato e data dell'ultimo aggiornamento |
 
 La stagione si scrive `2026-27` o `2627`, la risposta usa sempre la prima.
-`status` di una partita vale `predicted`, `resolved` o `invalid` — quest'ultimo
+`status` di una partita vale `predicted`, `played`, `resolved` o `invalid`.
+`played` e' giocata ma non ancora archiviata: il risultato e' **provvisorio**
+(dalla catena football-data, Understat, FBref, con la fonte in `result_source`)
+e le metriche sono vuote finche' `close_round` non chiude la giornata. `invalid`
 sono le righe scritte dopo il fischio: **hanno il risultato ma non le
 metriche**, e `invalid_reason` dice perche'.
 
@@ -644,7 +647,26 @@ Per un deploy stabile, in ordine di parti mobili:
 scripts\predict_round.cmd     # venerdi' — M1 nel registro, poi M5 in coda
 scripts\close_round.cmd       # martedi'
 scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
+scripts\aggiorna_risultati.cmd  # ogni giorno 17:45 e 23:30 — risultati provvisori
 ```
+
+**`aggiorna_risultati` porta in dashboard i risultati la sera stessa** (dal 12
+ottobre 2026). Prima, fra il venerdi' e il martedi' nessun comando scaricava
+niente: una partita del sabato restava "da giocare" per tre giorni, anche se
+Understat il punteggio lo aveva subito. Scarica Understat e football-data
+(non FBref, che e' il passo lento), ricostruisce dataset e feature, e stampa i
+risultati degli ultimi cinque giorni. Circa 30 secondi.
+
+```bash
+goalmodel aggiorna-risultati                 # a mano, quando serve
+goalmodel aggiorna-risultati --skip-ingest   # solo ricostruzione e riepilogo
+```
+
+**Non scrive nel registro e non chiude giornate.** L'API mostra quei risultati
+con `status: played`, cioe' provvisori, con la stessa catena di fonti di
+`close_round` (football-data, Understat, FBref): RPS, azzeccate e calibrazione
+restano calcolati solo dall'archivio. Per questo il task non compare in
+`last_run.json`, come M5.
 
 **`predict_round.cmd` fa due cose, in quest'ordine**: scrive le previsioni di
 M1 nel registro, poi lancia M5 che salva la sua opinione sulla stessa giornata
@@ -675,6 +697,21 @@ schtasks /create /tn "AI_Naples predict_round 2000"   /tr "$repo\scripts\predict
 schtasks /create /tn "AI_Naples predict_round sabato" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d SAT /st 09:00 /f
 schtasks /create /tn "AI_Naples close_round"          /tr "$repo\scripts\close_round.cmd"   /sc weekly /d TUE /st 09:00 /f
 ```
+
+`aggiorna_risultati` e' UN task con DUE orari, non due task: il 16 ottobre
+2026 i due task separati sono partiti insieme al risveglio del PC (il recupero
+degli orari mancati) e si sono interrotti a vicenda. `IgnoreNew` vale dentro un
+task, non fra task diversi.
+
+```powershell
+$t = @((New-ScheduledTaskTrigger -Daily -At 17:45), (New-ScheduledTaskTrigger -Daily -At 23:30))
+Register-ScheduledTask -TaskName "AI_Naples aggiorna_risultati" -Trigger $t `
+  -Action (New-ScheduledTaskAction -Execute "$repo\scripts\aggiorna_risultati.cmd")
+```
+
+Gli orari di `aggiorna_risultati` stanno lontani da quelli di `predict_round`
+di proposito: i due ricostruiscono gli stessi parquet, e non c'e' un lucchetto
+che impedisca a due processi di scriverli insieme.
 
 **Le impostazioni predefinite di `schtasks` fanno fallire i task in silenzio, e
 vanno cambiate subito dopo averli creati.** Di default Windows non avvia un task

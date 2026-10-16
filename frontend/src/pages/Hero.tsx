@@ -483,7 +483,8 @@ export function Hero() {
                       rende verificabile — e che si aspetta il risultato. */}
                   <span className="matchcard__note">
                     {match.goals_home !== null && match.goals_away !== null ? (
-                      `finita ${match.goals_home}–${match.goals_away}`
+                      `finita ${match.goals_home}–${match.goals_away}${
+                        match.status === "played" ? " · provvisorio" : ""}`
                     ) : (
                       <>
                         <span className="matchcard__ok" aria-hidden="true">✓</span> previsione

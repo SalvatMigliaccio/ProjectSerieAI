@@ -64,6 +64,22 @@ function Result({ match }: { match: Match }) {
   }
 
   const sign = match.actual_outcome ? (OUTCOME_LABELS[match.actual_outcome] ?? "") : "";
+
+  // PROVVISORIO NON E' "NON VALIDA". Le due hanno entrambe `correct` nullo, e
+  // prima dello stato `played` l'unico caso era la riga scritta dopo il
+  // fischio: senza questo ramo ogni partita della sera prima si sarebbe
+  // presentata come una previsione da scartare.
+  if (match.status === "played") {
+    return (
+      <span className="result" title="risultato non ancora archiviato: lo conferma la chiusura della giornata">
+        <span className="result__score">
+          {match.goals_home}–{match.goals_away}
+        </span>
+        <span className="pill">{sign} · provvisorio</span>
+      </span>
+    );
+  }
+
   const pill =
     match.correct === true
       ? "pill pill--ok"

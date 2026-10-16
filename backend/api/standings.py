@@ -23,7 +23,8 @@ mini-table is computed here:
 With four rounds played, ties are the normal case rather than the exception,
 which is why it is worth the twenty lines.
 
-READ ONLY. Reads `data/interim/matches_master.parquet` and writes nothing.
+READ ONLY. Reads the results chain (`store.results_frame`: football-data,
+then Understat, then FBref, production league only) and writes nothing.
 """
 
 from __future__ import annotations
@@ -149,9 +150,14 @@ def _ordered(table: dict[str, dict], played: pd.DataFrame) -> list[dict]:
 def standings(season: str, src: store.Sources | None = None) -> dict | None:
     """La classifica della stagione. `None` se non c'e' nessuna partita giocata."""
     src = src or store.default_sources()
-    master = store.read_master(src)
+    # Dalla catena dei risultati e non da `matches_master` da solo: football-data
+    # aggiorna un paio di volte a settimana, e la classifica restava indietro di
+    # una giornata fino al martedi'. La catena e' gia' filtrata sulla lega di
+    # produzione — il master contiene i Big 5, e filtrando per stagione e basta
+    # la "classifica di Serie A" mescolava cinque campionati.
+    results = store.results_frame(src)
     code = store.season_in(season)
-    played = master[(master["season"].astype(str) == code) & master["FTR"].notna()]
+    played = results[(results["season"] == code) & results["FTR"].notna()]
     played = played.dropna(subset=["FTHG", "FTAG"])
     if played.empty:
         return None

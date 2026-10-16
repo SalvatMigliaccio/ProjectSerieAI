@@ -148,9 +148,10 @@ function Row({
         : "score-chip";
   const spiegazione = !played
     ? undefined
-    : selection
-      ? `${selection.market_label}: ${esito === true ? "uscito" : esito === false ? "non uscito" : "non risolvibile"}`
-      : "esito dell'1X2 previsto da M1";
+    : (selection
+        ? `${selection.market_label}: ${esito === true ? "uscito" : esito === false ? "non uscito" : "non risolvibile"}`
+        : "esito dell'1X2 previsto da M1")
+      + (match.status === "played" ? " · risultato provvisorio, giornata non ancora chiusa" : "");
 
   return (
     <tr>

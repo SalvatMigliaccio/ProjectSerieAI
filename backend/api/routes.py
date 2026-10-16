@@ -65,7 +65,8 @@ router = APIRouter(
 
 public = APIRouter(prefix="/api")
 
-VALID_STATUS = (store.STATUS_PREDICTED, store.STATUS_RESOLVED, store.STATUS_INVALID)
+VALID_STATUS = (store.STATUS_PREDICTED, store.STATUS_PLAYED,
+                store.STATUS_RESOLVED, store.STATUS_INVALID)
 
 
 def played(match: dict) -> bool:
@@ -207,7 +208,7 @@ def get_matches(
     season: str,
     user: Viewer = None,
     team: str | None = Query(None, description="Home or away, exact name"),
-    status: str | None = Query(None, description="predicted | resolved | invalid"),
+    status: str | None = Query(None, description="predicted | played | resolved | invalid"),
     date_from: str | None = Query(None, alias="from", description="YYYY-MM-DD, inclusive"),
     date_to: str | None = Query(None, alias="to", description="YYYY-MM-DD, inclusive"),
 ) -> list[dict]:
