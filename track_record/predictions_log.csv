@@ -36,3 +36,13 @@ timestamp_prediction,model_version,league,season,matchday,match_date,home_team,a
 2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-11,Cagliari,Juventus,0.6902,1.9025,0.12753,0.21042,0.66204,0.47973,0.42413,7.0,3.75,1.55,B365-fixtures
 2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-12,Atalanta,Venezia,2.1028,1.0417,0.6172,0.20363,0.17917,0.60838,0.56812,1.57,4.2,5.75,B365-fixtures
 2026-10-09T13:49:47Z,M1 market-only (lambda),ITA-Serie A,2627,6,2026-10-12,Torino,Udinese,1.3447,1.1276,0.41697,0.26985,0.31319,0.44908,0.49997,2.3,3.2,3.3,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-16,Frosinone,Sassuolo,1.8437,1.7183,0.41538,0.22023,0.36439,0.69047,0.69079,2.3,3.9,2.75,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-17,Venezia,Napoli,0.9716,1.915,0.18676,0.21902,0.59422,0.55092,0.52994,5.0,3.9,1.7,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-17,Bologna,Inter,0.9462,2.033,0.16751,0.207,0.62549,0.57212,0.53167,5.5,4.0,1.62,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-17,Roma,Genoa,2.0756,0.811,0.66691,0.19736,0.13573,0.55092,0.48586,1.45,4.5,7.0,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-18,Udinese,Lecce,1.5808,0.9581,0.51885,0.2522,0.22895,0.46612,0.48953,1.85,3.5,4.33,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-18,Fiorentina,Como,1.2309,1.7483,0.26943,0.23522,0.49536,0.57213,0.58473,3.5,3.6,2.05,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-18,Milan,Atalanta,1.7881,1.0985,0.53518,0.23239,0.23243,0.55092,0.55511,1.8,3.75,4.33,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-18,Juventus,Lazio,1.742,0.878,0.57815,0.2347,0.18715,0.48657,0.482,1.67,3.8,5.25,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-19,Monza,Cagliari,1.3049,1.1675,0.39735,0.27103,0.33162,0.44908,0.50203,2.38,3.1,3.1,B365-fixtures
+2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-19,Parma,Torino,1.0217,1.2319,0.30518,0.28509,0.40973,0.39161,0.45329,3.1,3.1,2.45,B365-fixtures

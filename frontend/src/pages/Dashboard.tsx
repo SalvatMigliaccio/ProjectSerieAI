@@ -42,6 +42,25 @@ function giorno(iso: string | null): string {
     : date.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
 }
 
+/**
+ * Una giornata si apre solo se ha almeno una previsione registrata.
+ *
+ * Le altre portavano a una pagina vuota con "nessuna previsione registrata":
+ * un clic che non poteva dare niente. Restano visibili — il calendario intero
+ * dice dove siamo nella stagione — ma non si premono, e il suggerimento dice
+ * perche'. Un link diretto (`?g=1`) continua a funzionare e mostra il motivo.
+ */
+function haPrevisioni(round: Round): boolean {
+  return (round.matches_predicted ?? 0) > 0;
+}
+
+function perche_non_disponibile(round: Round): string {
+  if (round.status === "future" || round.status === "open") {
+    return `Giornata ${round.matchday}: le previsioni escono quando il mercato pubblica le quote, di solito il venerdì`;
+  }
+  return `Giornata ${round.matchday}: giocata prima che il registro delle previsioni esistesse`;
+}
+
 export function Dashboard() {
   // deep-linking: la giornata scelta sta nell'URL (`#/dashboard?g=5`). Prima
   // viveva solo nello stato del componente: un link mandato a qualcuno apriva
@@ -215,19 +234,25 @@ export function Dashboard() {
             ‹
           </button>
           <div className="round-strip__track" ref={track}>
-            {(rounds.data ?? []).map((r) => (
-              <button
-                key={r.matchday}
-                type="button"
-                className={`round-chip${r.closed ? " round-chip--closed" : ""}`}
-                aria-pressed={r.matchday === selected}
-                onClick={() => setSelected(r.matchday)}
-                title={r.status ? (ROUND_LABELS[r.status] ?? r.status) : ""}
-              >
-                <strong>{r.matchday}</strong>
-                <span>Giornata</span>
-              </button>
-            ))}
+            {(rounds.data ?? []).map((r) => {
+              const disponibile = haPrevisioni(r);
+              return (
+                <button
+                  key={r.matchday}
+                  type="button"
+                  className={`round-chip${r.closed ? " round-chip--closed" : ""}`}
+                  aria-pressed={r.matchday === selected}
+                  aria-disabled={!disponibile || undefined}
+                  onClick={() => { if (disponibile) setSelected(r.matchday); }}
+                  title={disponibile
+                    ? (r.status ? (ROUND_LABELS[r.status] ?? r.status) : "")
+                    : perche_non_disponibile(r)}
+                >
+                  <strong>{r.matchday}</strong>
+                  <span>Giornata</span>
+                </button>
+              );
+            })}
           </div>
           <button
             type="button"
