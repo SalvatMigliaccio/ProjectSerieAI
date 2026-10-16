@@ -26,6 +26,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from backend.auth.deps import Viewer, may_see_upcoming, require_permission
 
 from . import (
+    ml as ml_mod,
+)
+from . import (
     schemas,
     store,
 )
@@ -295,6 +298,31 @@ def get_selections(
         selections_mod.selections(
             season, max_odds=max_odds, min_odds=min_odds, matchday=matchday),
         user)
+
+
+@public.get("/ml/{season}/{matchday}", response_model=schemas.MLRound,
+            summary="The machine-learning model (M5) on a matchday, every market")
+def get_ml_round(season: str, matchday: int, user: Viewer = None) -> dict:
+    """
+    M5 as a second opinion, next to the market, on every derived market.
+
+    Same visibility as the matches: played ones are public, the ones still to
+    be played need `picks:read`. M5 is diagnostics — indistinguishable from
+    the market on the test set — and nothing here feeds the track record.
+    404 when M5 was not run on that matchday, or the deployment does not
+    mount `experiments/output/`.
+    """
+    _known_season(season)
+    if not 1 <= matchday <= 38:
+        raise HTTPException(status_code=404, detail=f"no matchday {matchday}")
+    payload = ml_mod.round_ml(season, matchday)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no M5 prediction for matchday {matchday} of {season}",
+        )
+    payload["matches"] = only_played(payload["matches"], user)
+    return payload
 
 
 @router.get("/status", response_model=schemas.Status,

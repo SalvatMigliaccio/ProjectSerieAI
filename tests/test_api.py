@@ -810,3 +810,53 @@ def test_the_free_window_is_the_last_month_with_a_floor(monkeypatch) -> None:
             "the public pages went empty during the summer break"
     finally:
         app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# The machine-learning model (M5), as a second opinion
+# ---------------------------------------------------------------------------
+
+def _ml_sources(tmp: str) -> store.Sources:
+    import dataclasses
+
+    out = Path(tmp) / "output"
+    out.mkdir()
+    return dataclasses.replace(store.default_sources(), ml_predictions=out)
+
+
+def test_ml_markets_are_recomputed_from_the_saved_goal_expectations() -> None:
+    """
+    Every market comes from the two lambdas in the file, through the same
+    score matrix as M1 and the weekly report — never from a second formula.
+    """
+    from backend.api import ml
+    from goalmodel.models.baseline import all_markets
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = _ml_sources(tmp)
+        pd.DataFrame([{
+            "timestamp_prediction": "2026-10-16T14:00:00+00:00",
+            "home_team": "Squadra Casa", "away_team": "Squadra Fuori",
+            "kickoff_utc": "2026-10-17 13:00:00+00:00",
+            "lam casa M5": 1.8, "lam fuori M5": 0.9,
+            "lam casa mkt": 1.7, "lam fuori mkt": 1.0,
+        }]).to_csv(src.ml_predictions / "previsioni_m5_2627_07.csv", index=False)
+
+        payload = ml.round_ml(SEASON, 7, src=src)
+        assert payload is not None
+        (match,) = payload["matches"]
+        expected = all_markets(np.array([1.8]), np.array([0.9]), rho=config.DC_RHO)
+        by_name = {m["market"]: m for m in match["markets"]}
+        for name in ("1", "X", "2", "gol-gol", "over 2.5", "under 3.5"):
+            assert abs(by_name[name]["p_ml"] - float(expected[name].iloc[0])) < 1e-12
+        picks = [m for m in match["markets"] if m["group"] == "1X2" and m["pick"]]
+        assert [m["market"] for m in picks] == ["1"], "one pick per group, the likeliest"
+        assert all(m["won"] is None for m in match["markets"]), "unplayed: nothing resolved"
+
+
+def test_ml_without_a_file_is_absent_not_an_error() -> None:
+    from backend.api import ml
+
+    with tempfile.TemporaryDirectory() as tmp:
+        assert ml.round_ml(SEASON, 7, src=_ml_sources(tmp)) is None
+    assert client.get(f"/api/ml/{SEASON}/39").status_code == 404

@@ -407,3 +407,53 @@ class Health(Base):
 
 class ErrorDetail(Base):
     detail: str
+
+
+# ---------------------------------------------------------------------------
+# The machine-learning model (M5), as a second opinion
+# ---------------------------------------------------------------------------
+
+class MLMarket(Base):
+    """One market of one match: M5 next to the market it starts from."""
+
+    group: str = Field(description="1X2, Doppia chance, Gol / No gol, Under / Over x.5")
+    market: str = Field(description="Raw name from all_markets, e.g. over 2.5")
+    label: str
+    p_ml: float = Field(description="Probability according to M5")
+    p_market: float = Field(description="Probability according to the de-vigged market (M1)")
+    difference: float = Field(description="p_ml - p_market")
+    fair_odds_ml: float | None = Field(None, description="1/p_ml, descriptive only")
+    pick: bool = Field(description="The most likely market of its group according to M5")
+    won: bool | None = Field(None, description="Null while the match is unplayed")
+
+
+class MLMatch(Base):
+    matchday: int
+    home_team: str
+    away_team: str
+    kickoff_utc: str | None = None
+    status: str | None = Field(None, description="Same vocabulary as Match.status")
+    goals_home: int | None = None
+    goals_away: int | None = None
+    lambda_home_ml: float
+    lambda_away_ml: float
+    lambda_home_market: float
+    lambda_away_market: float
+    max_divergence_1x2: float = Field(
+        description="Largest absolute gap between M5 and the market on 1, X, 2")
+    markets: list[MLMarket]
+
+
+class MLRound(Base):
+    """
+    M5 on a matchday. DIAGNOSTICS, not the production model.
+
+    On the test set M5 is indistinguishable from the market, so the track
+    record stays on M1. Nothing here feeds a metric.
+    """
+
+    season: str
+    matchday: int
+    model: str
+    written_at: str | None = Field(None, description="When M5 wrote the earliest row")
+    matches: list[MLMatch]

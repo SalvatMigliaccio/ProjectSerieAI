@@ -522,6 +522,7 @@ sono bloccate a runtime. Il track record lo scrivono `predict_round` e
 | `GET /api/standings/{season}` | la classifica calcolata dai risultati. Spareggio: punti, **scontri diretti**, differenza reti |
 | `GET /api/picks/{season}` | **le selezioni principali**: una per partita, con la soglia dichiarata in `config.QUOTA_MINIMA_SELEZIONE`. Nessun parametro di quota |
 | `GET /api/selections/{season}` | esploratore: i mercati dentro una banda. Filtri: `min_odds`/`max_odds` (default 1.30-1.40), `matchday` |
+| `GET /api/ml/{season}/{n}` | il modello ML (M5) sulla giornata: ogni mercato accanto al mercato, ricalcolato dai gol attesi salvati in `experiments/output/`. Diagnostica, mai nel track record. 404 se M5 non e' stato lanciato su quella giornata |
 | `GET /api/status` | ultime esecuzioni, giornata corrente, eta' dello snapshot, prossima azione |
 | `GET /api/health` | vivo/degradato e data dell'ultimo aggiornamento |
 

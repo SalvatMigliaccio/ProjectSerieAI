@@ -1189,6 +1189,49 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .picks__market { color: var(--mint); font-weight: 600; }
 .picks__odds { font-weight: 700; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
 
+/* --- dashboard: modello ML (M5), la seconda opinione ----------------------- */
+
+.ml__badge {
+  margin-left: var(--s2); padding: 2px 8px; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line-strong);
+}
+.ml__c-match { width: 30%; }
+.ml__c-pick { width: 19%; }
+.ml__c-num { width: 8%; }
+.ml__c-open { width: 5%; }
+.ml__when { display: block; font-weight: 400; font-size: 0.75rem; color: var(--muted); }
+.ml__pick { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.ml__pick strong { color: var(--fg); }
+.ml__p { color: var(--muted); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.ml__won { color: var(--ok); font-weight: 700; }
+.ml__lost { color: var(--ko); font-weight: 700; }
+.ml__up { color: var(--ok); }
+.ml__down { color: var(--ko); }
+.ml__toggle {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--fg);
+  font-size: 1rem; line-height: 1; cursor: pointer;
+}
+.ml__toggle:hover { border-color: var(--mint); color: var(--mint); }
+.ml__row--open td { border-bottom-color: transparent; }
+.ml__detail-row > td { padding-top: 0; }
+.ml__detail { padding: var(--s3); border-radius: var(--radius-sm); background: var(--surface-2); }
+.ml__detail p { margin: 0 0 var(--s3); max-width: none; }
+.ml__markets { table-layout: auto; }
+.ml__group td {
+  padding-top: var(--s3); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+.ml__row--pick td:first-child, .ml__row--pick td:nth-child(2) { color: var(--mint); font-weight: 700; }
+
+@media (max-width: 640px) {
+  /* Su telefono la riga tiene partita e scelte; lo scarto e' nel dettaglio. */
+  .ml__c-match { width: 34%; }
+  .ml__c-pick { width: 20%; }
+  .ml__pick { flex-direction: column; gap: 0; white-space: normal; }
+}
+
 /* --- classifica ------------------------------------------------------------ */
 
 /* Larghezze fisse e nessuna barra di scorrimento: dieci colonne di numeri

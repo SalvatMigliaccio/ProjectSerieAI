@@ -8,6 +8,7 @@ import { AsideSelections } from "../components/AsideSelections";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
+import { MLPanel } from "../components/MLPanel";
 import { ModelPicks } from "../components/ModelPicks";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { EmptyState, ErrorState, Loading, SoloAbbonati } from "../components/States";
@@ -325,6 +326,15 @@ export function Dashboard() {
               fallback={<p className="state">Selezioni non disponibili.</p>}
             >
               <ModelPicks matchday={selected} />
+            </ErrorBoundary>
+
+            {/* La seconda opinione, sotto la linea ufficiale e non accanto:
+                letta dopo, e dichiarata tale nel titolo. */}
+            <ErrorBoundary
+              label="modello ML"
+              fallback={<p className="state">Modello ML non disponibile.</p>}
+            >
+              <MLPanel matchday={selected} />
             </ErrorBoundary>
 
             {/* Detto una volta sola e nel punto in cui si nota l'assenza. Le

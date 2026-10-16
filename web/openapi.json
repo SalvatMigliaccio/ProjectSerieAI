@@ -484,6 +484,55 @@
         }
       }
     },
+    "/api/ml/{season}/{matchday}": {
+      "get": {
+        "summary": "The machine-learning model (M5) on a matchday, every market",
+        "description": "M5 as a second opinion, next to the market, on every derived market.\n\nSame visibility as the matches: played ones are public, the ones still to\nbe played need `picks:read`. M5 is diagnostics — indistinguishable from\nthe market on the test set — and nothing here feeds the track record.\n404 when M5 was not run on that matchday, or the deployment does not\nmount `experiments/output/`.",
+        "operationId": "get_ml_round_api_ml__season___matchday__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MLRound"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Liveness and data freshness",
@@ -1160,6 +1209,226 @@
           "command"
         ],
         "title": "LastRun"
+      },
+      "MLMarket": {
+        "properties": {
+          "group": {
+            "type": "string",
+            "title": "Group",
+            "description": "1X2, Doppia chance, Gol / No gol, Under / Over x.5"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market",
+            "description": "Raw name from all_markets, e.g. over 2.5"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "p_ml": {
+            "type": "number",
+            "title": "P Ml",
+            "description": "Probability according to M5"
+          },
+          "p_market": {
+            "type": "number",
+            "title": "P Market",
+            "description": "Probability according to the de-vigged market (M1)"
+          },
+          "difference": {
+            "type": "number",
+            "title": "Difference",
+            "description": "p_ml - p_market"
+          },
+          "fair_odds_ml": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds Ml",
+            "description": "1/p_ml, descriptive only"
+          },
+          "pick": {
+            "type": "boolean",
+            "title": "Pick",
+            "description": "The most likely market of its group according to M5"
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won",
+            "description": "Null while the match is unplayed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "group",
+          "market",
+          "label",
+          "p_ml",
+          "p_market",
+          "difference",
+          "pick"
+        ],
+        "title": "MLMarket",
+        "description": "One market of one match: M5 next to the market it starts from."
+      },
+      "MLMatch": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status",
+            "description": "Same vocabulary as Match.status"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "lambda_home_ml": {
+            "type": "number",
+            "title": "Lambda Home Ml"
+          },
+          "lambda_away_ml": {
+            "type": "number",
+            "title": "Lambda Away Ml"
+          },
+          "lambda_home_market": {
+            "type": "number",
+            "title": "Lambda Home Market"
+          },
+          "lambda_away_market": {
+            "type": "number",
+            "title": "Lambda Away Market"
+          },
+          "max_divergence_1x2": {
+            "type": "number",
+            "title": "Max Divergence 1X2",
+            "description": "Largest absolute gap between M5 and the market on 1, X, 2"
+          },
+          "markets": {
+            "items": {
+              "$ref": "#/components/schemas/MLMarket"
+            },
+            "type": "array",
+            "title": "Markets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "home_team",
+          "away_team",
+          "lambda_home_ml",
+          "lambda_away_ml",
+          "lambda_home_market",
+          "lambda_away_market",
+          "max_divergence_1x2",
+          "markets"
+        ],
+        "title": "MLMatch"
+      },
+      "MLRound": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "written_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Written At",
+            "description": "When M5 wrote the earliest row"
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/MLMatch"
+            },
+            "type": "array",
+            "title": "Matches"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matchday",
+          "model",
+          "matches"
+        ],
+        "title": "MLRound",
+        "description": "M5 on a matchday. DIAGNOSTICS, not the production model.\n\nOn the test set M5 is indistinguishable from the market, so the track\nrecord stays on M1. Nothing here feeds a metric."
       },
       "Match": {
         "properties": {

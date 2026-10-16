@@ -297,3 +297,43 @@ export interface Health {
   matches_logged: number;
   rounds_closed: number;
 }
+
+/** Un mercato di una partita secondo M5, accanto al mercato da cui parte. */
+export interface MLMarket {
+  group: string;
+  market: string;
+  label: string;
+  p_ml: number;
+  p_market: number;
+  difference: number;
+  fair_odds_ml: number | null;
+  /** Il piu' probabile del suo gruppo secondo M5. */
+  pick: boolean;
+  /** Nullo finche' la partita non e' giocata. */
+  won: boolean | null;
+}
+
+export interface MLMatch {
+  matchday: number;
+  home_team: string;
+  away_team: string;
+  kickoff_utc: string | null;
+  status: MatchStatus | null;
+  goals_home: number | null;
+  goals_away: number | null;
+  lambda_home_ml: number;
+  lambda_away_ml: number;
+  lambda_home_market: number;
+  lambda_away_market: number;
+  max_divergence_1x2: number;
+  markets: MLMarket[];
+}
+
+/** M5 su una giornata. DIAGNOSTICA: non e' il modello di produzione. */
+export interface MLRound {
+  season: string;
+  matchday: number;
+  model: string;
+  written_at: string | null;
+  matches: MLMatch[];
+}

@@ -11,6 +11,7 @@
 import type {
   Health,
   Match,
+  MLRound,
   Picks,
   Round,
   SeasonSummary,
@@ -219,6 +220,9 @@ export const api = {
     getOrNull<Match[]>(`/api/rounds/${code}/${matchday}`),
   trackRecord: (code = season()) => get<TrackRecord>(`/api/track-record/${code}`),
   standings: (code = season()) => get<Standings>(`/api/standings/${code}`),
+  /** M5 su una giornata: null se M5 non e' stato lanciato su quella giornata. */
+  ml: (matchday: number, code = season()) =>
+    getOrNull<MLRound>(`/api/ml/${code}/${matchday}`),
   /** Le principali: nessun parametro di quota, e non e' una dimenticanza. */
   picks: (code = season()) => get<Picks>(`/api/picks/${code}`),
   selections: (minOdds: number, maxOdds: number, code = season()) =>
