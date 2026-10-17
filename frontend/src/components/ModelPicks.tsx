@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { api } from "../api/client";
 import type { Selection } from "../api/types";
 import { useApi } from "../hooks/useApi";
@@ -17,9 +19,26 @@ import { ErrorState, Loading } from "./States";
  * NON E' REGOLABILE, E NON E' UNA DIMENTICANZA. Se una soglia scelta in pagina
  * potesse ridefinirla, il track record misurerebbe una cosa e la dashboard ne
  * mostrerebbe un'altra.
+ *
+ * DUE MODELLI, STESSA REGOLA. Il pulsante "Modello AI" mostra le selezioni
+ * fatte con la stessa soglia e lo stesso criterio, ma dai gol attesi di M5
+ * (LightGBM): le due liste differiscono solo per il modello. Si parte dal
+ * classico perche' e' quello del track record; l'AI e' una seconda opinione,
+ * indistinguibile dal mercato sul test set, e lo dice.
  */
+
+type Modello = "classico" | "ai";
+
+const MODELLI: Array<{ chiave: Modello; etichetta: string }> = [
+  { chiave: "classico", etichetta: "Modello classico" },
+  { chiave: "ai", etichetta: "Modello AI" },
+];
 export function ModelPicks({ matchday }: { matchday: number | null }) {
-  const picks = useApi(() => api.picks(), []);
+  const [modello, setModello] = useState<Modello>("classico");
+  const picks = useApi(
+    () => (modello === "ai" ? api.picksMl() : api.picks()),
+    [modello],
+  );
 
   const righe: Selection[] = (picks.data?.with_min_odds ?? []).filter(
     (r) => matchday === null || r.matchday === matchday,
@@ -34,10 +53,26 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
           </svg>
           Selezioni del modello
         </h3>
+        <div className="filters picks__models" role="group" aria-label="Modello">
+          {MODELLI.map(({ chiave, etichetta }) => (
+            <button
+              key={chiave}
+              type="button"
+              className="filter"
+              aria-pressed={modello === chiave}
+              onClick={() => setModello(chiave)}
+            >
+              {etichetta}
+            </button>
+          ))}
+        </div>
         <p className="small faint">
           Una per partita, la più probabile fra quelle che pagano almeno{" "}
           {picks.data ? num(picks.data.min_odds, 2) : "…"}. Soglia dichiarata dal progetto,
           non modificabile da qui.
+          {modello === "classico"
+            ? " Modello classico: le quote di apertura senza il margine del book, quello del track record."
+            : " Modello AI (LightGBM): parte dalle stesse quote e le corregge con la forma delle squadre. Seconda opinione: sul test set è indistinguibile dal mercato."}
           {picks.data && picks.data.with_min_odds_resolved > 0 && (
             <>
               {" "}In stagione:{" "}
@@ -53,7 +88,11 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
       {picks.loading && <Loading what="carico le selezioni…" />}
       {picks.error && <ErrorState error={picks.error} what="Selezioni non disponibili." />}
       {picks.data && righe.length === 0 && (
-        <p className="small faint">Nessuna selezione per questa giornata.</p>
+        <p className="small faint">
+          {modello === "ai"
+            ? "Nessuna selezione del modello AI per questa giornata: viene calcolato dalla giornata 4."
+            : "Nessuna selezione per questa giornata."}
+        </p>
       )}
 
       <div className="std">

@@ -160,3 +160,23 @@ def round_ml(season: str, matchday: int, src: store.Sources | None = None) -> di
         "written_at": store._iso(written) if pd.notna(written) else None,
         "matches": matches,
     }
+
+
+def lambdas(season: str, src: store.Sources | None = None) -> dict:
+    """
+    M5's goal expectations for every matchday of a season that has a file,
+    keyed by (matchday, home, away) — the shape `selections.picks` takes to
+    build the machine-learning picks with the same rule as M1's.
+    """
+    src = src or store.default_sources()
+    code = store.season_in(season)
+    out: dict = {}
+    for matchday in available(season, src):
+        df = pd.read_csv(_path(src, code, matchday))
+        if REQUIRED - set(df.columns):
+            log.warning("matchday %d: M5 file lacks columns, skipped", matchday)
+            continue
+        for _, row in df.iterrows():
+            out[(matchday, row["home_team"], row["away_team"])] = (
+                float(row["lam casa M5"]), float(row["lam fuori M5"]))
+    return out

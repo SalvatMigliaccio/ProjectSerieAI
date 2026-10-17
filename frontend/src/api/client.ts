@@ -225,6 +225,8 @@ export const api = {
     getOrNull<MLRound>(`/api/ml/${code}/${matchday}`),
   /** Le principali: nessun parametro di quota, e non e' una dimenticanza. */
   picks: (code = season()) => get<Picks>(`/api/picks/${code}`),
+  /** Stessa regola, gol attesi del modello AI (M5): seconda opinione. */
+  picksMl: (code = season()) => get<Picks>(`/api/picks-ml/${code}`),
   selections: (minOdds: number, maxOdds: number, code = season()) =>
     get<Selections>(
       `/api/selections/${code}?min_odds=${minOdds}&max_odds=${maxOdds}`,

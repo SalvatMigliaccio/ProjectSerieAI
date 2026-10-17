@@ -1174,6 +1174,9 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 }
 
 .picks__head h3 svg { color: var(--mint); }
+
+/* I due modelli, sotto il titolo: stessi pulsanti dei filtri della griglia. */
+.picks__models { margin-top: var(--s1); gap: var(--s1); }
 .picks__head p { margin: 0; max-width: none; }
 
 /* La tabella delle selezioni riusa il guscio e la tipografia della

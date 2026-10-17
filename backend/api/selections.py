@@ -137,19 +137,32 @@ def _counters(rows: list[dict]) -> tuple[int, int]:
     return len(scored), sum(1 for r in scored if r["won"])
 
 
-def _rows(season: str, matchday: int | None, src: store.Sources | None) -> tuple[list[dict], int]:
+def _rows(season: str, matchday: int | None, src: store.Sources | None,
+          lambdas: dict | None = None) -> tuple[list[dict], int]:
     """
     Every non-trivial market of every predicted match, with its outcome.
 
     Shared by the two readings below — the canonical picks and the band
     explorer — so they can never disagree about what a market is worth or
     whether it won.
+
+    `lambdas` replaces the goal expectations of the log with another model's,
+    keyed by (matchday, home, away): that is how the machine-learning picks
+    are made with EXACTLY the same rule as M1's, so the two lists differ only
+    in the model behind them. Matches the other model did not price are left
+    out, not filled in with M1.
     """
     from goalmodel.reporting.sezioni import selezioni
 
     records = store.matches(season, src=src)
     if matchday is not None:
         records = [r for r in records if r["matchday"] == matchday]
+    if lambdas is not None:
+        records = [
+            {**r, "lambda_home": lam[0], "lambda_away": lam[1]}
+            for r in records
+            if (lam := lambdas.get((r["matchday"], r["home_team"], r["away_team"])))
+        ]
     usable = [r for r in records
               if r["lambda_home"] is not None and r["lambda_away"] is not None]
     if not usable:
@@ -188,7 +201,7 @@ def _rows(season: str, matchday: int | None, src: store.Sources | None) -> tuple
 
 
 def picks(season: str, matchday: int | None = None,
-          src: store.Sources | None = None) -> dict:
+          src: store.Sources | None = None, lambdas: dict | None = None) -> dict:
     """
     The canonical selections: exactly what M1 has produced since day one.
 
@@ -206,7 +219,7 @@ def picks(season: str, matchday: int | None = None,
     """
     from goalmodel import config
 
-    rows, total = _rows(season, matchday, src)
+    rows, total = _rows(season, matchday, src, lambdas=lambdas)
     floor = float(config.QUOTA_MINIMA_SELEZIONE)
 
     most_probable = _best_per_match(rows)

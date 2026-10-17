@@ -274,6 +274,26 @@ def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38),
     return _visible(selections_mod.picks(season, matchday=matchday), user)
 
 
+@public.get("/picks-ml/{season}", response_model=schemas.Picks,
+            summary="The same selections, from the machine-learning model (M5)")
+def get_picks_ml(season: str, matchday: int | None = Query(None, ge=1, le=38),
+                 user: Viewer = None) -> dict:
+    """
+    The main line's rule — one pick per match, the likeliest among those whose
+    fair odds reach `config.QUOTA_MINIMA_SELEZIONE` — applied to M5's goal
+    expectations instead of M1's. Same code path as `/api/picks`, so the two
+    lists differ only in the model behind them.
+
+    A SECOND OPINION. M5 is indistinguishable from the market on the test
+    set: these picks are shown next to M1's, never instead of them, and the
+    track record stays M1's. Only matchdays M5 was run on appear.
+    """
+    _known_season(season)
+    return _visible(
+        selections_mod.picks(season, matchday=matchday, lambdas=ml_mod.lambdas(season)),
+        user)
+
+
 @public.get("/selections/{season}", response_model=schemas.Selections,
             summary="Markets priced under a ceiling on the odds")
 def get_selections(

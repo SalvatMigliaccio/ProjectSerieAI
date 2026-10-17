@@ -392,6 +392,64 @@
         }
       }
     },
+    "/api/picks-ml/{season}": {
+      "get": {
+        "summary": "The same selections, from the machine-learning model (M5)",
+        "description": "The main line's rule — one pick per match, the likeliest among those whose\nfair odds reach `config.QUOTA_MINIMA_SELEZIONE` — applied to M5's goal\nexpectations instead of M1's. Same code path as `/api/picks`, so the two\nlists differ only in the model behind them.\n\nA SECOND OPINION. M5 is indistinguishable from the market on the test\nset: these picks are shown next to M1's, never instead of them, and the\ntrack record stays M1's. Only matchdays M5 was run on appear.",
+        "operationId": "get_picks_ml_api_picks_ml__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Picks"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/selections/{season}": {
       "get": {
         "summary": "Markets priced under a ceiling on the odds",

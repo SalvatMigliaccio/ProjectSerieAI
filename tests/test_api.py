@@ -860,3 +860,20 @@ def test_ml_without_a_file_is_absent_not_an_error() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         assert ml.round_ml(SEASON, 7, src=_ml_sources(tmp)) is None
     assert client.get(f"/api/ml/{SEASON}/39").status_code == 404
+
+
+def test_ml_picks_follow_the_same_rule_as_m1() -> None:
+    """
+    The AI picks are M1's code path with M5's goal expectations: if the same
+    lambdas go in, the same picks must come out. Anything else would mean the
+    two buttons apply two different rules, and the comparison would be about
+    the rule rather than the model.
+    """
+    from backend.api import selections
+
+    m1 = selections.picks("2627")
+    same = {(r["matchday"], r["home_team"], r["away_team"]): (r["lambda_home"], r["lambda_away"])
+            for r in store.matches("2627") if r["lambda_home"] is not None}
+    again = selections.picks("2627", lambdas=same)
+    assert [(r["home_team"], r["market"]) for r in again["with_min_odds"]] ==            [(r["home_team"], r["market"]) for r in m1["with_min_odds"]]
+    assert client.get(f"/api/picks-ml/{SEASON}").status_code == 200
