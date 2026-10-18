@@ -8,7 +8,6 @@ import { AsideSelections } from "../components/AsideSelections";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
-import { MLPanel } from "../components/MLPanel";
 import { ModelPicks } from "../components/ModelPicks";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { EmptyState, ErrorState, Loading, SoloAbbonati } from "../components/States";
@@ -318,24 +317,24 @@ export function Dashboard() {
               </ErrorBoundary>
             )}
 
-            {/* La linea dichiarata del modello, in riga sotto la giornata: e'
-                la principale, e nella colonna stretta accanto a una lettura
-                regolabile sembrava la secondaria delle due. */}
-            <ErrorBoundary
-              label="selezioni del modello"
-              fallback={<p className="state">Selezioni non disponibili.</p>}
-            >
-              <ModelPicks matchday={selected} />
-            </ErrorBoundary>
+            {/* ANALISI DEL MODELLO: le selezioni della giornata, con il
+                pulsante per passare dal modello classico (M1, quello del track
+                record) al modello AI (M5) con la stessa regola. */}
+            <section className="analysis" aria-labelledby="analisi-titolo">
+              <header className="analysis__head">
+                <Eyebrow>giornata {selected ?? ""}</Eyebrow>
+                <h2 id="analisi-titolo">Analisi del modello</h2>
+              </header>
 
-            {/* La seconda opinione, sotto la linea ufficiale e non accanto:
-                letta dopo, e dichiarata tale nel titolo. */}
-            <ErrorBoundary
-              label="modello ML"
-              fallback={<p className="state">Modello ML non disponibile.</p>}
-            >
-              <MLPanel matchday={selected} />
-            </ErrorBoundary>
+              {/* La linea dichiarata del modello: e' la principale, ed e'
+                  la prima cosa del blocco. */}
+              <ErrorBoundary
+                label="selezioni del modello"
+                fallback={<p className="state">Selezioni non disponibili.</p>}
+              >
+                <ModelPicks matchday={selected} />
+              </ErrorBoundary>
+            </section>
 
             {/* Detto una volta sola e nel punto in cui si nota l'assenza. Le
                 partite gia' giocate sono tutte qui sopra: quello che manca a
