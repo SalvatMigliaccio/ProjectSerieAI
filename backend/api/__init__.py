@@ -320,6 +320,40 @@ def create_app() -> FastAPI:
                 response.headers["ETag"] = tag
         return response
 
+    @app.middleware("http")
+    async def rate_limit(request: Request, call_next):
+        """
+        One ceiling per address over the whole API (`ratelimit.api_limiter`).
+
+        DECLARED AFTER `cache_headers` ON PURPOSE: Starlette runs the
+        middleware added last first, so this sits outermost and a 304 counts
+        like any other answer — a revalidation flood is still a flood.
+
+        Two things are not counted. Preflights (`OPTIONS`) are the browser's,
+        not the caller's, and doubling every cross-origin request would halve
+        the limit for no reason. `/api/health` is what monitors poll: it is
+        cheap, and a monitor locked out by a busy NAT neighbour would report
+        an outage that is not there.
+
+        The per-route limits in `backend/auth/routes.py` still apply on top:
+        this one stops volume, those stop the routes that are expensive or
+        sensitive at a much lower rate.
+        """
+        from backend.auth.deps import client_ip
+        from backend.auth.ratelimit import api_limiter
+
+        if request.method == "OPTIONS" or request.url.path == "/api/health":
+            return await call_next(request)
+        key = client_ip(request) or "unknown"
+        if not api_limiter.allow(key):
+            log.warning("api rate limit hit from %s on %s", key, request.url.path)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "too many requests: slow down and retry shortly"},
+                headers={"Retry-After": str(api_limiter.retry_after(key))},
+            )
+        return await call_next(request)
+
     @app.exception_handler(FileNotFoundError)
     async def missing_file(request: Request, exc: FileNotFoundError):
         """Data that should exist but has not been built: 503, naming the fix."""

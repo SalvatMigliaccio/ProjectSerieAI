@@ -57,14 +57,35 @@ export class ApiError extends Error {
 }
 
 /**
- * Precedenza: `?api=` nella query, poi localStorage, poi la variabile
- * d'ambiente di build, infine il locale.
+ * In sviluppo, precedenza: `?api=` nella query, poi localStorage, poi la
+ * variabile d'ambiente di build, infine il locale. In produzione solo le
+ * ultime due (vedi sotto).
  *
  * Il parametro nella query serve a provare un tunnel senza ricompilare, e
  * viene ricordato: l'URL di ngrok cambia a ogni riavvio e riscriverlo ogni
  * volta sarebbe la via piu' rapida per incollarlo sbagliato.
  */
 export function baseUrl(): string {
+  // SOLO IN SVILUPPO, e non e' prudenza generica. Un link con
+  // `?api=https://sito-di-qualcuno` cambiava l'API per sempre (localStorage),
+  // e da quel momento il modulo di accesso mandava email e password a quel
+  // sito: un furto di credenziali con un solo clic, che sopravvive alla
+  // chiusura della scheda. In produzione la CSP di Caddy (`connect-src
+  // 'self'`) lo fermava, ma una protezione non deve dipendere da un'altra
+  // configurata altrove. Una build di produzione parla con la propria origine
+  // o con VITE_API_BASE_URL, scelto da chi la compila e non da chi la apre.
+  if (!import.meta.env.DEV) {
+    // Un valore lasciato da una build precedente, o da quel link, si butta:
+    // altrimenti tornerebbe valido alla prima build di sviluppo aperta qui.
+    try {
+      window.localStorage.removeItem("aiNaplesApiBase");
+    } catch {
+      /* finestra privata: niente da togliere */
+    }
+    const configured = import.meta.env.VITE_API_BASE_URL as string | undefined;
+    return (configured ?? FALLBACK_BASE).replace(/\/$/, "");
+  }
+
   const fromQuery = new URLSearchParams(window.location.search).get("api");
   if (fromQuery) {
     try {
@@ -232,6 +253,14 @@ async function get<T>(path: string): Promise<T> {
       detail = ((await response.json()) as { detail?: string }).detail ?? "";
     } catch {
       /* il corpo non era JSON: resta il codice di stato */
+    }
+    if (response.status === 429) {
+      const attesa = Number(response.headers.get("Retry-After")) || 60;
+      throw new ApiError("troppe richieste in poco tempo", {
+        status: 429,
+        url,
+        hint: `Il server ha messo un limite per proteggersi. Riprova tra ${attesa} secondi.`,
+      });
     }
     throw new ApiError(detail || `l'API ha risposto ${response.status}`, {
       status: response.status,

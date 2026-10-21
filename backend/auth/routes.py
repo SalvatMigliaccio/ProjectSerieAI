@@ -36,7 +36,15 @@ from .deps import (
 )
 from .models import User
 from .password import MIN_LENGTH, WeakPassword
-from .ratelimit import reset_limiter, sign_in_limiter, signup_limiter
+from .ratelimit import (
+    password_change_limiter,
+    refresh_limiter,
+    reset_limiter,
+    session_admin_limiter,
+    sign_in_limiter,
+    signup_limiter,
+    token_limiter,
+)
 
 log = logging.getLogger("auth.routes")
 
@@ -155,13 +163,21 @@ def _refused(cfg) -> Response:
     return out
 
 
-def _limit(limiter, request: Request, what: str) -> None:
-    key = client_ip(request) or "unknown"
+def _limit(limiter, request: Request, what: str, key: str | None = None) -> None:
+    """
+    429 with `Retry-After` when `limiter` is full for this caller.
+
+    `key` defaults to the caller's address; the account routes pass the user id
+    instead, because what they protect is the account, and an attacker holding
+    a stolen token can change address at will.
+    """
+    key = key or client_ip(request) or "unknown"
     if not limiter.allow(key):
         log.warning("rate limit hit on %s from %s", what, key)
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "too many requests: wait a few minutes before trying again",
+            headers={"Retry-After": str(limiter.retry_after(key))},
         )
 
 
@@ -193,6 +209,7 @@ def verify_email(payload: TokenOnly, response: Response, request: Request,
                  db: Db,
                  cfg: Cfg) -> Identity:
     """Confirms the address and signs the user in straight away."""
+    _limit(token_limiter, request, "verify-email")
     try:
         user = service.verify_email(db, payload.token)
     except service.InvalidToken as exc:
@@ -248,6 +265,7 @@ def refresh(request: Request, response: Response, db: Db, cfg: Cfg) -> Refreshed
     token the other has just burnt. With a 24-hour ceiling and a sessions page
     that revokes a device in one click, the race costs more than it buys.
     """
+    _limit(refresh_limiter, request, "refresh")
     token = request.cookies.get(cfg.cookie_name)
     row = service.session_from_token(db, token, cfg) if token else None
     if row is None:
@@ -310,6 +328,7 @@ def reset_password(payload: ResetPayload, request: Request,
     No cookie is issued: after a reset the user signs in again. If the reset
     was triggered by someone else, that second step is where they stop.
     """
+    _limit(token_limiter, request, "reset-password")
     try:
         service.reset_password(db, payload.token, payload.password,
                                ip=client_ip(request),
@@ -372,6 +391,7 @@ def revoke_other_sessions(row: CurrentSession, request: Request, db: Db) -> dict
     are using to secure their account is how a security action becomes one
     nobody completes: they land on a login form and assume it failed.
     """
+    _limit(session_admin_limiter, request, "revoke-others", key=str(row.user_id))
     count = service.revoke_all(db, row.user, keep=row.id)
     service.record_event(db, "sessions_revoked", "ok", user_id=row.user.id,
                          ip=client_ip(request), user_agent=request.headers.get("user-agent"),
@@ -393,6 +413,7 @@ def revoke_session(session_id: uuid.UUID, row: CurrentSession, request: Request,
     not exist: 404, same body. Otherwise the route would confirm which session
     ids are live, for anyone signed in.
     """
+    _limit(session_admin_limiter, request, "revoke-session", key=str(row.user_id))
     if session_id == row.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             "this is the current session: use sign-out")
@@ -407,8 +428,10 @@ def revoke_session(session_id: uuid.UUID, row: CurrentSession, request: Request,
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
 def change_password(payload: ChangePayload,
                     row: CurrentSession,
+                    request: Request,
                     db: Db) -> Response:
     """Every other session drops; the one doing the change survives."""
+    _limit(password_change_limiter, request, "change-password", key=str(row.user_id))
     try:
         service.change_password(db, row.user, payload.current_password,
                                 payload.new_password, current_session=row.id)

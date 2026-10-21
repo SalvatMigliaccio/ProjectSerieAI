@@ -14,6 +14,13 @@
 
 	# The API first: a path match beats the file server below it.
 	handle /api/* {
+		# A CEILING ON THE BODY. The largest legitimate request is a sign-in or
+		# a password change, a few hundred bytes of JSON. Without a limit,
+		# uvicorn reads whatever arrives into memory before FastAPI looks at it:
+		# a few concurrent gigabyte uploads are enough to kill the container.
+		request_body {
+			max_size 64KB
+		}
 		reverse_proxy api:8000 {
 			# Without these the application sees the proxy as the client, and
 			# every audit row records Caddy's address instead of the caller's.

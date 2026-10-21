@@ -152,3 +152,24 @@ def pytest_collection_modifyitems(config, items: list[pytest.Item]) -> None:
         for item in items:
             if "richiede_dataset_completo" in item.keywords:
                 item.add_marker(salta)
+
+
+@pytest.fixture(autouse=True)
+def _limitatori_azzerati():
+    """
+    Ogni limitatore di richieste parte vuoto a ogni test.
+
+    Vivono nella memoria del processo e sono condivisi: senza questo il
+    limite sull'intera API (300 al minuto per indirizzo, e nei test
+    l'indirizzo e' sempre lo stesso) scatterebbe a meta' suite con un 429
+    che sembra un endpoint rotto. Import pigro: i test del modello girano
+    anche senza l'extra `auth`.
+    """
+    try:
+        from backend.auth.ratelimit import ALL_LIMITERS
+    except ImportError:
+        yield
+        return
+    for limiter in ALL_LIMITERS:
+        limiter.reset()
+    yield

@@ -24,6 +24,7 @@ import smtplib
 import ssl
 from dataclasses import dataclass, field
 from email.message import EmailMessage
+from html import escape  # security rule 5: every value interpolated into HTML
 from typing import Protocol
 from urllib.parse import quote
 
@@ -152,7 +153,7 @@ def verification_message(cfg: Settings, to: str, token: str) -> Message:
     )
     html = (
         "<p>Welcome.</p>"
-        f'<p>Confirm your address: <a href="{url}">activate the account</a></p>'
+        f'<p>Confirm your address: <a href="{escape(url, quote=True)}">activate the account</a></p>'
         f"<p>The link is valid for {hours} hours.</p>"
         "<p>If you did not create this account, ignore this message: without "
         "the confirmation the account stays inactive.</p>"
@@ -172,7 +173,7 @@ def reset_message(cfg: Settings, to: str, token: str) -> Message:
     )
     html = (
         "<p>You asked to reset your password.</p>"
-        f'<p><a href="{url}">Choose a new password</a></p>'
+        f'<p><a href="{escape(url, quote=True)}">Choose a new password</a></p>'
         f"<p>The link is valid for {minutes} minutes and can be used "
         "<strong>once</strong>.</p>"
         "<p>If this was not you, do nothing: your current password stays valid "

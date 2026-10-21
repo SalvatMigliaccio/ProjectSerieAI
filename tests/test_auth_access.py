@@ -21,7 +21,6 @@ import pytest
 from backend.auth import access
 from backend.auth.settings import Settings
 from pydantic import SecretStr
-
 from tests.test_auth_http import GOOD, _register_and_verify, client, post  # noqa: F401
 
 CFG = Settings(secret_key=SecretStr("k" * 64), access_token_minutes=15)
@@ -111,7 +110,7 @@ def test_malformed_permissions_are_refused(perms) -> None:
 
 def test_a_tampered_payload_is_refused() -> None:
     token, _ = access.issue(uuid.uuid4(), uuid.uuid4(), set(), CFG)
-    head, body, sig = token.split(".")
+    head, _body, sig = token.split(".")
     forged = _sign(_claims(perms=["users:manage"])).split(".")[1]
     assert access.verify(f"{head}.{forged[:-2]}xx.{sig}", CFG) is None
     assert access.verify("not.a.jwt", CFG) is None
