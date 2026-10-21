@@ -905,6 +905,32 @@
         }
       }
     },
+    "/api/auth/activity": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Activity",
+        "description": "What happened to this account lately: sign-ins, failures, password changes.\n\nThe sessions list shows who is signed in NOW. It cannot show eight wrong\npasswords typed last night, and that is exactly the thing worth seeing\nbefore it becomes a ninth that works.",
+        "operationId": "activity_api_auth_activity_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ActivityRow"
+                  },
+                  "type": "array",
+                  "title": "Response Activity Api Auth Activity Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/sessions/revoke-others": {
       "post": {
         "tags": [
@@ -924,6 +950,54 @@
                   },
                   "type": "object",
                   "title": "Response Revoke Other Sessions Api Auth Sessions Revoke Others Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/sessions/{session_id}/revoke": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke Session",
+        "description": "Sign out one other device, the one the user does not recognise.\n\nNOT THE CURRENT ONE: ending the session asking is sign-out, and it already\nhas its own route that also clears the cookie. Doing it here would leave a\ndead cookie in the browser and a page that fails on its next request.\n\nAn id that belongs to another account answers exactly like one that does\nnot exist: 404, same body. Otherwise the route would confirm which session\nids are live, for anyone signed in.",
+        "operationId": "revoke_session_api_auth_sessions__session_id__revoke_post",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Revoke Session Api Auth Sessions  Session Id  Revoke Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -969,6 +1043,52 @@
   },
   "components": {
     "schemas": {
+      "ActivityRow": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "outcome",
+          "at"
+        ],
+        "title": "ActivityRow",
+        "description": "One entry of the account's own audit trail, as its owner sees it.\n\nNO `details`. That column holds context for whoever investigates — the id\nof the admin who granted a role, the reason of a refusal — and none of it\nis the user's to read. What is left is what a person can act on: what\nhappened, whether it worked, when, from where."
+      },
       "CalibrationBin": {
         "properties": {
           "bin": {
@@ -1187,6 +1307,28 @@
             },
             "type": "array",
             "title": "Permissions"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "email_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Verified At"
           }
         },
         "type": "object",

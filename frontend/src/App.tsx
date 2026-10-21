@@ -22,6 +22,9 @@ const TITOLI: Record<string, string> = {
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
   "/verify-email": "Attivazione · MatchPoint",
+  "/account": "Il tuo account · MatchPoint",
+  "/account/sicurezza": "Sicurezza · Account · MatchPoint",
+  "/account/sessioni": "Sessioni · Account · MatchPoint",
 };
 
 /**
@@ -78,7 +81,7 @@ export function App() {
           {/* The landing page stays open: it sells the thing. */}
           <Route path="/" element={<Hero />} />
 
-          <Route path="/account" element={<Profile />} />
+          <Route path="/account/:sezione?" element={<Profile />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

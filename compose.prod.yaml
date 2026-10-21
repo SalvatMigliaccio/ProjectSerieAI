@@ -85,6 +85,10 @@ services:
       # the pipeline on the host owns it.
       - ${TRACK_RECORD_DIR:-./track_record}:/srv/track_record:ro
       - ${DATA_DIR:-./data}:/srv/data:ro
+      # M5's predictions for the dashboard's "Modello AI", read by
+      # `backend/api/ml.py` next to `data/`. Missing, the AI picks come back
+      # empty on every matchday with no error at all.
+      - ${ML_DIR:-./experiments/output}:/srv/experiments/output:ro
     depends_on:
       db:
         condition: service_healthy

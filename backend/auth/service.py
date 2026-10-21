@@ -18,7 +18,7 @@ import datetime as dt
 import logging
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -329,6 +329,62 @@ def revoke_all(db: Session, user: User, *, keep: uuid.UUID | None = None) -> int
         r.revoked_at = at
         count += 1
     return count
+
+
+# The audit events an account owner is shown, by kind. A list of what to SHOW,
+# not of what to hide: a kind added tomorrow for investigators stays out of the
+# account page until someone decides it belongs there. Left out on purpose:
+# `signup` refusals (someone tried to register this address — alarming and not
+# actionable), `verification_mail` failures (our mailer, not their account),
+# and role and suspension events, which are the staff's to explain.
+ACTIVITY_KINDS = frozenset({
+    "signup", "verify_email", "sign_in", "sign_out",
+    "change_password", "reset_requested", "reset_done",
+    "session_revoked", "sessions_revoked",
+})
+
+ACTIVITY_LIMIT = 20
+
+
+def recent_activity(db: Session, user: User, *, limit: int = ACTIVITY_LIMIT) -> list[AuthEvent]:
+    """
+    The latest events of `user`, newest first.
+
+    `signup` only when it succeeded: a refused signup carries the user id of
+    the address someone tried to take, and is not something its owner did.
+    The id breaks ties: `now()` is the transaction's start, so events written
+    together share a timestamp, and uuid7 keeps their order.
+    """
+    return list(db.scalars(
+        select(AuthEvent)
+        .where(
+            AuthEvent.user_id == user.id,
+            AuthEvent.kind.in_(ACTIVITY_KINDS),
+            ~and_(AuthEvent.kind == "signup", AuthEvent.outcome != "ok"),
+        )
+        .order_by(AuthEvent.at.desc(), AuthEvent.id.desc())
+        .limit(limit)
+    ).all())
+
+
+def revoke_one(db: Session, user: User, session_id: uuid.UUID) -> bool:
+    """
+    Revoke one session of `user`, by id. False if there is none to revoke.
+
+    THE OWNER IS PART OF THE QUERY, not a check after it. Looking the row up by
+    id alone and then comparing `user_id` is the same thing until someone drops
+    the comparison; here a session of another account is simply not found, and
+    the caller cannot tell it apart from an id that never existed.
+    """
+    row = db.scalar(select(UserSession).where(
+        UserSession.id == session_id,
+        UserSession.user_id == user.id,
+        UserSession.revoked_at.is_(None),
+    ))
+    if row is None:
+        return False
+    row.revoked_at = now()
+    return True
 
 
 # ---------------------------------------------------------------------------

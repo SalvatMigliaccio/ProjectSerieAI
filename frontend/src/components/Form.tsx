@@ -43,7 +43,35 @@ export function newPasswordError(value: string): string | null {
   if (value.length < MIN_PASSWORD) {
     return `Servono almeno ${MIN_PASSWORD} caratteri (ne hai ${value.length}). Una frase di più parole va benissimo.`;
   }
+  if (new Set(value.toLowerCase()).size < 5) {
+    return "Troppi caratteri ripetuti: prova con una frase di più parole.";
+  }
   return null;
+}
+
+/**
+ * Quanto regge una password nuova, in quattro gradini.
+ *
+ * CONTA LA LUNGHEZZA, NON LE CATEGORIE. E' la stessa regola del server e del
+ * suggerimento in pagina: nessun obbligo di maiuscole o simboli, perche'
+ * spingono verso «Password1!» e non verso una frase lunga. L'unica eccezione
+ * e' la ripetizione: «aaaaaaaaaaaa» ha dodici caratteri e nessuna robustezza,
+ * e premiarla insegnerebbe la cosa sbagliata.
+ */
+export type Robustezza = 0 | 1 | 2 | 3;
+
+export function robustezza(value: string): Robustezza {
+  if (value.length < MIN_PASSWORD) return 0;
+  if (new Set(value.toLowerCase()).size < 5) return 0;
+  if (value.length < 16) return 1;
+  if (value.length < 20) return 2;
+  return 3;
+}
+
+function gradino(value: string): string {
+  if (value.length >= MIN_PASSWORD && robustezza(value) === 0) return "troppi caratteri ripetuti";
+  const nomi: Record<Robustezza, string> = { 0: "troppo corta", 1: "sufficiente", 2: "buona", 3: "ottima" };
+  return nomi[robustezza(value)];
 }
 
 export function requiredError(value: string, what: string): string | null {
@@ -107,6 +135,8 @@ interface FieldProps {
   onBlur?: () => void;
   error?: string | null;
   hint?: ReactNode;
+  /** L'aiuto e' una conferma ("le due password coincidono"): spunta e verde. */
+  hintOk?: boolean;
   autoComplete?: string;
   inputRef?: Ref<HTMLInputElement>;
   autoFocus?: boolean;
@@ -118,7 +148,7 @@ function describedBy(id: string, error?: string | null, hint?: ReactNode): strin
   return ids.length ? ids.join(" ") : undefined;
 }
 
-function FieldMessages({ id, error, hint }: { id: string; error?: string | null; hint?: ReactNode }) {
+function FieldMessages({ id, error, hint, hintOk }: { id: string; error?: string | null; hint?: ReactNode; hintOk?: boolean }) {
   return (
     <>
       {error && (
@@ -131,7 +161,12 @@ function FieldMessages({ id, error, hint }: { id: string; error?: string | null;
         </p>
       )}
       {hint && (
-        <p className="field__hint" id={`${id}-aiuto`}>
+        <p className={`field__hint${hintOk ? " field__hint--ok" : ""}`} id={`${id}-aiuto`}>
+          {hintOk && (
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
           {hint}
         </p>
       )}
@@ -174,13 +209,15 @@ export function EmailField(props: FieldProps) {
  * nome cambia con l'azione che compie. Vedere quello che si scrive dimezza gli
  * errori di battitura su una password lunga, che e' quella che chiediamo.
  *
- * `counter` mostra la lunghezza contro il minimo: solo dove si sceglie una
- * password nuova, non dove la si ripete a memoria.
+ * `counter` mostra la robustezza: solo dove si sceglie una password nuova, non
+ * dove la si ripete a memoria. La barra e' decorazione; quello che conta e' il
+ * testo accanto, che dice il gradino e i caratteri contro il minimo — il colore
+ * da solo non lo legge chi non lo distingue, e nemmeno uno screen reader.
  */
 export function PasswordField(props: FieldProps & { counter?: boolean }) {
-  const { id, label, value, onChange, onBlur, error, hint, autoComplete = "current-password", inputRef, counter, autoFocus } = props;
+  const { id, label, value, onChange, onBlur, error, hint, hintOk, autoComplete = "current-password", inputRef, counter, autoFocus } = props;
   const [visible, setVisible] = useState(false);
-  const enough = value.length >= MIN_PASSWORD;
+  const livello = robustezza(value);
   const counterId = `${id}-conteggio`;
   const described = [describedBy(id, error, hint), counter ? counterId : null].filter(Boolean).join(" ") || undefined;
 
@@ -225,12 +262,24 @@ export function PasswordField(props: FieldProps & { counter?: boolean }) {
         </button>
       </div>
       {counter && (
-        <p className={`field__counter${enough ? " is-ok" : ""}`} id={counterId}>
-          {enough ? "✓ " : ""}
-          {value.length} / {MIN_PASSWORD} caratteri minimi
-        </p>
+        <div className="strength" data-level={value ? livello : undefined}>
+          <div className="strength__bar" aria-hidden="true">
+            {[0, 1, 2].map((i) => (
+              <span key={i} className={value && livello > i ? "is-on" : undefined} />
+            ))}
+          </div>
+          <p className="strength__text" id={counterId}>
+            {value ? (
+              <>
+                <strong>{gradino(value)}</strong> · {value.length} caratteri, minimo {MIN_PASSWORD}
+              </>
+            ) : (
+              `Almeno ${MIN_PASSWORD} caratteri`
+            )}
+          </p>
+        </div>
       )}
-      <FieldMessages id={id} error={error} hint={hint} />
+      <FieldMessages id={id} error={error} hint={hint} hintOk={hintOk} />
     </div>
   );
 }

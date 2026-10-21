@@ -10,13 +10,15 @@ wrong.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from backend.api import app
 from backend.auth import service
 from backend.auth.db import request_session
 from backend.auth.deps import mail_sender
 from backend.auth.mail import InMemorySender
-from backend.auth.models import EmailToken
+from backend.auth.models import EmailToken, UserSession
 from backend.auth.ratelimit import reset_limiter, sign_in_limiter, signup_limiter
 from fastapi.testclient import TestClient
 
@@ -428,6 +430,93 @@ def test_revoking_the_others_keeps_the_one_that_asked(client, db) -> None:
     assert all(row["current"] for row in client.get("/api/auth/sessions").json())
 
 
+def test_revoking_one_session_leaves_the_others(client, db) -> None:
+    """The device the user does not recognise goes; the one they are on stays."""
+    email = "una@example.com"
+    _register_and_verify(client, db, email)  # verification opens a session
+    client.post("/api/auth/sign-in", json={"email": email, "password": GOOD})
+
+    rows = client.get("/api/auth/sessions").json()
+    assert len(rows) == 2
+    other = next(r for r in rows if not r["current"])
+
+    r = client.post(f"/api/auth/sessions/{other['id']}/revoke")
+    assert r.status_code == 200 and r.json() == {"revoked": 1}
+    left = client.get("/api/auth/sessions").json()
+    assert [row["id"] for row in left] == [next(x["id"] for x in rows if x["current"])]
+
+    again = client.post(f"/api/auth/sessions/{other['id']}/revoke")
+    assert again.status_code == 404, "an already revoked session is not revocable twice"
+
+
+def test_the_current_session_is_not_revoked_from_here(client, db) -> None:
+    """Ending the session asking is sign-out, which also clears the cookie."""
+    _register_and_verify(client, db, "corrente@example.com")
+    current = next(r for r in client.get("/api/auth/sessions").json() if r["current"])
+
+    assert client.post(f"/api/auth/sessions/{current['id']}/revoke").status_code == 400
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_another_accounts_session_answers_like_a_missing_one(client, db) -> None:
+    """Otherwise the route would confirm which ids are live, to anyone signed in."""
+    _register_and_verify(client, db, "vittima@example.com")
+    victim = next(r for r in client.get("/api/auth/sessions").json() if r["current"])
+
+    _register_and_verify(client, db, "intruso@example.com")  # the cookie now is theirs
+    stolen = client.post(f"/api/auth/sessions/{victim['id']}/revoke")
+    missing = client.post(f"/api/auth/sessions/{uuid.uuid4()}/revoke")
+
+    assert stolen.status_code == missing.status_code == 404
+    assert stolen.json() == missing.json()
+    row = db.get(UserSession, uuid.UUID(victim["id"]))
+    assert row is not None and row.revoked_at is None, "the victim's session was revoked"
+
+
+def test_me_carries_the_two_account_dates(client, db) -> None:
+    _register_and_verify(client, db, "date@example.com")
+    body = client.get("/api/auth/me").json()
+    assert body["created_at"] and body["email_verified_at"]
+    assert body["created_at"] <= body["email_verified_at"]
+
+
+def test_activity_shows_a_failed_sign_in_to_the_owner(client, db) -> None:
+    """Eight wrong passwords last night are what this page exists to show."""
+    email = "attivita@example.com"
+    _register_and_verify(client, db, email)
+    client.post("/api/auth/sign-in", json={"email": email, "password": "wrong"})
+    client.post("/api/auth/sign-in", json={"email": email, "password": GOOD})
+
+    rows = client.get("/api/auth/activity").json()
+    seen = {(r["kind"], r["outcome"]) for r in rows}
+    assert ("sign_in", "ko") in seen and ("sign_in", "ok") in seen
+    assert rows[0]["kind"] == "sign_in" and rows[0]["outcome"] == "ok", "newest first"
+    assert all("details" not in r for r in rows), "details are for investigators"
+
+
+def test_activity_hides_what_the_owner_did_not_do(client, db) -> None:
+    """A refused signup on this address is someone else's attempt, not activity."""
+    email = "nascosto@example.com"
+    _register_and_verify(client, db, email)
+    client.post("/api/auth/signup", json={"email": email, "password": GOOD})
+
+    rows = client.get("/api/auth/activity").json()
+    assert not any(r["kind"] == "signup" and r["outcome"] == "ko" for r in rows)
+    assert not any(r["kind"] == "verification_mail" for r in rows)
+
+
+def test_activity_is_only_the_callers_own(client, db) -> None:
+    _register_and_verify(client, db, "primo@example.com")
+    client.post("/api/auth/sign-in", json={"email": "primo@example.com", "password": "wrong"})
+
+    _register_and_verify(client, db, "secondo@example.com")  # the cookie now is theirs
+    rows = client.get("/api/auth/activity").json()
+    assert not any(r["kind"] == "sign_in" and r["outcome"] == "ko" for r in rows), \
+        "another account's failed sign-in leaked into this one"
+
+
 def test_sessions_need_a_session(client) -> None:
+    assert client.get("/api/auth/activity").status_code == 401
     assert client.get("/api/auth/sessions").status_code == 401
     assert client.post("/api/auth/sessions/revoke-others").status_code == 401
+    assert client.post(f"/api/auth/sessions/{uuid.uuid4()}/revoke").status_code == 401

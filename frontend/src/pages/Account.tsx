@@ -38,7 +38,75 @@ import {
 } from "../components/Form";
 import { Colophon, Masthead } from "../components/Layout";
 
-/** The shared frame: brand mark, title, optional lead, the form, links. */
+/**
+ * Cosa si ottiene entrando, accanto al modulo.
+ *
+ * TRE FATTI, NESSUNA PROMESSA. Sono le proprieta' che il progetto garantisce
+ * per costruzione — la matrice dei gol, la previsione scritta prima del
+ * fischio, l'errore pubblicato partita per partita — e non un rendimento:
+ * il valore atteso contro il book e' negativo ed e' misurato (CLAUDE.md), e
+ * una pagina d'ingresso che lasciasse intendere il contrario sarebbe la prima
+ * cosa falsa che un visitatore legge.
+ */
+const PUNTI: { icon: ReactNode; title: string; text: string }[] = [
+  {
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+        <path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17" />
+      </svg>
+    ),
+    title: "Gol, non pronostici",
+    text: "Per ogni partita la distribuzione dei gol: 1X2, over/under e risultati esatti escono dalla stessa matrice.",
+  },
+  {
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+    title: "Scritte prima del fischio",
+    text: "Ogni previsione è registrata prima del calcio d'inizio e non si modifica dopo.",
+  },
+  {
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path d="M4 19.5h16M7 16V11M12 16V7M17 16v-3" strokeLinecap="round" />
+      </svg>
+    ),
+    title: "Errore in chiaro",
+    text: "Track record giornata per giornata, con l'errore di ogni singola partita.",
+  },
+];
+
+function BrandPanel() {
+  return (
+    <aside className="auth__brand" aria-label="Cos'è MatchPoint">
+      <div className="auth__pitch" aria-hidden="true" />
+      <div className="auth__brand-inner">
+        <p className="auth__eyebrow">Serie A · previsioni probabilistiche</p>
+        <p className="auth__claim">
+          Quanti gol, <em>prima</em> che si giochi.
+        </p>
+        <ul className="auth__points">
+          {PUNTI.map((p) => (
+            <li key={p.title}>
+              <span className="auth__point-icon" aria-hidden="true">{p.icon}</span>
+              <span>
+                <strong>{p.title}</strong>
+                {p.text}
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="auth__note">Probabilità, non consigli di gioco.</p>
+      </div>
+    </aside>
+  );
+}
+
+/** The shared frame: brand panel, then mark, title, optional lead, the form, links. */
 function Shell({
   title,
   lead,
@@ -54,18 +122,26 @@ function Shell({
   // niente marchio, niente modo di tornare indietro, e l'aria di un errore di
   // caricamento invece di un passaggio previsto. E' anche il punto in cui una
   // persona decide se questo sito merita la sua password.
+  //
+  // IL MODULO VIENE PRIMA NEL DOCUMENTO, il pannello dopo: chi naviga con Tab o
+  // con uno screen reader arriva subito al campo email, e su telefono il
+  // modulo sta in cima senza dover scorrere oltre la presentazione. A schermo
+  // largo la griglia rimette il pannello a sinistra.
   return (
     <>
       <Masthead current="hero" />
-      <main id="contenuto" className="account" tabIndex={-1}>
-        <section className="account-card" aria-labelledby="account-titolo">
-          <div className="account-card__mark" aria-hidden="true">
-            {icon ?? <img src="/Logo_NoName.png" alt="" width={331} height={333} />}
-          </div>
-          <h1 id="account-titolo">{title}</h1>
-          {lead ? <p className="lead">{lead}</p> : null}
-          {children}
-        </section>
+      <main id="contenuto" className="auth" tabIndex={-1}>
+        <div className="auth__form">
+          <section className="account-card" aria-labelledby="account-titolo">
+            <div className="account-card__mark" aria-hidden="true">
+              {icon ?? <img src="/Logo_NoName.png" alt="" width={331} height={333} />}
+            </div>
+            <h1 id="account-titolo">{title}</h1>
+            {lead ? <p className="lead">{lead}</p> : null}
+            {children}
+          </section>
+        </div>
+        <BrandPanel />
       </main>
       <Colophon modelVersion={null} />
     </>
@@ -505,8 +581,9 @@ export function ResetPassword() {
           onBlur={v.blur("repeat")}
           error={v.error("repeat")}
           inputRef={v.ref("repeat")}
+          hintOk
           hint={repeat && repeat === password && password.length >= MIN_PASSWORD
-            ? "✓ Le due password coincidono."
+            ? "Le due password coincidono."
             : undefined}
         />
 

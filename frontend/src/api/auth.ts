@@ -19,6 +19,9 @@ export interface Identity {
   status: string;
   roles: string[];
   permissions: string[];
+  /** ISO 8601. Optional: an API older than the account page omits them. */
+  created_at?: string | null;
+  email_verified_at?: string | null;
 }
 
 /** Message shapes the API returns on 4xx. */
@@ -135,10 +138,34 @@ export async function sessions(): Promise<SessionRow[]> {
   return (await r.json()) as SessionRow[];
 }
 
+export interface ActivityRow {
+  kind: string;
+  outcome: "ok" | "ko" | string;
+  at: string;
+  ip: string | null;
+  user_agent: string | null;
+}
+
+/** The account's own recent audit trail, newest first. Never the `details`. */
+export async function activity(): Promise<ActivityRow[]> {
+  const r = await fetch(`${baseUrl()}/api/auth/activity`, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (!r.ok) throw new ApiError("non riesco a leggere l'attività", {
+    status: r.status, url: "/api/auth/activity", hint: null,
+  });
+  return (await r.json()) as ActivityRow[];
+}
+
 export const revokeOtherSessions = () =>
   post<{ revoked: number }>("/api/auth/sessions/revoke-others");
 
-export const changePassword = (currentPassword: string, newPassword: string) =>
+/** Sign out one other device. The current session is refused: that is sign-out. */
+export const revokeSession = (id: string) =>
+  post<{ revoked: number }>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`);
+
+export const changePassword =(currentPassword: string, newPassword: string) =>
   post<void>("/api/auth/change-password", {
     current_password: currentPassword,
     new_password: newPassword,

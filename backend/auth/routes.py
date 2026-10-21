@@ -15,6 +15,7 @@ into an address-validation service for anyone with curl.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr, Field
@@ -96,6 +97,10 @@ class Identity(BaseModel):
     status: str
     roles: list[str]
     permissions: list[str]
+    # Two dates for the account page. Optional so a client that predates them
+    # keeps working, and because an unverified account has no verification.
+    created_at: str | None = None
+    email_verified_at: str | None = None
 
 
 def _identity(user: User) -> Identity:
@@ -105,7 +110,26 @@ def _identity(user: User) -> Identity:
         status=user.status,
         roles=sorted(r.name for r in user.roles),
         permissions=sorted(service.permissions_of(user)),
+        created_at=user.created_at.isoformat() if user.created_at else None,
+        email_verified_at=user.email_verified_at.isoformat() if user.email_verified_at else None,
     )
+
+
+class ActivityRow(BaseModel):
+    """
+    One entry of the account's own audit trail, as its owner sees it.
+
+    NO `details`. That column holds context for whoever investigates — the id
+    of the admin who granted a role, the reason of a refusal — and none of it
+    is the user's to read. What is left is what a person can act on: what
+    happened, whether it worked, when, from where.
+    """
+
+    kind: str
+    outcome: str
+    at: str
+    ip: str | None = None
+    user_agent: str | None = None
 
 
 def _limit(limiter, request: Request, what: str) -> None:
@@ -257,6 +281,24 @@ def sessions(row: CurrentSession, db: Db) -> list[SessionRow]:
     ) for r in rows]
 
 
+@router.get("/activity")
+def activity(user: CurrentUser, db: Db) -> list[ActivityRow]:
+    """
+    What happened to this account lately: sign-ins, failures, password changes.
+
+    The sessions list shows who is signed in NOW. It cannot show eight wrong
+    passwords typed last night, and that is exactly the thing worth seeing
+    before it becomes a ninth that works.
+    """
+    return [ActivityRow(
+        kind=e.kind,
+        outcome=e.outcome,
+        at=e.at.isoformat(),
+        ip=str(e.ip) if e.ip else None,
+        user_agent=e.user_agent,
+    ) for e in service.recent_activity(db, user)]
+
+
 @router.post("/sessions/revoke-others")
 def revoke_other_sessions(row: CurrentSession, request: Request, db: Db) -> dict[str, int]:
     """
@@ -271,6 +313,31 @@ def revoke_other_sessions(row: CurrentSession, request: Request, db: Db) -> dict
                          ip=client_ip(request), user_agent=request.headers.get("user-agent"),
                          details={"revoked": count})
     return {"revoked": count}
+
+
+@router.post("/sessions/{session_id}/revoke")
+def revoke_session(session_id: uuid.UUID, row: CurrentSession, request: Request,
+                   db: Db) -> dict[str, int]:
+    """
+    Sign out one other device, the one the user does not recognise.
+
+    NOT THE CURRENT ONE: ending the session asking is sign-out, and it already
+    has its own route that also clears the cookie. Doing it here would leave a
+    dead cookie in the browser and a page that fails on its next request.
+
+    An id that belongs to another account answers exactly like one that does
+    not exist: 404, same body. Otherwise the route would confirm which session
+    ids are live, for anyone signed in.
+    """
+    if session_id == row.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "this is the current session: use sign-out")
+    if not service.revoke_one(db, row.user, session_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "session not found")
+    service.record_event(db, "session_revoked", "ok", user_id=row.user.id,
+                         ip=client_ip(request), user_agent=request.headers.get("user-agent"),
+                         details={"session": str(session_id)})
+    return {"revoked": 1}
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)

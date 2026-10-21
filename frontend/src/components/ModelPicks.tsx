@@ -40,9 +40,22 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
     [modello],
   );
 
-  const righe: Selection[] = (picks.data?.with_min_odds ?? []).filter(
+  const tutte = picks.data?.with_min_odds ?? [];
+  const righe: Selection[] = tutte.filter(
     (r) => matchday === null || r.matchday === matchday,
   );
+  // DUE VUOTI DIVERSI. Una giornata senza M5 e' normale (gira dalla 4); una
+  // stagione intera senza M5 vuol dire che l'API non trova i file — ed era
+  // proprio questo che il vecchio messaggio "viene calcolato dalla giornata 4"
+  // nascondeva, facendo cercare il problema nella giornata.
+  const vuotoAi =
+    modello === "ai" && tutte.length === 0
+      ? "Le previsioni del modello AI non sono disponibili su questo server."
+      : `Nessuna selezione del modello AI per questa giornata: il modello è disponibile per le giornate ${[
+          ...new Set(tutte.map((r) => r.matchday)),
+        ]
+          .sort((a, b) => a - b)
+          .join(", ")}.`;
 
   return (
     <section className="picks">
@@ -90,7 +103,7 @@ export function ModelPicks({ matchday }: { matchday: number | null }) {
       {picks.data && righe.length === 0 && (
         <p className="small faint">
           {modello === "ai"
-            ? "Nessuna selezione del modello AI per questa giornata: viene calcolato dalla giornata 4."
+            ? vuotoAi
             : "Nessuna selezione per questa giornata."}
         </p>
       )}

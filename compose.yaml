@@ -121,6 +121,11 @@ services:
       - ./manual:/srv/manual:ro
       - ./data:/srv/data:ro
       - ./track_record:/srv/track_record:ro
+      # Le previsioni di M5 (`previsioni_m5_*.csv`), lette da `backend/api/ml.py`
+      # accanto a `data/`. Senza questo montaggio l'API non trova nessun file e
+      # il "Modello AI" della dashboard risulta vuoto su OGNI giornata, senza un
+      # errore: per l'API "nessun file" e' uno stato legittimo.
+      - ./experiments/output:/srv/experiments/output:ro
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
