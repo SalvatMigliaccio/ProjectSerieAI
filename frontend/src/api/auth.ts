@@ -43,7 +43,7 @@ function readDetail(body: ErrorBody | null, fallback: string): string {
  * where a 401 means "access token expired". On the credential forms it means
  * "wrong password" or "link expired", and a refresh there would be noise.
  */
-async function post<T>(path: string, payload?: unknown, { renew = false } = {}): Promise<T> {
+export async function post<T>(path: string, payload?: unknown, { renew = false } = {}): Promise<T> {
   const url = `${baseUrl()}${path}`;
   let response: Response;
 
@@ -129,6 +129,30 @@ export interface SessionRow {
   ip: string | null;
   user_agent: string | null;
   current: boolean;
+}
+
+/**
+ * GET JSON from a route that needs a session, with one refresh on 401.
+ * A failure carries the status, so a page can tell "not allowed" (403) from
+ * "not found" (404) from "server down".
+ */
+export async function getJson<T>(path: string): Promise<T> {
+  const r = await fetchWithRefresh(`${baseUrl()}${path}`, {
+    headers: { Accept: "application/json" },
+    credentials: "include",
+  });
+  if (!r.ok) {
+    let body: ErrorBody | null = null;
+    try {
+      body = (await r.json()) as ErrorBody;
+    } catch {
+      /* not JSON: the status is enough */
+    }
+    throw new ApiError(readDetail(body, `il server ha risposto ${r.status}`), {
+      status: r.status, url: path, hint: null,
+    });
+  }
+  return (await r.json()) as T;
 }
 
 /** Where this account is signed in. Never carries the token, by design. */

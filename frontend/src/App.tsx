@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
+import { FavoriteProvider } from "./auth/Favorite";
 import { RequireAuth } from "./auth/RequireAuth";
 import {
   ForgotPassword,
@@ -12,6 +13,7 @@ import {
 } from "./pages/Account";
 import { Dashboard } from "./pages/Dashboard";
 import { Hero } from "./pages/Hero";
+import { Pronostici } from "./pages/Pronostici";
 import { Profile } from "./pages/Profile";
 
 const TITOLI: Record<string, string> = {
@@ -22,6 +24,7 @@ const TITOLI: Record<string, string> = {
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
   "/verify-email": "Attivazione · MatchPoint",
+  "/pronostici": "I miei pronostici · MatchPoint",
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
@@ -76,6 +79,7 @@ export function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <FavoriteProvider>
         <CambioPagina />
         <Routes>
           {/* The landing page stays open: it sells the thing. */}
@@ -101,8 +105,17 @@ export function App() {
               </RequireAuth>
             }
           />
+          <Route
+            path="/pronostici"
+            element={
+              <RequireAuth>
+                <Pronostici />
+              </RequireAuth>
+            }
+          />
           <Route path="*" element={<Hero />} />
         </Routes>
+        </FavoriteProvider>
       </AuthProvider>
     </HashRouter>
   );

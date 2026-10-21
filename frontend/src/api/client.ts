@@ -300,6 +300,9 @@ export const api = {
     getOrNull<Match[]>(`/api/rounds/${code}/${matchday}`),
   trackRecord: (code = season()) => get<TrackRecord>(`/api/track-record/${code}`),
   standings: (code = season()) => get<Standings>(`/api/standings/${code}`),
+  /** Le partite di una squadra nella stagione, in casa e fuori. */
+  teamMatches: (team: string, code = season()) =>
+    get<Match[]>(`/api/matches/${code}?team=${encodeURIComponent(team)}`),
   /** M5 su una giornata: null se M5 non e' stato lanciato su quella giornata. */
   ml: (matchday: number, code = season()) =>
     getOrNull<MLRound>(`/api/ml/${code}/${matchday}`),

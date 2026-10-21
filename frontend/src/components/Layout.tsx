@@ -1,5 +1,5 @@
 import { type MouseEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -212,9 +212,14 @@ function AccountLink() {
   // posto dove si clicca per sbaglio; e non lasciava nessun punto in cui
   // cambiare la password o vedere le sessioni aperte.
   return (
-    <Link className="nav__account" to="/account" title={user?.email}>
-      Account
-    </Link>
+    <>
+      <NavLink className="nav__account" to="/pronostici">
+        I miei pronostici
+      </NavLink>
+      <NavLink className="nav__account" to="/account" title={user?.email}>
+        Account
+      </NavLink>
+    </>
   );
 }
 

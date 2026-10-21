@@ -31,6 +31,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
@@ -75,6 +76,12 @@ class User(Base):
     # MFA groundwork: the column exists, the flow does not yet. Adding it later
     # would mean migrating a table holding real accounts.
     totp_secret: Mapped[str | None] = mapped_column(Text)
+
+    # The team the user follows, as the track record names it ("Napoli").
+    # A plain string and not a foreign key: teams are not a table here, they
+    # are names in the match files, and the route checks the name against the
+    # season's fixtures before saving it.
+    favorite_team: Mapped[str | None] = mapped_column(String(64))
 
     failed_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_until: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
@@ -264,4 +271,41 @@ class AuthEvent(Base):
     __table_args__ = (
         CheckConstraint("outcome IN ('ok', 'ko')", name="ck_auth_events_outcome"),
         Index("ix_auth_events_kind_at", "kind", "at"),
+    )
+
+
+class UserPrediction(Base):
+    """
+    A user's own pick on one market of one match ("My Prediction").
+
+    THE SAME RULE AS THE TRACK RECORD, FOR THE SAME REASON. A pick is worth
+    comparing with the model only if it was made before kick-off: the route
+    refuses to create or delete one after it, server-side, against the
+    kickoff in the match files — never against a time the browser sends.
+    These rows live in Postgres with the accounts; the track record stays
+    files written by local processes, and nothing here touches it.
+
+    The match is named by the project's join key, (season, home, away) — rule
+    5: never the date. `matchday` is kept to group the history.
+    """
+
+    __tablename__ = "user_predictions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    season: Mapped[str] = mapped_column(String(4), nullable=False)
+    matchday: Mapped[int] = mapped_column(Integer, nullable=False)
+    home_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    away_team: Mapped[str] = mapped_column(String(64), nullable=False)
+    # A key of `models.baseline.all_markets` ("1", "over 2.5", "gol-gol"...).
+    market: Mapped[str] = mapped_column(String(16), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        # One pick per market per match: picking "over 2.5" twice is not two
+        # opinions, and a double row would count twice in the summary.
+        UniqueConstraint("user_id", "season", "home_team", "away_team", "market",
+                         name="uq_user_predictions_pick"),
     )

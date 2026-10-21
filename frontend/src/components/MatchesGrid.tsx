@@ -112,11 +112,14 @@ function Row({
   match,
   market,
   selection,
+  favorite,
 }: {
   match: Match;
   market: Market;
   selection: Selection | undefined;
+  favorite?: string | null;
 }) {
+  const fav = !!favorite && (match.home_team === favorite || match.away_team === favorite);
   const over = match.p_over25;
   const under = over === null ? null : 1 - over;
   const gg = match.p_btts;
@@ -154,9 +157,10 @@ function Row({
       + (match.status === "played" ? " · risultato provvisorio, giornata non ancora chiusa" : "");
 
   return (
-    <tr>
+    <tr className={fav ? "is-fav" : undefined}>
       <td>
         <div className="match-cell">
+          {fav && <span className="visually-hidden">La tua squadra: </span>}
           <span className="match-cell__home">{match.home_team}</span>
           <span className="match-cell__time">{ora(match)}</span>
           <span className="match-cell__away">{match.away_team}</span>
@@ -230,10 +234,13 @@ export function MatchesGrid({
   sort,
   picked,
   soglia,
+  favorite,
 }: {
   matches: Match[];
   market: Market;
   sort: SortBy;
+  /** La squadra preferita dell'utente: le sue partite sono evidenziate. */
+  favorite?: string | null;
   /** Selezione scelta dalla soglia, per partita. */
   picked?: Map<string, Selection>;
   soglia?: number;
@@ -305,6 +312,7 @@ export function MatchesGrid({
                     match={match}
                     market={market}
                     selection={picked?.get(chiave(match))}
+                    favorite={favorite}
                   />
                 ))}
               </tbody>

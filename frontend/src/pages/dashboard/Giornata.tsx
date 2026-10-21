@@ -3,9 +3,11 @@ import { useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { useFavorite } from "../auth/Favorite";
 import type { Match, Round, SeasonSummary, Selection, TrackRecord } from "../api/types";
 import { AsideSelections } from "../components/AsideSelections";
 import { ErrorBoundary } from "../components/ErrorBoundary";
+import { FavoritePanel } from "../components/FavoritePanel";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
 import { ModelPicks } from "../components/ModelPicks";
@@ -76,6 +78,7 @@ export function Dashboard() {
     setParams({ g: String(giornata) }, { replace: true });
   };
   const [market, setMarket] = useState<Market>("all");
+  const { team: preferita } = useFavorite();
   const [sort, setSort] = useState<SortBy>("time");
   // La soglia di quota sta QUI e non nella scheda laterale: sceglierla accende
   // anche le celle della griglia, quindi e' stato della pagina. Vedi
@@ -313,6 +316,7 @@ export function Dashboard() {
                   sort={sort}
                   picked={scelte}
                   soglia={soglia}
+                  favorite={preferita}
                 />
               </ErrorBoundary>
             )}
@@ -345,6 +349,14 @@ export function Dashboard() {
           </div>
 
           <aside>
+            {preferita && (
+              <ErrorBoundary
+                label="la tua squadra"
+                fallback={<p className="state">Squadra non disponibile.</p>}
+              >
+                <FavoritePanel team={preferita} />
+              </ErrorBoundary>
+            )}
             <ErrorBoundary
               label="selezioni"
               fallback={<p className="state">Selezioni non disponibili.</p>}

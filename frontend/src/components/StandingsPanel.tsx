@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import { useFavorite } from "../auth/Favorite";
 import { useApi } from "../hooks/useApi";
 import { ErrorState, Loading } from "./States";
 
@@ -29,6 +30,7 @@ const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
 
 export function StandingsPanel({ limit }: { limit?: number }) {
   const state = useApi(() => api.standings(), []);
+  const { team: preferita } = useFavorite();
 
   if (state.loading) return <Loading what="carico la classifica…" />;
   if (state.error) {
@@ -73,7 +75,8 @@ export function StandingsPanel({ limit }: { limit?: number }) {
 
           <tbody>
             {rows.map((row) => (
-              <tr key={row.team}>
+              <tr key={row.team} className={row.team === preferita ? "is-fav" : undefined}
+                aria-current={row.team === preferita ? "true" : undefined}>
                 <td className="right">
                   <span className="std__rank">{row.position}</span>
                 </td>

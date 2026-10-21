@@ -138,6 +138,10 @@ password_change_limiter = RateLimiter(limit=8, window_seconds=900)
 # Revoking sessions, per account: cheap, but a loop on it fills the audit log.
 session_admin_limiter = RateLimiter(limit=30, window_seconds=300)
 
+# "My Prediction" and preferences (/api/me), per account: generous for
+# someone filling a matchday market by market, tight for a script.
+prediction_limiter = RateLimiter(limit=120, window_seconds=300)
+
 ALL_LIMITERS = (sign_in_limiter, signup_limiter, reset_limiter, api_limiter,
                 refresh_limiter, token_limiter, password_change_limiter,
-                session_admin_limiter)
+                session_admin_limiter, prediction_limiter)
