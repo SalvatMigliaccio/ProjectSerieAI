@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import type { Match, MatchPoint, Round, StandingRow } from "../api/types";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { HowItWorks } from "../components/HowItWorks";
@@ -25,9 +26,22 @@ import { localTime, num, prob, ratio } from "../lib/format";
  * avrebbe dimostrato niente.
  */
 
-function lastWithPredictions(rounds: Round[] | null): Round | null {
+/**
+ * La giornata in vetrina, che dipende da CHI GUARDA.
+ *
+ * Chi puo' vedere le partite non ancora giocate (`picks:read`) vede l'ultima
+ * giornata con previsioni, cioe' la prossima. Tutti gli altri vedono l'ultima
+ * con almeno un risultato: l'API filtra le partite future per chi non ha quel
+ * permesso, e scegliere la prossima giornata dava loro una lista VUOTA — il
+ * tablet restava sullo scheletro di caricamento per sempre, da ogni venerdi'
+ * in cui `predict_round` registrava il turno nuovo. L'ultima giornata giocata
+ * invece e' sempre pubblica (`routes.FREE_WINDOW_DAYS` e il suo pavimento).
+ */
+function showcaseRound(rounds: Round[] | null, seesUpcoming: boolean): Round | null {
   if (!rounds) return null;
-  return rounds.filter((round) => (round.matches_predicted ?? 0) > 0).at(-1) ?? null;
+  const predicted = rounds.filter((round) => (round.matches_predicted ?? 0) > 0);
+  if (seesUpcoming) return predicted.at(-1) ?? null;
+  return predicted.filter((round) => round.matches_resolved > 0).at(-1) ?? null;
 }
 
 function OddsRow({ match, compact = false }: { match: Match; compact?: boolean }) {
@@ -199,7 +213,12 @@ export function Hero() {
   const standings = useApi(() => api.standings(), []);
   const track = useApi(() => api.trackRecord(), []);
 
-  const round = lastWithPredictions(rounds.data);
+  // Durante la verifica della sessione si parte come anonimi: i dati pubblici
+  // compaiono subito, e se l'accesso c'e' la vetrina passa alla prossima
+  // giornata un istante dopo. Aspettare la verifica lascerebbe tutti davanti
+  // a uno scheletro, anche chi non ha mai fatto l'accesso.
+  const { can } = useAuth();
+  const round = showcaseRound(rounds.data, can("picks:read"));
   const matches = useApi<Match[] | null>(
     () => (round ? api.roundMatches(round.matchday) : Promise.resolve(null)),
     [round?.matchday],
@@ -390,10 +409,14 @@ export function Hero() {
                     </div>
                   </div>
                 </>
-              ) : (
+              ) : rounds.loading || matches.loading ? (
                 <div className="device__teams">
                   <Skeleton width="11rem" />
                 </div>
+              ) : (
+                // Caricato e vuoto non e' "sto caricando": uno scheletro che
+                // non finisce mai sembra un sito rotto.
+                <div className="device__when">Nessuna partita da mostrare.</div>
               )}
             </div>
 
