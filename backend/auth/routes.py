@@ -14,13 +14,15 @@ into an address-validation service for anyone with curl.
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
-from . import service
+from . import access, service
 from .deps import (
     Cfg,
     CurrentSession,
@@ -29,6 +31,7 @@ from .deps import (
     Mailer,
     clear_session_cookie,
     client_ip,
+    set_access_cookie,
     set_session_cookie,
 )
 from .models import User
@@ -132,6 +135,26 @@ class ActivityRow(BaseModel):
     user_agent: str | None = None
 
 
+def _issue_access(response: Response, row, cfg) -> dt.datetime:
+    """Mint an access token for a live session row and set its cookie."""
+    token, expires = access.issue(row.user_id, row.id, service.permissions_of(row.user), cfg)
+    set_access_cookie(response, token, cfg)
+    return expires
+
+
+def _hand_over(response: Response, refresh_token: str, row, cfg) -> None:
+    """A session just opened: the refresh cookie and the first access token."""
+    set_session_cookie(response, refresh_token, cfg)
+    _issue_access(response, row, cfg)
+
+
+def _refused(cfg) -> Response:
+    """401 that still clears both cookies (see `refresh`)."""
+    out = JSONResponse({"detail": "session not valid"}, status_code=status.HTTP_401_UNAUTHORIZED)
+    clear_session_cookie(out, cfg)
+    return out
+
+
 def _limit(limiter, request: Request, what: str) -> None:
     key = client_ip(request) or "unknown"
     if not limiter.allow(key):
@@ -175,9 +198,9 @@ def verify_email(payload: TokenOnly, response: Response, request: Request,
     except service.InvalidToken as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    token, _ = service.open_session(db, user, cfg, ip=client_ip(request),
-                                    user_agent=request.headers.get("user-agent"))
-    set_session_cookie(response, token, cfg)
+    token, row = service.open_session(db, user, cfg, ip=client_ip(request),
+                                      user_agent=request.headers.get("user-agent"))
+    _hand_over(response, token, row, cfg)
     return _identity(user)
 
 
@@ -189,7 +212,7 @@ def sign_in(payload: Credentials, response: Response, request: Request,
             cfg: Cfg) -> Identity:
     _limit(sign_in_limiter, request, "sign-in")
     try:
-        token, _ = service.sign_in(db, payload.email, payload.password, cfg=cfg,
+        token, row = service.sign_in(db, payload.email, payload.password, cfg=cfg,
                                    ip=client_ip(request),
                                    user_agent=request.headers.get("user-agent"))
     except service.AccessDenied as exc:
@@ -197,9 +220,44 @@ def sign_in(payload: Credentials, response: Response, request: Request,
         # is what decides how vague to be; the route does not second-guess it.
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 
-    user = service.by_email(db, payload.email)
-    set_session_cookie(response, token, cfg)
-    return _identity(user)
+    _hand_over(response, token, row, cfg)
+    return _identity(row.user)
+
+
+class Refreshed(BaseModel):
+    """When the new access token lapses, and when the session behind it does."""
+
+    access_expires_at: str
+    session_expires_at: str
+
+
+@router.post("/refresh")
+def refresh(request: Request, response: Response, db: Db, cfg: Cfg) -> Refreshed:
+    """
+    A new access token from the refresh cookie, or 401.
+
+    Every check of a session happens HERE, on the row: revoked, past its 24
+    hours, idle too long, account no longer active. That is why an access token
+    can be trusted for its few minutes without the database — the moment it
+    lapses, the next one is only issued if the session still stands.
+
+    THE REFRESH TOKEN IS NOT ROTATED, and it is a choice. Rotation (a new
+    refresh token at every refresh, the old one dead) detects a stolen copy
+    only if the thief and the owner both use it — and it logs the owner out
+    whenever two tabs refresh at the same moment, since one of them presents a
+    token the other has just burnt. With a 24-hour ceiling and a sessions page
+    that revokes a device in one click, the race costs more than it buys.
+    """
+    token = request.cookies.get(cfg.cookie_name)
+    row = service.session_from_token(db, token, cfg) if token else None
+    if row is None:
+        clear_session_cookie(response, cfg)
+        # Raising would discard the headers set on `response`, so the dead
+        # cookies would stay in the browser and be sent again on every retry.
+        return _refused(cfg)
+    expires = _issue_access(response, row, cfg)
+    return Refreshed(access_expires_at=expires.isoformat(),
+                     session_expires_at=row.expires_at.isoformat())
 
 
 @router.post("/sign-out", status_code=status.HTTP_204_NO_CONTENT)
@@ -215,8 +273,14 @@ def sign_out(request: Request, response: Response,
     token = request.cookies.get(cfg.cookie_name)
     if token:
         service.sign_out(db, token)
-    clear_session_cookie(response, cfg)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    # The cookies go on the response that is RETURNED. They used to be set on
+    # the injected `response` and a fresh 204 returned instead, which drops
+    # its headers: the session was revoked server-side, but the browser kept
+    # both cookies. Harmless while the server checked every request; with a
+    # JWT the data routes would keep accepting that cookie until it expired.
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_session_cookie(out, cfg)
+    return out
 
 
 @router.get("/me")

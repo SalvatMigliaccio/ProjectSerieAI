@@ -311,8 +311,9 @@ const CONTATTO = "salvatore.migliaccio998@gmail.com";
  *
  * L'AVVERTENZA NON E' UN ADEMPIMENTO, E' LA STESSA COSA CHE DICE IL MODELLO.
  * Su 1140 partite fuori campione il valore atteso e' -5.2% su ogni riga: dire
- * che sono stime e non consigli di gioco e' la lettura corretta dei numeri che
- * la pagina mostra, non una formula messa li' per prudenza.
+ * che sono stime senza garanzia e' la lettura corretta dei numeri che la
+ * pagina mostra. La formula "non consigli di gioco" e' stata tolta dall'app
+ * per scelta (21 ottobre 2026): non va reintrodotta.
  */
 export function Colophon({
   modelVersion,
@@ -392,9 +393,8 @@ export function Colophon({
 
       <div className="wrap colophon__bottom">
         <p>
-          Le probabilità sono <strong>stime statistiche</strong>, non consigli di
-          gioco: nessuna garanzia di vincita. Gioca responsabilmente,{" "}
-          <strong>18+</strong>.
+          Le probabilità sono <strong>stime statistiche</strong>: nessuna garanzia
+          di vincita. Gioca responsabilmente, <strong>18+</strong>.
         </p>
         <p className="colophon__meta">
           MatchPoint · Serie A {new Date().getFullYear()} · dati football-data.co.uk,

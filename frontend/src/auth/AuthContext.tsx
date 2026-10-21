@@ -7,9 +7,10 @@
  * reload before the session check comes back — which looks exactly like being
  * logged out at random, and is the single most common way this goes wrong.
  *
- * NO TOKEN IS STORED HERE. The session is an HttpOnly cookie the browser sends
- * on its own. Keeping a copy in localStorage would hand an XSS bug the thing
- * the cookie flag exists to protect.
+ * NO TOKEN IS STORED HERE. Both of them — the 15-minute JWT and the one-day
+ * refresh token (ADR 0003) — are HttpOnly cookies the browser sends on its
+ * own. Keeping a copy in localStorage would hand an XSS bug the thing the
+ * cookie flag exists to protect.
  */
 
 import {
@@ -24,9 +25,12 @@ import {
 
 import * as authApi from "../api/auth";
 import type { Identity } from "../api/auth";
-import { UNAUTHENTICATED_EVENT } from "../api/client";
+import { UNAUTHENTICATED_EVENT, refreshSession } from "../api/client";
 
 type Phase = "checking" | "authenticated" | "anonymous";
+
+/** Ogni quanto rinnovare il JWT di accesso: sotto i suoi 15 minuti di vita. */
+const RINNOVO_MS = 10 * 60 * 1000;
 
 interface AuthValue {
   phase: Phase;
@@ -75,6 +79,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     window.addEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
     return () => window.removeEventListener(UNAUTHENTICATED_EVENT, onUnauthenticated);
   }, []);
+
+  // RINNOVO PREVENTIVO, NON SOLO A RICHIESTA FALLITA. Il JWT di accesso vale
+  // 15 minuti (ADR 0003): rinnovandolo ogni 10 la dashboard non incontra mai
+  // un token scaduto, e non spende una richiesta 401 piu' un rinnovo piu' un
+  // nuovo tentativo a ogni giro di aggiornamento.
+  //
+  // I timer di una scheda in secondo piano il browser li rallenta fino a
+  // fermarli: tornando alla scheda dopo un'ora il token e' certamente scaduto,
+  // e si rinnova subito invece di aspettare il prossimo giro. Se il rinnovo
+  // fallisce la sessione e' finita davvero (24 ore passate, revocata, account
+  // sospeso), e l'interfaccia lo dice invece di fingere.
+  useEffect(() => {
+    if (phase !== "authenticated") return;
+    let ultimo = Date.now();
+    const rinnova = async () => {
+      ultimo = Date.now();
+      if (!(await refreshSession())) {
+        setUser(null);
+        setPhase("anonymous");
+      }
+    };
+    const timer = window.setInterval(() => void rinnova(), RINNOVO_MS);
+    const alRitorno = () => {
+      if (document.visibilityState === "visible" && Date.now() - ultimo > RINNOVO_MS) {
+        void rinnova();
+      }
+    };
+    document.addEventListener("visibilitychange", alRitorno);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", alRitorno);
+    };
+  }, [phase]);
 
   const signIn = useCallback(async (email: string, password: string) => {
     const identity = await authApi.signIn(email, password);

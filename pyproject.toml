@@ -117,6 +117,11 @@ auth = [
     "argon2-cffi>=23.1,<26",
     # Firma dei token di verifica e di reset, con scadenza dentro il token.
     "itsdangerous>=2.2,<3",
+    # Il token di accesso breve (ADR 0003). PyJWT e non una firma fatta in
+    # casa: la verifica di un JWT ha trappole note (`alg: none`, confusione
+    # fra algoritmi, `exp` non obbligatorio) che la libreria chiude se le si
+    # dice quali algoritmi e quali claim pretendere.
+    "pyjwt>=2.10,<3",
     "email-validator>=2.2,<3",
     "pydantic-settings>=2.7,<3",
 ]

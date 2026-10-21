@@ -754,6 +754,28 @@
         }
       }
     },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Refresh",
+        "description": "A new access token from the refresh cookie, or 401.\n\nEvery check of a session happens HERE, on the row: revoked, past its 24\nhours, idle too long, account no longer active. That is why an access token\ncan be trusted for its few minutes without the database — the moment it\nlapses, the next one is only issued if the session still stands.\n\nTHE REFRESH TOKEN IS NOT ROTATED, and it is a choice. Rotation (a new\nrefresh token at every refresh, the old one dead) detects a stolen copy\nonly if the thief and the owner both use it — and it logs the owner out\nwhenever two tabs refresh at the same moment, since one of them presents a\ntoken the other has just burnt. With a 24-hour ceiling and a sessions page\nthat revokes a device in one click, the race costs more than it buys.",
+        "operationId": "refresh_api_auth_refresh_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Refreshed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/sign-out": {
       "post": {
         "tags": [
@@ -2218,6 +2240,25 @@
         ],
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
+      },
+      "Refreshed": {
+        "properties": {
+          "access_expires_at": {
+            "type": "string",
+            "title": "Access Expires At"
+          },
+          "session_expires_at": {
+            "type": "string",
+            "title": "Session Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_expires_at",
+          "session_expires_at"
+        ],
+        "title": "Refreshed",
+        "description": "When the new access token lapses, and when the session behind it does."
       },
       "ResetPayload": {
         "properties": {

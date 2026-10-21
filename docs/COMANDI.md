@@ -1019,11 +1019,13 @@ for a real deployment:
 
 | variable | why it matters |
 |---|---|
-| `AI_NAPLES_SECRET_KEY` | signs emailed tokens; the example value is public |
+| `AI_NAPLES_SECRET_KEY` | signs emailed tokens and (derived) the access JWT; the example value is public. Rotating it kills every JWT at once |
 | `AI_NAPLES_COOKIE_SECURE` | `1` behind HTTPS, or the session cookie travels in the clear |
 | `AI_NAPLES_DATABASE_URL` | never a versioned file; comes from the service environment |
 | `AI_NAPLES_SMTP_*` | point at a real provider instead of Mailpit |
 | `AI_NAPLES_PUBLIC_URL` | builds the links inside emails — wrong value, dead links |
+| `AI_NAPLES_ACCESS_TOKEN_MINUTES` | life of the access JWT, default 15, max 60: how long a revoked session still reaches the data routes (ADR 0003) |
+| `AI_NAPLES_SESSION_MAX_HOURS` | absolute life of a session (the refresh token), default 24 |
 
 ### Migrations
 

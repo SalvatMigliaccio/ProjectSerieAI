@@ -11,7 +11,7 @@
  * request, and that the server, not this file, decides when a session ends.
  */
 
-import { ApiError, baseUrl } from "./client";
+import { ApiError, baseUrl, fetchWithRefresh } from "./client";
 
 export interface Identity {
   id: string;
@@ -38,7 +38,12 @@ function readDetail(body: ErrorBody | null, fallback: string): string {
   return first ?? fallback;
 }
 
-async function post<T>(path: string, payload?: unknown): Promise<T> {
+/**
+ * `renew`: on 401, refresh the session and retry — only for the account routes,
+ * where a 401 means "access token expired". On the credential forms it means
+ * "wrong password" or "link expired", and a refresh there would be noise.
+ */
+async function post<T>(path: string, payload?: unknown, { renew = false } = {}): Promise<T> {
   const url = `${baseUrl()}${path}`;
   let response: Response;
 
@@ -46,7 +51,7 @@ async function post<T>(path: string, payload?: unknown): Promise<T> {
   const timer = window.setTimeout(() => abort.abort(), 15000);
 
   try {
-    response = await fetch(url, {
+    response = await (renew ? fetchWithRefresh : fetch)(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       credentials: "include",
@@ -84,7 +89,7 @@ async function post<T>(path: string, payload?: unknown): Promise<T> {
 export async function me(): Promise<Identity | null> {
   const url = `${baseUrl()}/api/auth/me`;
   try {
-    const r = await fetch(url, {
+    const r = await fetchWithRefresh(url, {
       headers: { Accept: "application/json" },
       credentials: "include",
     });
@@ -128,7 +133,7 @@ export interface SessionRow {
 
 /** Where this account is signed in. Never carries the token, by design. */
 export async function sessions(): Promise<SessionRow[]> {
-  const r = await fetch(`${baseUrl()}/api/auth/sessions`, {
+  const r = await fetchWithRefresh(`${baseUrl()}/api/auth/sessions`, {
     headers: { Accept: "application/json" },
     credentials: "include",
   });
@@ -148,7 +153,7 @@ export interface ActivityRow {
 
 /** The account's own recent audit trail, newest first. Never the `details`. */
 export async function activity(): Promise<ActivityRow[]> {
-  const r = await fetch(`${baseUrl()}/api/auth/activity`, {
+  const r = await fetchWithRefresh(`${baseUrl()}/api/auth/activity`, {
     headers: { Accept: "application/json" },
     credentials: "include",
   });
@@ -159,14 +164,14 @@ export async function activity(): Promise<ActivityRow[]> {
 }
 
 export const revokeOtherSessions = () =>
-  post<{ revoked: number }>("/api/auth/sessions/revoke-others");
+  post<{ revoked: number }>("/api/auth/sessions/revoke-others", undefined, { renew: true });
 
 /** Sign out one other device. The current session is refused: that is sign-out. */
 export const revokeSession = (id: string) =>
-  post<{ revoked: number }>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`);
+  post<{ revoked: number }>(`/api/auth/sessions/${encodeURIComponent(id)}/revoke`, undefined, { renew: true });
 
 export const changePassword =(currentPassword: string, newPassword: string) =>
   post<void>("/api/auth/change-password", {
     current_password: currentPassword,
     new_password: newPassword,
-  });
+  }, { renew: true });

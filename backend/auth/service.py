@@ -283,11 +283,49 @@ def session_from_token(db: Session, token: str, cfg: Settings | None = None) -> 
     at = now()
     if not row.is_valid(at, dt.timedelta(minutes=cfg.session_idle_minutes)):
         return None
+    if _past_ceiling(row, cfg, at):
+        return None
     if row.user.status != "active":
         # An account suspended mid-session must drop immediately, not when the
         # cookie happens to expire.
         return None
 
+    row.last_seen_at = at
+    return row
+
+
+def _past_ceiling(row: UserSession, cfg: Settings, at: dt.datetime) -> bool:
+    """
+    Older than the CURRENT ceiling, whatever `expires_at` says.
+
+    `expires_at` is fixed when the session opens. Lowering the ceiling (14 days
+    to 24 hours, ADR 0003) would otherwise spare every session already open,
+    for up to two weeks: the new rule has to apply to them too, at once.
+    """
+    return at - row.created_at >= dt.timedelta(hours=cfg.session_max_hours)
+
+
+def live_session(db: Session, session_id: uuid.UUID, user_id: uuid.UUID,
+                 cfg: Settings | None = None) -> UserSession | None:
+    """
+    The session an access token names, if it would still be refreshed.
+
+    The same tests as `session_from_token`, reached by id instead of by the
+    refresh token: the account routes hold a JWT, not the refresh cookie (which
+    travels only to /api/auth). The owner is part of the check — a token whose
+    `sid` points at someone else's session is not that session.
+    """
+    cfg = cfg or settings()
+    row = db.get(UserSession, session_id)
+    if row is None or row.user_id != user_id:
+        return None
+    at = now()
+    if not row.is_valid(at, dt.timedelta(minutes=cfg.session_idle_minutes)):
+        return None
+    if _past_ceiling(row, cfg, at):
+        return None
+    if row.user.status != "active":
+        return None
     row.last_seen_at = at
     return row
 

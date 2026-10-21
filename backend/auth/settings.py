@@ -43,13 +43,22 @@ class Settings(BaseSettings):
     # at once, which is also how you revoke them in a hurry.
     secret_key: SecretStr = SecretStr(EXAMPLE_KEY)
 
-    # --- sessions -----------------------------------------------------------
+    # --- sessions (the refresh side) -----------------------------------------
     # Two deadlines, not one. The idle one evicts whoever left the laptop open;
     # the absolute one caps the damage of a stolen cookie, which would
-    # otherwise stay valid as long as someone keeps using it.
+    # otherwise stay valid as long as someone keeps using it. 24 hours since
+    # ADR 0003 (it was 14 days): after a day, the password again.
     session_idle_minutes: int = Field(default=60 * 12, ge=5)
-    session_max_hours: int = Field(default=24 * 14, ge=1)
+    session_max_hours: int = Field(default=24, ge=1)
     cookie_name: str = "ainaples_session"
+
+    # --- access token (JWT) -------------------------------------------------
+    # The window in which a revoked session or a suspended account still
+    # reaches the DATA routes, which check the token and not the database.
+    # Account routes check the session row as well and are never late. Capped
+    # at an hour: past that the token is a second session nobody can revoke.
+    access_token_minutes: int = Field(default=15, ge=1, le=60)
+    access_cookie_name: str = "ainaples_access"
     cookie_secure: bool = False
     cookie_domain: str | None = None
 

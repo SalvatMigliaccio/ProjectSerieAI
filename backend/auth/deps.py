@@ -1,7 +1,11 @@
 """
 FastAPI dependencies: who is calling, and may they.
 
-WHY THE COOKIE AND NOT AN `Authorization` HEADER. The token is the session;
+TWO TOKENS SINCE ADR 0003. A JWT valid for minutes (`access.py`), which the
+data routes check without touching the database, and the session row in
+Postgres as the refresh token, valid for a day and revocable at once.
+
+WHY COOKIES AND NOT AN `Authorization` HEADER. Both tokens are credentials;
 anything JavaScript can read, an XSS can exfiltrate. An `HttpOnly` cookie is
 unreadable from script, so a cross-site scripting bug stops short of handing
 over the account. The price is CSRF, which is paid for by `SameSite` plus the
@@ -22,8 +26,9 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
+from . import access, service
 from . import mail as mail_mod
-from . import service
+from .access import Principal
 from .db import request_session
 from .models import User, UserSession
 from .settings import Settings, settings
@@ -92,12 +97,35 @@ def mail_sender(cfg: Cfg) -> mail_mod.Sender:
 Mailer = Annotated[mail_mod.Sender, Depends(mail_sender)]
 
 
-def current_session(request: Request, db: Db, cfg: Cfg) -> UserSession:
-    token = request.cookies.get(cfg.cookie_name)
-    if not token:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not signed in")
+def current_principal(request: Request, cfg: Cfg) -> Principal:
+    """
+    The caller according to the access token: signature and expiry, no query.
 
-    row = service.session_from_token(db, token, cfg)
+    401 for every way the token can fail, including its absence. The frontend
+    reads a 401 as "call /api/auth/refresh once, then retry" — so an expired
+    access token costs one round trip, not a sign-in screen.
+    """
+    token = request.cookies.get(cfg.access_cookie_name)
+    principal = access.verify(token, cfg) if token else None
+    if principal is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "not signed in")
+    return principal
+
+
+CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
+
+
+def current_session(principal: CurrentPrincipal, db: Db, cfg: Cfg) -> UserSession:
+    """
+    The session row behind the access token, still alive. For account routes.
+
+    THE ACCOUNT ROUTES DO NOT TRUST THE TOKEN ALONE. Listing sessions, changing
+    the password, revoking a device: these are where a revoked session must stop
+    AT ONCE, not when its access token lapses. So here the row is loaded and
+    checked again — revoked, expired, idle, account suspended, all as at
+    refresh — and the 15-minute window of ADR 0003 closes for them.
+    """
+    row = service.live_session(db, principal.session_id, principal.user_id, cfg)
     if row is None:
         # One answer for expired, revoked, idle-too-long and never-existed.
         # Telling them apart would say whether a stolen token was ever real.
@@ -115,39 +143,40 @@ def current_user(row: CurrentSession) -> User:
 CurrentUser = Annotated[User, Depends(current_user)]
 
 
-def viewer(request: Request, db: Db, cfg: Cfg) -> User | None:
+def viewer(request: Request, cfg: Cfg) -> Principal | None:
     """
-    The signed-in user, or `None` — never a 401.
+    The signed-in caller, or `None` — never a 401.
 
-    THE FREE TIER NEEDS A THIRD ANSWER. `current_user` knows two: signed in, or
-    refused. A route that is public but shows MORE to a subscriber needs to ask
-    who is there without turning "nobody" into an error, which is exactly the
-    shape of the tiers in `docs/MODELLO_DI_BUSINESS.md`: played matches are
-    everyone's, the round that has not kicked off yet is the product.
+    THE FREE TIER NEEDS A THIRD ANSWER. `current_principal` knows two: signed
+    in, or refused. A route that is public but shows MORE to a subscriber needs
+    to ask who is there without turning "nobody" into an error, which is
+    exactly the shape of the tiers in `docs/MODELLO_DI_BUSINESS.md`: played
+    matches are everyone's, the round that has not kicked off yet is the
+    product.
 
-    It deliberately swallows only the 401 that `current_session` raises for an
-    absent or dead session. Anything else — a database that is down, a broken
-    cookie parser — still propagates, because answering "you are anonymous"
-    when the truth is "the session store is unreachable" would silently
-    downgrade every subscriber to the free tier.
+    No database: the permissions travel in the token.
+
+    NO COOKIE IS ANONYMOUS; A DEAD COOKIE IS 401. A subscriber whose access
+    token lapsed between two refreshes would otherwise get the free tier, with
+    a 200 and nothing to say a part is missing — a paywall that quietly closes
+    on a paying customer. A 401 is what makes the frontend refresh and retry;
+    if the refresh fails it clears both cookies, and the retry is then
+    genuinely anonymous.
     """
-    try:
-        return current_session(request, db, cfg).user
-    except HTTPException as exc:
-        if exc.status_code == status.HTTP_401_UNAUTHORIZED:
-            return None
-        raise
+    if not request.cookies.get(cfg.access_cookie_name):
+        return None
+    return current_principal(request, cfg)
 
 
-Viewer = Annotated["User | None", Depends(viewer)]
+Viewer = Annotated["Principal | None", Depends(viewer)]
 
 
-def may_see_upcoming(user: User | None) -> bool:
+def may_see_upcoming(principal: Principal | None) -> bool:
     """Whether this viewer gets matches that have not been played yet."""
-    return user is not None and service.has_permission(user, "picks:read")
+    return principal is not None and principal.can("picks:read")
 
 
-def require_permission(name: str) -> Callable[..., User]:
+def require_permission(name: str) -> Callable[..., Principal]:
     """
     A dependency that lets the request through only with that permission.
 
@@ -156,40 +185,66 @@ def require_permission(name: str) -> Callable[..., User]:
     and costs a confusing error.
     """
 
-    def guard(user: CurrentUser) -> User:
-        if not service.has_permission(user, name):
+    def guard(principal: CurrentPrincipal) -> Principal:
+        if not principal.can(name):
             raise HTTPException(
                 status.HTTP_403_FORBIDDEN, f"missing permission: {name}")
-        return user
+        return principal
 
     return guard
 
 
+# The refresh cookie travels only to /api/auth: the data routes never read it,
+# so there is no reason to send it with every poll of the dashboard. Before ADR
+# 0003 it lived at "/", and those cookies are still in browsers: every place
+# that sets or clears it also clears the old path, or the two would coexist
+# under one name and the server would read whichever the browser sent first.
+REFRESH_PATH = "/api/auth"
+LEGACY_PATH = "/"
+
+
+def _cookie(response: Response, cfg: Settings, key: str, value: str, path: str,
+            max_age: int | None = None) -> None:
+    response.set_cookie(
+        key=key, value=value, max_age=max_age, path=path,
+        httponly=True, secure=cfg.cookie_secure, samesite="lax", domain=cfg.cookie_domain,
+    )
+
+
+def _drop(response: Response, cfg: Settings, key: str, path: str) -> None:
+    response.delete_cookie(
+        key=key, path=path,
+        httponly=True, secure=cfg.cookie_secure, samesite="lax", domain=cfg.cookie_domain,
+    )
+
+
 def set_session_cookie(response: Response, token: str, cfg: Settings) -> None:
     """
-    HttpOnly, SameSite=Lax, Secure when configured.
+    The refresh token: HttpOnly, SameSite=Lax, Secure when configured.
 
     No `max_age`: it is a session cookie, so closing the browser drops it. The
     real deadlines live server-side, where the client cannot move them — a
     cookie lifetime is a hint to the browser, never an expiry you can rely on.
     """
-    response.set_cookie(
-        key=cfg.cookie_name,
-        value=token,
-        httponly=True,
-        secure=cfg.cookie_secure,
-        samesite="lax",
-        domain=cfg.cookie_domain,
-        path="/",
-    )
+    _drop(response, cfg, cfg.cookie_name, LEGACY_PATH)
+    _cookie(response, cfg, cfg.cookie_name, token, REFRESH_PATH)
+
+
+def set_access_cookie(response: Response, token: str, cfg: Settings) -> None:
+    """
+    The access token, at "/" because every data route reads it.
+
+    `max_age` equal to the token's life, unlike the refresh cookie: a browser
+    that keeps an expired JWT only sends a dead credential and earns a 401 it
+    could have skipped. The expiry that counts is still `exp`, inside the
+    signed token.
+    """
+    _cookie(response, cfg, cfg.access_cookie_name, token, "/",
+            max_age=cfg.access_token_minutes * 60)
 
 
 def clear_session_cookie(response: Response, cfg: Settings) -> None:
-    response.delete_cookie(
-        key=cfg.cookie_name,
-        httponly=True,
-        secure=cfg.cookie_secure,
-        samesite="lax",
-        domain=cfg.cookie_domain,
-        path="/",
-    )
+    """Both tokens, and the refresh cookie at its old path as well."""
+    _drop(response, cfg, cfg.cookie_name, REFRESH_PATH)
+    _drop(response, cfg, cfg.cookie_name, LEGACY_PATH)
+    _drop(response, cfg, cfg.access_cookie_name, "/")

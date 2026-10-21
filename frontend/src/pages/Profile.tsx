@@ -133,7 +133,7 @@ const SEZIONI: { id: Sezione; path: string; label: string; lead: string; icon: R
     id: "sessioni",
     path: "/account/sessioni",
     label: "Sessioni",
-    lead: "I dispositivi da cui hai fatto l'accesso. Se ne vedi uno che non riconosci, chiudilo e cambia la password.",
+    lead: "I dispositivi da cui hai fatto l'accesso. Ogni sessione dura al massimo 24 ore, poi serve accedere di nuovo. Se ne vedi una che non riconosci, chiudila e cambia la password.",
     icon: ICONA_SESSIONI,
   },
 ];
@@ -173,6 +173,21 @@ function dispositivo(ua: string | null): { nome: string; mobile: boolean } {
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * "tra 5 ore", "tra 40 min": quanto manca alla fine di una sessione.
+ *
+ * Dall'ADR 0003 una sessione vale al massimo 24 ore, e chi la vede sparire a
+ * meta' pomeriggio deve poter capire perche' senza pensare a un guasto.
+ */
+function tra(iso: string): string {
+  const minuti = Math.round((new Date(iso).getTime() - Date.now()) / 60_000);
+  if (Number.isNaN(minuti)) return "";
+  if (minuti < 1) return "a momenti";
+  if (minuti < 60) return `tra ${minuti} min`;
+  const ore = Math.round(minuti / 60);
+  return `tra ${ore} ${ore === 1 ? "ora" : "ore"}`;
+}
 
 /** Solo la data, senza ora: "iscritto il 14 settembre 2026" non ha bisogno dei minuti. */
 function soloData(iso: string | null | undefined): string | null {
@@ -459,6 +474,10 @@ function SezioneSessioni() {
                     )}
                     {r.ip ? <> · {r.ip}</> : null}
                     {" · "}accesso del {localDateTime(r.created_at)}
+                    {" · "}
+                    <time dateTime={r.expires_at} title={localDateTime(r.expires_at)}>
+                      scade {tra(r.expires_at)}
+                    </time>
                   </p>
                 </div>
 

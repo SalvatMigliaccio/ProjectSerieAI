@@ -80,10 +80,65 @@ const PUNTI: { icon: ReactNode; title: string; text: string }[] = [
   },
 ];
 
+/**
+ * Il campo visto dall'alto, in metri: 105 x 68, le misure regolamentari.
+ *
+ * MISURE VERE E NON A OCCHIO. Area di rigore 16.5 m per 40.32, area di porta
+ * 5.5 per 18.32, dischetto a 11 m, cerchi di 9.15 m: un campo disegnato a
+ * occhio lo riconosce come sbagliato proprio chi questa pagina la usa. La
+ * lunetta e' la sola parte del cerchio di 9.15 m attorno al dischetto che
+ * resta fuori dall'area: tocca la linea dei 16.5 m a 7.31 m dal centro
+ * (radice di 9.15^2 - 5.5^2).
+ *
+ * SFONDO, NON ILLUSTRAZIONE. Sta dietro tutta la schermata, a bassa opacita',
+ * e taglia i bordi invece di deformarsi (`slice`: un cerchio di centrocampo
+ * schiacciato in un'ellisse si nota subito). A schermo largo le due colonne
+ * sono uguali, quindi la linea di meta' campo cade proprio sulla divisione fra
+ * il pannello e il modulo. Niente pallone in movimento: dietro un modulo con
+ * la password, una cosa che si muove e' solo una distrazione.
+ * Decorazione pura, nascosta agli screen reader.
+ */
+function Pitch() {
+  const stripes = Array.from({ length: 14 }, (_, i) => i);
+  return (
+    <svg className="pitch" viewBox="-3 -3 111 74" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">
+      {stripes.map((i) => (
+        <rect key={i} x={i * 7.5} y={0} width={7.5} height={68}
+          className={i % 2 ? "pitch__grass pitch__grass--alt" : "pitch__grass"} />
+      ))}
+      <g className="pitch__lines">
+        <rect x={0} y={0} width={105} height={68} />
+        <line x1={52.5} y1={0} x2={52.5} y2={68} />
+        <circle cx={52.5} cy={34} r={9.15} />
+        {/* aree di rigore e di porta */}
+        <rect x={0} y={13.84} width={16.5} height={40.32} />
+        <rect x={88.5} y={13.84} width={16.5} height={40.32} />
+        <rect x={0} y={24.84} width={5.5} height={18.32} />
+        <rect x={99.5} y={24.84} width={5.5} height={18.32} />
+        {/* lunette */}
+        <path d="M16.5 26.69 A9.15 9.15 0 0 1 16.5 41.31" />
+        <path d="M88.5 26.69 A9.15 9.15 0 0 0 88.5 41.31" />
+        {/* bandierine */}
+        <path d="M0 1 A1 1 0 0 0 1 0" />
+        <path d="M104 0 A1 1 0 0 0 105 1" />
+        <path d="M0 67 A1 1 0 0 1 1 68" />
+        <path d="M104 68 A1 1 0 0 1 105 67" />
+        {/* porte */}
+        <rect x={-2} y={30.34} width={2} height={7.32} />
+        <rect x={105} y={30.34} width={2} height={7.32} />
+      </g>
+      <g className="pitch__spots">
+        <circle cx={52.5} cy={34} r={0.5} />
+        <circle cx={11} cy={34} r={0.45} />
+        <circle cx={94} cy={34} r={0.45} />
+      </g>
+    </svg>
+  );
+}
+
 function BrandPanel() {
   return (
     <aside className="auth__brand" aria-label="Cos'è MatchPoint">
-      <div className="auth__pitch" aria-hidden="true" />
       <div className="auth__brand-inner">
         <p className="auth__eyebrow">Serie A · previsioni probabilistiche</p>
         <p className="auth__claim">
@@ -100,7 +155,6 @@ function BrandPanel() {
             </li>
           ))}
         </ul>
-        <p className="auth__note">Probabilità, non consigli di gioco.</p>
       </div>
     </aside>
   );
@@ -131,11 +185,20 @@ function Shell({
     <>
       <Masthead current="hero" />
       <main id="contenuto" className="auth" tabIndex={-1}>
+        <Pitch />
         <div className="auth__form">
           <section className="account-card" aria-labelledby="account-titolo">
-            <div className="account-card__mark" aria-hidden="true">
-              {icon ?? <img src="/Logo_NoName.png" alt="" width={331} height={333} />}
-            </div>
+            {/* Il nome, non il logo: e' la prima cosa che si legge sulla
+                scheda, e su una schermata che chiede la password conta che
+                dica chiaramente di chi e'. Le schermate che rispondono a
+                un'azione (busta, chiave) tengono la loro icona. */}
+            {icon ? (
+              <div className="account-card__mark" aria-hidden="true">{icon}</div>
+            ) : (
+              <p className="account-card__brand">
+                Match<em>Point</em>
+              </p>
+            )}
             <h1 id="account-titolo">{title}</h1>
             {lead ? <p className="lead">{lead}</p> : null}
             {children}

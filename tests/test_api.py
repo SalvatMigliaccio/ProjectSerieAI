@@ -53,33 +53,35 @@ def _signed_in():
     email would need Postgres for tests that otherwise touch only parquet and
     CSV, and would couple this file to a flow it is not checking.
 
-    `current_user` is the seam: `require_permission` depends on it, so
-    replacing it grants the request whatever this stub says it holds. The
+    `current_principal` is the seam: since ADR 0003 the caller is the access
+    token, and `require_permission` reads the permissions it carries.
+    Replacing it grants the request whatever this stub says it holds. The
     permission names are the real ones, so a route asking for a permission
     that does not exist here still fails.
     """
-    from backend.auth.deps import current_user, viewer
-    from backend.auth.models import Permission, Role, User
+    import datetime as dt
+    import uuid
 
-    everything = Role(
-        name="test", description="all permissions, in memory only",
-        permissions=[Permission(name=n) for n in
-                     ("data:read", "picks:read", "users:manage", "system:manage")],
+    from backend.auth.access import Principal
+    from backend.auth.deps import current_principal, viewer
+
+    stub = Principal(
+        user_id=uuid.uuid4(), session_id=uuid.uuid4(),
+        permissions=frozenset({"data:read", "picks:read", "users:manage", "system:manage"}),
+        expires_at=dt.datetime.now(dt.UTC) + dt.timedelta(minutes=15),
     )
-    stub = User(email="test@example.com", password_hash="unused", status="active")
-    stub.roles = [everything]
 
-    # BOTH SEAMS, because there are now two. `current_user` is the one
+    # BOTH SEAMS, because there are two. `current_principal` is the one
     # `require_permission` uses to refuse; `viewer` is the one the public
     # routes use to decide how much to show. Overriding only the first leaves
     # every free-tier route treating these tests as anonymous, which shows up
     # as matches quietly missing from a payload rather than as a 401.
-    app.dependency_overrides[current_user] = lambda: stub
+    app.dependency_overrides[current_principal] = lambda: stub
     app.dependency_overrides[viewer] = lambda: stub
     try:
         yield stub
     finally:
-        app.dependency_overrides.pop(current_user, None)
+        app.dependency_overrides.pop(current_principal, None)
         app.dependency_overrides.pop(viewer, None)
 
 SEASON = "2026-27"
@@ -706,8 +708,8 @@ def test_the_browser_preflight_passes_with_the_headers_the_dashboard_sends() -> 
 
 def _anonymous() -> TestClient:
     """A client with the signed-in override removed, i.e. nobody."""
-    from backend.auth.deps import current_session, current_user, viewer
-    for dep in (current_user, current_session):
+    from backend.auth.deps import current_principal, current_session, current_user, viewer
+    for dep in (current_principal, current_user, current_session):
         app.dependency_overrides[dep] = _refuse
     app.dependency_overrides[viewer] = lambda: None
     return TestClient(app)

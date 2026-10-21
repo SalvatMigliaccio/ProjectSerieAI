@@ -1,7 +1,8 @@
 /**
- * L'unico punto che fa `fetch`. Solo GET: l'API non ha altri metodi, e non e'
- * una dimenticanza — il track record si scrive dai comandi locali, mai da una
- * richiesta HTTP.
+ * L'unico punto che fa `fetch` per i dati. Solo GET: l'API dei dati non ha
+ * altri metodi, e non e' una dimenticanza — il track record si scrive dai
+ * comandi locali, mai da una richiesta HTTP. (I POST di `/api/auth` stanno in
+ * `auth.ts`; il rinnovo della sessione sta qui perche' serve a entrambi.)
  *
  * GLI ERRORI SI RACCONTANO. Una dashboard che resta bianca quando l'API e' giu'
  * fa cercare il problema nei dati, che stanno benissimo. Ogni errore porta con
@@ -127,6 +128,56 @@ export class NotAuthenticated extends ApiError {
  */
 export const UNAUTHENTICATED_EVENT = "ainaples:unauthenticated";
 
+/**
+ * Ask the server for a new access token, once, however many callers ask.
+ *
+ * DUE TOKEN, DALL'ADR 0003. Il JWT di accesso vale 15 minuti e lo legge ogni
+ * rotta; il token di rinnovo e' la sessione sul server, vale un giorno e
+ * viaggia solo verso `/api/auth`. Quando il primo scade, il secondo ne compra
+ * un altro: per chi usa la pagina non succede niente.
+ *
+ * UNA SOLA RICHIESTA IN VOLO. La dashboard ne fa sette insieme, e tutte e
+ * sette tornano 401 nello stesso istante: senza questo partirebbero sette
+ * rinnovi. Chi arriva mentre uno e' in corso aspetta quello.
+ *
+ * Nessun token passa da qui: entrambi sono cookie HttpOnly, il codice della
+ * pagina non li vede e non li deve vedere.
+ */
+let inFlight: Promise<boolean> | null = null;
+
+export function refreshSession(): Promise<boolean> {
+  inFlight ??= fetch(`${baseUrl()}/api/auth/refresh`, {
+    method: "POST",
+    headers: { Accept: "application/json", "ngrok-skip-browser-warning": "1" },
+    credentials: "include",
+  })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
+
+/**
+ * `fetch`, and on 401 one refresh and one retry.
+ *
+ * SI RIPROVA ANCHE SE IL RINNOVO FALLISCE. In quel caso il server ha appena
+ * cancellato entrambi i cookie, quindi la seconda richiesta parte anonima: una
+ * rotta pubblica risponde 200 con la parte gratuita, una riservata 401 di
+ * nuovo — ed e' quel 401 che riporta alla schermata di accesso.
+ *
+ * Solo dove un 401 vuol dire "token scaduto". Sull'accesso vuol dire
+ * "password sbagliata", e rinnovare li' non avrebbe senso: per questo i
+ * moduli delle credenziali non passano da qui.
+ */
+export async function fetchWithRefresh(input: string, init: RequestInit): Promise<Response> {
+  const first = await fetch(input, init);
+  if (first.status !== 401) return first;
+  await refreshSession();
+  return fetch(input, init);
+}
+
 async function get<T>(path: string): Promise<T> {
   const url = `${baseUrl()}${path}`;
   let response: Response;
@@ -143,7 +194,7 @@ async function get<T>(path: string): Promise<T> {
     // un account ngrok gratuito, senza, la prima risposta a una `fetch` puo'
     // essere la pagina di avviso del tunnel — HTML dove il codice aspetta
     // JSON, e l'errore parla di sintassi invece che di tunnel.
-    response = await fetch(url, {
+    response = await fetchWithRefresh(url, {
       headers: { Accept: "application/json", "ngrok-skip-browser-warning": "1" },
       // The session lives in an HttpOnly cookie, and a cross-origin fetch
       // drops cookies unless asked to send them. Without this every request
