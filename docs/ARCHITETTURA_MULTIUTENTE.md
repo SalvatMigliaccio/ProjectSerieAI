@@ -345,7 +345,7 @@ esiste, si torna ai file con una variabile d'ambiente.
 **Modificati**: `backend/api/__init__.py` (guardie, CORS, middleware 304),
 `backend/api/store.py` (diventa un'implementazione del repository),
 `backend/api/routes.py` (dipendenze di sessione), `tests/test_api.py` (i tre
-test strutturali), `web/openapi.json` (ri-esportato), `requirements.txt`,
+test strutturali), `frontend/openapi.json` (ri-esportato), `requirements.txt`,
 `scripts/run_task.cmd`, `frontend/src/api/client.ts` (access token, refresh,
 401 → riprova), `CLAUDE.md` e `COMANDI.md`.
 

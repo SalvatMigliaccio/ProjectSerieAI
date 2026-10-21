@@ -254,7 +254,12 @@ def run(matchday: int | None = None, dry_run: bool = False,
         )
         return 0
 
-    d = costruisci_giornata(season, matchday)
+    # Solo il modello principale. Con un modello parallelo nel registro, il
+    # file di giornata ne avrebbe mescolato le righe e l'RPS archiviato sarebbe
+    # stato la media di due modelli. Il parallelo si legge con
+    # `goalmodel backtest`, che separa per `model_version`.
+    d = costruisci_giornata(season, matchday,
+                            model_version=predict_mod.MarketOnly().name)
     if d.empty:
         print(f"\nNessuna previsione in registro per la giornata {matchday}.")
         rounds.riepilogo_due_righe(

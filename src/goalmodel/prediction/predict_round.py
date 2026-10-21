@@ -209,6 +209,20 @@ def run(matchday: int | None = None, dry_run: bool = False,
 
     esito = predict_mod.run(matchday=matchday, dry_run=dry_run, quiet=True)
 
+    # I modelli paralleli si registrano sulle stesse righe, subito dopo. Un
+    # loro errore non deve costare la previsione principale, gia' scritta: si
+    # dice e si prosegue. ValueError e' il solo errore atteso (il controllo sul
+    # calcio d'inizio); il resto e' un bug e deve salire.
+    paralleli: list[str] = []
+    if not dry_run:
+        for modello in predict_mod.modelli_paralleli():
+            try:
+                scritte, _ = predict_mod.registra_parallelo(esito, modello)
+                paralleli.append(f"{modello.name}: {scritte} nuove")
+            except ValueError as exc:
+                log.error("modello parallelo non registrato: %s", exc)
+                paralleli.append(f"{modello.name}: NON registrato")
+
     if not esito.preds.empty:
         rounds.titolo(f"GIORNATA {matchday}  |  {len(esito.preds)} partite con quote")
         tabella_previsioni(esito.preds)
@@ -231,7 +245,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
                   "Rigeneralo con 'goalmodel report'.")
 
     _riepilogo(esito, matchday, n_partite, gia_in_registro, falliti,
-               dry_run, percorso)
+               dry_run, percorso, paralleli)
 
     if percorso is not None and apri and not dry_run:
         webbrowser.open(percorso.resolve().as_uri())
@@ -240,7 +254,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
 
 def _riepilogo(esito: predict_mod.Esito, matchday: int, n_partite: int,
                gia_in_registro: int, falliti: list[str], dry_run: bool,
-               percorso) -> None:
+               percorso, paralleli: list[str] | None = None) -> None:
     rounds.titolo("RIEPILOGO")
     if falliti:
         print("  ! stage di rete falliti, proseguito con i dati presenti:")
@@ -253,6 +267,8 @@ def _riepilogo(esito: predict_mod.Esito, matchday: int, n_partite: int,
     print(f"  previste ora            {nuove:3d}"
           f"{'  (dry-run: NON registrate)' if dry_run else ''}")
     print(f"  senza quote             {len(esito.skipped):3d}")
+    for riga in paralleli or []:
+        print(f"  in parallelo            {riga}")
     if percorso is not None:
         print(f"\n  report:   {percorso}")
 

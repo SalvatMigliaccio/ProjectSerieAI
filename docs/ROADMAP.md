@@ -63,7 +63,7 @@ che esistesse l'API. Lo split va scritto come **ADR 0003**, non come emendamento
 al 0001: e' una decisione nuova, con un contesto diverso.
 La dipendenza e' gia' a senso unico — `frontend` -> `backend` -> `goalmodel` —
 ed e' il motivo per cui lo split non deve toccare un solo modulo di produzione.
-Il contratto fra i due e' `web/openapi.json`, che `tests/test_api.py` verifica
+Il contratto fra i due e' `frontend/openapi.json`, che `tests/test_api.py` verifica
 non diverga.
 
 **Dockerization e deploy — li facciamo noi.** `backend` e' gia' un secondo
@@ -138,7 +138,7 @@ promettesse il contrario mentirebbe sui propri numeri.
 ## Fase 5 — frontend
 
 La fa il collega, dopo la separazione. I tipi in `frontend/src/api/types.ts`
-ricalcano `web/openapi.json`, che e' il contratto.
+ricalcano `frontend/openapi.json`, che e' il contratto.
 
 ## Fase 6 — allargamento e feature nuove
 

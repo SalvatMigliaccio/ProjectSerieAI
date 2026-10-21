@@ -299,6 +299,23 @@ GLM_RIDGE = 1e-3
 # ATTENZIONE AL SEGNO: e' rho negativo ad alzare 0-0 e 1-1.
 DC_RHO = 0.0
 
+# M1 IN PARALLELO, CON I PAREGGI RIMESSI — dal 21 ottobre 2026.
+# Due Poisson indipendenti tolgono 1.7 punti di pareggio alle quote da cui
+# partono: M1 prevede il 24.1% di pareggi contro il 28.0% osservato sul test,
+# con intervallo che esclude lo zero (experiments/output/riassunto_bias_gol.md).
+# rho = -0.16 e' il minimo dell'RPS in validazione; sul test riporta i pareggi
+# al 27.8% (IC dello scarto [-2.4, +3.0] punti), non peggiora l'RPS (-0.00040,
+# IC [-0.00092, +0.00010]) e lascia l'over 2.5 identico al sesto decimale.
+# Regole scritte prima: `experiments/rho_mercato.py`, esito in riassunto_rho.md.
+#
+# NON SOSTITUISCE M1: viene registrato ACCANTO, con una sua `model_version`
+# ("M1 market-only (lambda, rho=-0.16)"). La serie 2026/27 e' iniziata con
+# rho = 0 e non si spezza a meta' stagione; la linea principale, il report e
+# l'API restano su DC_RHO. Il prezzo noto: la verosimiglianza del risultato
+# esatto peggiora appena (-2.7457 -> -2.7473), quindi i punteggi esatti
+# restano calcolati con DC_RHO.
+M1_RHO_PARALLELO = -0.16
+
 # Numero di bin per curve di calibrazione ed ECE.
 CALIBRATION_BINS = 10
 

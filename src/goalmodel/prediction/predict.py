@@ -739,6 +739,41 @@ def run(
     return esito
 
 
+def modelli_paralleli() -> list[Model]:
+    """
+    I modelli registrati ACCANTO a quello principale, mai al suo posto.
+
+    Servono a costruire un track record vero per un candidato prima di
+    promuoverlo: le stesse partite, le stesse quote, lo stesso istante. Oggi
+    e' uno solo, M1 con il rho dei pareggi (`config.M1_RHO_PARALLELO`).
+    """
+    return [MarketOnly(rho=config.M1_RHO_PARALLELO)]
+
+
+def registra_parallelo(esito: Esito, model: Model, path=PREDICTIONS_LOG) -> tuple[int, int]:
+    """
+    Registra un modello parallelo sulle STESSE righe appena predette.
+
+    Non rilancia la pipeline: prende le partite di `esito`, che hanno gia'
+    superato il controllo sul calcio d'inizio, e ne ricalcola le colonne di
+    previsione. Cosi' le due versioni condividono quote, istante e partite, e
+    il confronto fra loro e' appaiato per costruzione.
+
+    Il controllo sul calcio d'inizio si ripete comunque, con un `raise` e non
+    un assert (regola di sicurezza 2): costa niente, e l'unico modo di
+    sbagliarlo sarebbe un `esito` costruito a mano.
+    """
+    if esito.preds.empty or esito.now is None:
+        return 0, 0
+    if not (esito.preds["kickoff"] > esito.now).all():
+        raise ValueError(f"modello parallelo {model.name}: previsione a {esito.now} "
+                         "non precede il calcio d'inizio")
+    righe = esito.preds.reset_index(drop=True)
+    nuove = model.predict(righe)
+    righe = righe.drop(columns=list(nuove.columns)).join(nuove)
+    return append_log(righe, model.name, esito.now, path=path)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Previsione settimanale")
     g = ap.add_mutually_exclusive_group()

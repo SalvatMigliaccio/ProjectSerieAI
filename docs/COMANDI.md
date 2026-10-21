@@ -489,7 +489,7 @@ installazione non e' importabile nemmeno dalla radice del repository.
 
 ```bash
 python -m backend.api --port 8000                          # http://127.0.0.1:8000/docs
-python -m backend.api --export-openapi web/openapi.json    # il file per il frontend
+python -m backend.api --export-openapi frontend/openapi.json    # il file per il frontend
 python -m tests.test_api                                   # tutti gli endpoint
 ```
 
@@ -883,7 +883,7 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | `track_record/rounds/riepilogo.csv` | `close_round` | cumulativo per giornata, rifatto da zero a ogni chiusura |
 | `track_record/report.html` | `*_round`, `report` | il report a percorso fisso. NON versionato: si rigenera |
 | `data/processed/reports/giornata_*.html` | `*_round`, `report` | archivio del report, uno per giornata |
-| **`web/openapi.json`** | `backend.api --export-openapi` | **il contratto per il frontend. Versionato: un test fallisce se diverge dall'app** |
+| **`frontend/openapi.json`** | `backend.api --export-openapi` | **il contratto per il frontend. Versionato: un test fallisce se diverge dall'app** |
 | `logs/scheduler_*.log` | `scripts\*.cmd` | un file al giorno, output completo dei comandi. NON versionato |
 | `logs/last_run.json` | `scripts\*.cmd` | esito dell'ultima esecuzione di ciascun comando, letto da `/api/status`. NON versionato |
 
@@ -954,9 +954,29 @@ $env:AI_NAPLES_FORCE_BUILD = "1"; goalmodel normalize --build
 
 ```bash
 cp .env.example .env          # then change the values; .env is git-ignored
-docker compose up -d          # Postgres 17 (pgvector) + Mailpit
+docker compose up -d --build  # Postgres + Mailpit + API + dashboard, hot reload
 alembic -c alembic.ini upgrade head
 ```
+
+The dashboard is at **http://localhost:5173**, the API at
+**http://localhost:8000**. Both reload on save: the sources are bind-mounted,
+and polling is on because Docker Desktop on Windows does not forward file
+events. `data/` and `track_record/` are mounted read-only; the pipeline
+(`predict_round`, `close_round`) still runs on the host.
+
+To run the API and the dashboard by hand instead, start only the services:
+
+```bash
+docker compose up -d db mail
+python -m backend.api --port 8000     # and, in frontend/: npm run dev
+```
+
+The two setups use the same ports (8000, 5173) and cannot run together.
+`API_PORT` and `FRONTEND_PORT` in `.env` move the containers' host ports.
+
+After changing `frontend/package.json`, rebuild the dashboard image:
+`docker compose up -d --build --renew-anon-volumes frontend`. node_modules
+lives in an anonymous volume, and without the flag the old one is kept.
 
 Mailpit captures every outgoing message and delivers none of it. Read them at
 **http://127.0.0.1:8025**. That is the point: sending a real email to a test

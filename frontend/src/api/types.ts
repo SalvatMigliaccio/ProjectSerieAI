@@ -1,5 +1,5 @@
 /**
- * I tipi del contratto, ricalcati da `web/openapi.json`.
+ * I tipi del contratto, ricalcati da `frontend/openapi.json`.
  *
  * PERCHE' SCRITTI A MANO E NON GENERATI. Sono sette risposte e stanno in una
  * schermata: un generatore aggiungerebbe una dipendenza e un passo di build per

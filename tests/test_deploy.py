@@ -17,9 +17,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 DOCKERIGNORE = ROOT / ".dockerignore"
-API_DOCKERFILE = ROOT / "docker" / "api" / "Dockerfile"
-WEB_DOCKERFILE = ROOT / "docker" / "web" / "Dockerfile"
-CADDYFILE = ROOT / "docker" / "web" / "Caddyfile"
+API_DOCKERFILE = ROOT / "backend" / "Dockerfile"
+WEB_DOCKERFILE = ROOT / "frontend" / "Dockerfile.prod"
+CADDYFILE = ROOT / "docker" / "caddy" / "Caddyfile"
 PROD = ROOT / "compose.prod.yaml"
 
 

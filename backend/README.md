@@ -31,5 +31,5 @@ elenchi divergono, e viene sempre letto quello sbagliato. In breve:
 da qualsiasi directory: `backend` e' dichiarato in `pyproject.toml` insieme a
 `goalmodel`.
 
-Il contratto per il frontend e' `web/openapi.json`, versionato e verificato da
+Il contratto per il frontend e' `frontend/openapi.json`, versionato e verificato da
 `tests/test_api.py`: se diverge dall'app, il test fallisce.

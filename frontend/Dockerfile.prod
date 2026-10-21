@@ -25,6 +25,6 @@ RUN npm run build
 FROM caddy:2-alpine AS runtime
 
 COPY --from=builder /build/dist /srv
-COPY docker/web/Caddyfile /etc/caddy/Caddyfile
+COPY docker/caddy/Caddyfile /etc/caddy/Caddyfile
 
 EXPOSE 80 443

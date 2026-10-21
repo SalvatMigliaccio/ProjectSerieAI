@@ -6,7 +6,7 @@ scrive dai comandi locali, mai da un browser.
 
 ```
 src/
-  api/types.ts     i tipi del contratto, ricalcati da web/openapi.json
+  api/types.ts     i tipi del contratto, ricalcati da frontend/openapi.json
   api/client.ts    l'unico punto che fa fetch
   lib/format.ts    formattazione, e la regola "null si mostra vuoto, mai zero"
   hooks/useApi.ts  dati, errore, caricamento — tre stati, non due

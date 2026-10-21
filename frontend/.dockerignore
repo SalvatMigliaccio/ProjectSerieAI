@@ -1,0 +1,10 @@
+# Build context of frontend/Dockerfile (development).
+#
+# node_modules above all: the host's copy is built for the host's OS. On
+# Windows it carries esbuild's Windows binary, which does not run in a Linux
+# container, and copying it would also overwrite the `npm ci` layer.
+node_modules/
+dist/
+.env
+.env.*
+!.env.example

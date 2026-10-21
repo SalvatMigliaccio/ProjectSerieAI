@@ -309,10 +309,22 @@ class MarketOnly(Model):
     e la differenza fra le due misura proprio quel costo.
     """
 
-    name = "M1 market-only (lambda)"
-
     def __init__(self, rho: float = config.DC_RHO) -> None:
         self.rho = rho
+
+    @property
+    def name(self) -> str:
+        """
+        Il nome e' la `model_version` del registro, quindi deve dire il rho.
+
+        Con rho = 0 resta quello storico, su cui sono scritte tutte le
+        previsioni dal 2026/27: cambiarlo spezzerebbe la serie. Con un altro
+        rho le probabilita' di 1X2 e gol-gol sono diverse dagli stessi lambda,
+        e una riga del registro deve poter essere ricalcolata da chi la legge:
+        un rho non scritto nel nome sarebbe un rho perso.
+        """
+        base = "M1 market-only (lambda)"
+        return base if self.rho == 0 else f"{base[:-1]}, rho={self.rho:+.2f})"
 
     def predict(self, test: pd.DataFrame) -> pd.DataFrame:
         lam_h = test["mkt_lambda_home"].to_numpy(dtype=float)

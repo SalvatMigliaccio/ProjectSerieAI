@@ -225,8 +225,14 @@ src/goalmodel/            il pacchetto: la pipeline, da installare
     report.py             regia: sezioni -> pagina -> due file
   experiments/            fuori produzione, guardia a runtime sulle scritture
 backend/                  API HTTP in sola lettura (FastAPI). Extra `api`
-frontend/                 dashboard React + Vite, consuma web/openapi.json
-web/openapi.json          il contratto verso il frontend, versionato
+  Dockerfile              l'immagine dell'API, sviluppo e produzione
+frontend/                 dashboard React + Vite
+  openapi.json            il contratto con l'API, versionato
+  Dockerfile              server di sviluppo Vite (compose.yaml)
+  Dockerfile.prod         bundle statico dietro Caddy (compose.prod.yaml)
+docker/                   solo infrastruttura condivisa: Caddyfile, init Postgres
+compose.yaml              sviluppo: db, mail, api, frontend
+compose.prod.yaml         produzione: db, api, web (Caddy)
 scripts/                  utilita' di ispezione, fuori dal pacchetto
 tests/                    dati sintetici e test di regressione
 track_record/             registro previsioni + giornate archiviate (VERSIONATO)

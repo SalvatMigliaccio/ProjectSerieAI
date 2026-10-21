@@ -1,6 +1,24 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// Questo file gira in Node, dove `process` esiste; il tsconfig e' quello del
+// browser e non lo conosce. Si dichiara la sola parte usata invece di tirare
+// dentro @types/node per due letture di variabili d'ambiente.
+declare const process: { env: Record<string, string | undefined> };
+
+// DOVE STA L'API, visto dal server di sviluppo. Da una shell sulla macchina e'
+// `127.0.0.1:8000`; dentro compose.yaml no: in un container 127.0.0.1 e' il
+// container stesso, e il proxy risponderebbe "connection refused" accusando
+// un'API che e' accesa. Li' compose passa `http://api:8000`, il nome del
+// servizio sulla rete interna.
+const API_TARGET = process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000";
+
+// Su Docker Desktop per Windows le modifiche ai file del bind mount non
+// arrivano al container come eventi: senza polling il server di sviluppo non
+// ricarica mai, e sembra che le modifiche non vengano prese. Solo dove serve:
+// il polling costa CPU, e sulla macchina gli eventi funzionano.
+const POLLING = process.env.VITE_USE_POLLING === "1";
+
 // La porta 5173 non e' un caso: e' fra le origini che l'API accetta per
 // default (vedi allowed_origins in backend/api/__init__.py), quindi in
 // sviluppo il CORS funziona senza configurare niente. Cambiandola, va
@@ -27,9 +45,10 @@ export default defineConfig({
     // della pagina — quindi un solo tunnel basta, e il CORS non entra nemmeno
     // in gioco perche' non c'e' piu' una seconda origine.
     proxy: {
-      "/api": { target: "http://127.0.0.1:8000", changeOrigin: true },
-      "/openapi.json": { target: "http://127.0.0.1:8000", changeOrigin: true },
+      "/api": { target: API_TARGET, changeOrigin: true },
+      "/openapi.json": { target: API_TARGET, changeOrigin: true },
     },
+    watch: POLLING ? { usePolling: true, interval: 300 } : undefined,
 
     // Vite rifiuta le richieste con un Host che non conosce ("Blocked request.
     // This host is not allowed"), e un tunnel ne porta sempre uno nuovo. Qui si

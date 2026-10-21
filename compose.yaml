@@ -1,16 +1,20 @@
-# I servizi di sviluppo: il database e il relay di posta.
+# Lo stack di SVILUPPO: database, posta, API e dashboard, con ricarica a caldo.
 #
-# COSA NON C'E' QUI, E NON E' UNA DIMENTICANZA. Non c'e' l'API, e non c'e' la
-# pipeline. L'API la si lancia a mano (`python -m backend.api`) finche' la fase
-# 3 non decide come va containerizzata; la pipeline **non si containerizza**,
-# perche' scrive il track record e quel registro vale solo se lo scrive un
-# processo locale. Questo file mette a disposizione cio' che serve accanto,
-# non l'applicazione.
+#   docker compose up --build        poi http://localhost:5173
 #
-# PERCHE' ESISTE GIA' ORA. La fase 2 ha bisogno di Postgres, e installarlo a
-# mano sulla macchina di ciascuno significa due ambienti diversi entro una
-# settimana. Il file e' anche il punto di partenza della fase 3: quando si
-# containerizzera' l'API, si aggiunge un servizio qui invece di ricominciare.
+# Si possono ancora lanciare API e dashboard a mano (`python -m backend.api`,
+# `npm run dev`) e tenere qui solo db e mail: `docker compose up db mail`.
+# Le due cose non convivono sulle stesse porte, 8000 e 5173.
+#
+# COSA NON C'E' QUI, E NON E' UNA DIMENTICANZA: la pipeline. `predict_round` e
+# `close_round` scrivono il track record, e quel registro vale solo se lo
+# scrive un processo locale prima del fischio. Restano sulla macchina; i
+# container qui sotto LEGGONO soltanto, e i montaggi di `data/` e
+# `track_record/` sono in sola lettura anche in sviluppo — una regola che vale
+# solo in produzione non e' una regola, e' una speranza.
+#
+# Produzione: `compose.prod.yaml`, stessa immagine dell'API, dashboard come
+# bundle statico dietro Caddy.
 
 name: ai-naples
 
@@ -78,6 +82,74 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
+
+  api:
+    # La STESSA immagine della produzione (backend/Dockerfile), con i sorgenti
+    # montati sopra e uvicorn in --reload. Un'immagine di sviluppo separata
+    # divergerebbe da quella che va in produzione, e i problemi d'immagine —
+    # un pacchetto mancante, un percorso sbagliato — si vedrebbero solo li'.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      # goalmodel ricava i percorsi da questa radice: senza, nell'immagine
+      # punterebbero dentro il virtualenv (vedi compose.prod.yaml).
+      AI_NAPLES_ROOT: /srv
+      # I sorgenti montati vincono sul pacchetto installato nell'immagine: i
+      # percorsi in PYTHONPATH precedono site-packages.
+      PYTHONPATH: /srv/src:/srv
+      # Dentro la rete di compose l'host e' il nome del servizio, mai
+      # 127.0.0.1 — che in un container e' il container stesso.
+      AI_NAPLES_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ainaples}:${POSTGRES_PASSWORD:?serve POSTGRES_PASSWORD, copia .env.example in .env}@db:5432/${POSTGRES_DB:-ainaples}
+      AI_NAPLES_SECRET_KEY: ${AI_NAPLES_SECRET_KEY:?serve AI_NAPLES_SECRET_KEY, copia .env.example in .env}
+      AI_NAPLES_COOKIE_SECURE: "0"
+      AI_NAPLES_PUBLIC_URL: http://localhost:${FRONTEND_PORT:-5173}
+      AI_NAPLES_SMTP_HOST: mail
+      AI_NAPLES_SMTP_PORT: "1025"
+      AI_NAPLES_SMTP_SECURITY: none
+      AI_NAPLES_SMTP_FROM: ${AI_NAPLES_SMTP_FROM:-no-reply@ainaples.local}
+      # Docker Desktop su Windows non inoltra gli eventi dei file del bind
+      # mount: senza polling --reload non ricarica mai.
+      WATCHFILES_FORCE_POLLING: "true"
+    command: >-
+      uvicorn backend.api:app --host 0.0.0.0 --port 8000
+      --reload --reload-dir /srv/backend --reload-dir /srv/src
+    volumes:
+      - ./backend:/srv/backend:ro
+      - ./src:/srv/src:ro
+      - ./manual:/srv/manual:ro
+      - ./data:/srv/data:ro
+      - ./track_record:/srv/track_record:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mail:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    # Il server di sviluppo Vite. Il browser parla SOLO con lui: le chiamate a
+    # /api le gira all'API sulla rete interna (API_PROXY_TARGET), quindi c'e'
+    # un'origine sola e il cookie di sessione funziona come in produzione.
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      API_PROXY_TARGET: http://api:8000
+      VITE_USE_POLLING: "1"
+    volumes:
+      - ./frontend:/app
+      # Volume anonimo SOPRA node_modules: la copia della macchina e' compilata
+      # per il suo sistema (su Windows esbuild e' un .exe) e nel container non
+      # parte. Cosi' resta quella installata da `npm ci` nell'immagine.
+      - /app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:

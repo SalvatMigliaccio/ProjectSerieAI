@@ -40,7 +40,7 @@ Fuori dal pacchetto, e di proposito:
 ```
 backend/                   API HTTP in sola lettura. Importa goalmodel, mai
                            il contrario. Dipendenze nell'extra `api`
-frontend/                  React + Vite. Consuma web/openapi.json
+frontend/                  React + Vite. Consuma frontend/openapi.json
 ```
 
 `backend` e' un secondo pacchetto installabile, non un sottomodulo di
@@ -1309,6 +1309,40 @@ disponibili il venerdi', non esiste una baseline dimostrabilmente piu' forte:
 **i confronti fatti finora contro B365/Shin non erano contro un avversario
 debole.**
 
+### Sovradattamento e bias sui gol — 21 ottobre 2026
+
+Diagnostica sul walk-forward di test (Serie A, 1140 partite), nessun
+confronto di blocco consumato. Riassunti in `experiments/output/`.
+
+**Sovradattamento** (`experiments/overfitting.py`). Scarto fra errore
+in-sample e fuori campione, al netto dello stesso scarto del mercato (che non
+stima niente e misura solo la difficolta' delle giornate). M4 sovradatta
+molto: eccesso RPS +0.011 senza mercato, +0.009 con mercato, intervalli netti,
+in calo al crescere del training. M5 poco ma in modo misurabile: +0.0008, cioe'
+tre quarti del suo vantaggio in-sample sul mercato spariscono fuori campione.
+**Un guadagno di M5 misurato sul training non va mai creduto.** Gli alberi
+scelti dall'arresto anticipato di M5 vanno da 1 a oltre 2000 fra blocchi
+vicini: la curva e' piatta, altro motivo per `M5MediaSemi`.
+
+**Bias sui gol** (`experiments/bias_gol.py`). Livello, pendenza (1.02 per M1),
+over 2.5, fasce di favorito, stagioni, squadre: niente fuori dal caso. Napoli
+-0.17 gol fatti a partita, p = 0.13. **L'unico bias netto sono i pareggi**: M1
+ne prevede il 24.1% contro il 28.0%, IC dello scarto [+1.2, +6.6] punti. Non e'
+il mercato (le quote dirette danno 25.8%, compatibile): e' la conversione in
+due Poisson indipendenti con `DC_RHO = 0`.
+
+**rho = -0.16, in parallelo** (`experiments/rho_mercato.py`, regole scritte
+prima). Minimo dell'RPS in validazione; sul test pareggi al 27.8% (IC [-2.4,
++3.0]), RPS -0.00040 [-0.00092, +0.00010], over 2.5 identico al sesto decimale,
+gol-gol da 47.6% a 49.4% (osservato 49.7%). Prezzo: verosimiglianza del
+risultato esatto appena peggiore, quindi i punteggi esatti restano a DC_RHO.
+**Non sostituisce M1**: `predict_round` registra accanto
+`M1 market-only (lambda, rho=-0.16)` sulle stesse righe e allo stesso istante
+(`config.M1_RHO_PARALLELO`, `predict.registra_parallelo`), e la serie 2026/27
+non si spezza. `close_round` archivia solo la linea principale; il parallelo si
+legge con `goalmodel backtest`, che separa per `model_version`. La promozione
+si decide sul confronto appaiato delle due versioni a fine stagione.
+
 ## Ipotesi PRE-REGISTRATE — congelate qui, da testare su dati che ancora non esistono
 
 **A cosa serve questa sezione.** Una specifica scelta dopo aver visto i dati
@@ -1397,7 +1431,7 @@ richiesto di toccare un solo modulo di produzione.
 
 Il frontend parla con l'API **solo via HTTP e solo in GET**: non importa nulla
 di Python e non conosce i percorsi dei file. I tipi in `frontend/src/api/types.ts`
-ricalcano `web/openapi.json`, che e' il contratto e va riesportato quando gli
+ricalcano `frontend/openapi.json`, che e' il contratto e va riesportato quando gli
 schemi cambiano (`tests/test_api.py` fallisce se diverge).
 
 Il motivo e' lo stesso per cui il registro e' append-only con backup e con due

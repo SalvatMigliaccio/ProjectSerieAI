@@ -616,15 +616,15 @@ def test_etag_follows_the_configuration() -> None:
 
 def test_openapi_file_is_in_sync() -> None:
     """
-    `web/openapi.json` is the file handed to the frontend: it must not age in
+    `frontend/openapi.json` is the file handed to the frontend: it must not age in
     silence. Same idea as the golden sample in test_production_unchanged.
     """
-    path = config.ROOT / "web" / "openapi.json"
-    assert path.exists(), "run: python -m backend.api --export-openapi web/openapi.json"
+    path = config.ROOT / "frontend" / "openapi.json"
+    assert path.exists(), "run: python -m backend.api --export-openapi frontend/openapi.json"
     on_disk = json.loads(path.read_text(encoding="utf-8"))
     assert on_disk == app.openapi(), (
-        "web/openapi.json is stale: re-export it with "
-        "'python -m backend.api --export-openapi web/openapi.json'")
+        "frontend/openapi.json is stale: re-export it with "
+        "'python -m backend.api --export-openapi frontend/openapi.json'")
 
 
 def main() -> None:

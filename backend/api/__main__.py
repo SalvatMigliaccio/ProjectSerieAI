@@ -2,7 +2,7 @@
 Entry point: run the API, or export its schema.
 
     python -m backend.api --port 8000
-    python -m backend.api --export-openapi web/openapi.json
+    python -m backend.api --export-openapi frontend/openapi.json
 
 BOUND TO LOCALHOST BY DEFAULT. The tunnel (ngrok) is the only way in during
 frontend development, so the server itself never listens on the network. Pass
