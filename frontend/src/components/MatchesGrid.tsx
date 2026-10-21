@@ -29,6 +29,15 @@ import { odds as fmtOdds, prob, score } from "../lib/format";
 export type Market = "all" | "1x2" | "ou" | "gg" | "result";
 export type SortBy = "time" | "prob";
 
+/** I filtri per mercato sopra la griglia: gli stessi in ogni schermata che la usa. */
+export const MERCATI: Array<[Market, string]> = [
+  ["all", "Tutte le partite"],
+  ["1x2", "1X2"],
+  ["ou", "Over/Under"],
+  ["gg", "Goal/No Goal"],
+  ["result", "Risultato finale"],
+];
+
 /** Dal nome del mercato alla colonna della griglia. I mercati che non hanno
  *  una colonna (doppia chance, over 1.5, "segna") restano fuori di proposito:
  *  compaiono come etichetta sotto i nomi delle squadre. */
@@ -235,12 +244,19 @@ export function MatchesGrid({
   picked,
   soglia,
   favorite,
+  perGiornata = false,
 }: {
   matches: Match[];
   market: Market;
   sort: SortBy;
   /** La squadra preferita dell'utente: le sue partite sono evidenziate. */
   favorite?: string | null;
+  /**
+   * Una stagione intera invece di una giornata: gruppi per giornata, dalla
+   * piu' recente. Per giorno, su trentotto partite di una squadra, ogni gruppo
+   * avrebbe una riga sola.
+   */
+  perGiornata?: boolean;
   /** Selezione scelta dalla soglia, per partita. */
   picked?: Map<string, Selection>;
   soglia?: number;
@@ -248,12 +264,17 @@ export function MatchesGrid({
   const ordinate = [...matches].sort((a, b) =>
     sort === "prob"
       ? topProb(b) - topProb(a)
-      : (a.kickoff_utc ?? a.match_date ?? "").localeCompare(b.kickoff_utc ?? b.match_date ?? ""),
+      : (perGiornata ? -1 : 1) *
+        (a.kickoff_utc ?? a.match_date ?? "").localeCompare(b.kickoff_utc ?? b.match_date ?? ""),
   );
 
   const gruppi = new Map<string, Match[]>();
   for (const match of ordinate) {
-    const titolo = sort === "prob" ? "" : giorno(match);
+    const titolo = sort === "prob"
+      ? ""
+      : perGiornata
+        ? `Giornata ${match.matchday ?? "?"} · ${giorno(match)}`
+        : giorno(match);
     gruppi.set(titolo, [...(gruppi.get(titolo) ?? []), match]);
   }
 

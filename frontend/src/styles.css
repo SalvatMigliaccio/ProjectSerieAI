@@ -3009,16 +3009,6 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
 }
 .fav-panel__match { margin: 0 0 var(--s3); font-size: 0.9375rem; max-width: none; }
-.fav-panel__probs { margin: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
-.fav-panel__probs > div {
-  padding: var(--s2) var(--s3); border-radius: var(--radius-sm);
-  background: var(--bg-2); border: 1px solid var(--line); text-align: center;
-}
-.fav-panel__probs dt { color: var(--faint); font-size: 0.75rem; }
-.fav-panel__probs dd {
-  margin: 2px 0 0; font-family: var(--display); font-weight: 700; font-size: 1.125rem;
-  font-variant-numeric: tabular-nums;
-}
 .fav-panel__chips { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
 .fav-chip {
   display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
@@ -3027,13 +3017,9 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .fav-chip--V { background: var(--ok-wash); color: var(--ok); border-color: rgba(69, 192, 138, 0.4); }
 .fav-chip--N { background: var(--idle-wash); color: var(--muted); border-color: var(--line-strong); }
 .fav-chip--P { background: var(--ko-wash); color: var(--ko); border-color: rgba(230, 119, 111, 0.4); }
-.fav-panel__record { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; max-width: none; }
-.fav-panel__record strong { color: var(--fg); }
 
 /* --- i miei pronostici ---------------------------------------------------- */
-.pronostici { padding-block: var(--s7) var(--s8); }
-.pronostici .wrap { max-width: 64rem; }
-.pron-section { margin-top: var(--s7); }
+.pron-section { margin-top: var(--s6); }
 .pron-section > h2 { font-family: var(--display); font-size: 1.25rem; margin: 0 0 var(--s4); }
 
 .pron-stats {
@@ -3105,3 +3091,173 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .pron-groups { grid-template-columns: minmax(0, 1fr); }
   .pron-table td.picks__match { white-space: normal; }
 }
+
+/* --- la cornice della dashboard (pages/dashboard/Shell.tsx) ---------------
+   TRE FORME DELLA STESSA NAVIGAZIONE, decise dalla larghezza e non dal
+   dispositivo:
+   - da 1440px: barra laterale con icona e nome;
+   - da 1024 a 1439: colonna di sole icone, perche' la giornata ha gia' una
+     sua colonna laterale e con 14rem in meno la griglia andava a capo;
+   - sotto 1024: schede in basso, a portata di pollice.
+   Il nome resta sempre nel testo del link: nascosto alla vista quando manca
+   lo spazio, mai a uno screen reader. */
+
+.dash-shell {
+  display: grid;
+  grid-template-columns: 14rem minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+  padding-block: var(--s6) var(--s8);
+}
+.dash-main { min-width: 0; }
+.dash-main:focus { outline: none; }
+
+.dash-nav {
+  position: sticky; top: 104px;
+  padding: var(--s3);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-1);
+}
+.dash-nav__title {
+  margin: var(--s2) var(--s3) var(--s3);
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--faint);
+}
+.dash-nav ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.dash-nav__link {
+  position: relative;
+  display: flex; align-items: center; gap: var(--s3);
+  min-height: 44px; padding: 0 var(--s3);
+  border-radius: var(--radius-sm);
+  color: var(--muted); text-decoration: none; font-weight: 500; font-size: 0.9375rem;
+  transition: background 160ms ease, color 160ms ease;
+}
+.dash-nav__link svg { flex: none; }
+.dash-nav__link:hover { background: rgba(255, 255, 255, 0.04); color: var(--fg); }
+.dash-nav__link:focus-visible { outline: 2px solid var(--mint); outline-offset: 1px; }
+.dash-nav__link.active { background: rgba(var(--accent-rgb), 0.1); color: var(--fg); font-weight: 600; }
+.dash-nav__link.active svg { color: var(--mint); }
+.dash-nav__link.active::before {
+  content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--mint);
+}
+.dash-nav__label { min-width: 0; }
+.dash-nav__short { display: none; }
+/* La squadra scelta, sotto la voce: dice dove porta prima di cliccare. */
+.dash-nav__team {
+  margin-left: auto; padding: 1px var(--s2); border-radius: 999px;
+  background: rgba(var(--accent-rgb), 0.12); color: var(--mint);
+  font-size: 0.6875rem; font-weight: 600;
+  max-width: 6.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* LA TESTATA PARTE ALL'ALTEZZA DELLA BARRA LATERALE. `.dash-banner` aveva un
+   margine sopra pensato per stare sotto la testata del sito; dentro la
+   cornice e' la prima cosa della colonna, e quel margine la sfasava rispetto
+   alla barra accanto. Sotto, ogni blocco prende la stessa distanza. */
+.dash-main > .dash-banner:first-child,
+.dash-main > div > .dash-banner:first-child { margin-top: 0; }
+.screen-header { min-height: 96px; }
+.dash-main .dash-bottom { margin-top: var(--s5); }
+.pron-stats { margin-top: var(--s5); }
+
+/* Il menu della squadra nella testata di "La mia squadra". */
+.fav-picker { display: grid; gap: 4px; min-width: 14rem; }
+.fav-picker label {
+  font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--faint);
+}
+.fav-picker select {
+  min-height: 44px; padding: 0 var(--s4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-2); color: var(--fg); font: inherit; font-size: 0.9375rem; cursor: pointer;
+}
+.fav-picker select:focus-visible { outline: 2px solid var(--mint); outline-offset: 1px; }
+.fav-picker .field__error { margin: 0; }
+
+
+/* --- da 1024 a 1439: colonna di icone ------------------------------------ */
+@media (max-width: 1439px) {
+  .dash-shell { grid-template-columns: 4.25rem minmax(0, 1fr); gap: var(--s5); }
+  .dash-nav { padding: var(--s2); }
+  .dash-nav__title, .dash-nav__team { display: none; }
+  .dash-nav__link { justify-content: center; padding: 0; min-height: 48px; }
+  .dash-nav__label {
+    position: absolute !important; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  /* L'etichetta al passaggio e al fuoco: un'icona sola non si indovina. */
+  .dash-nav__link:hover .dash-nav__short,
+  .dash-nav__link:focus-visible .dash-nav__short {
+    display: block; position: absolute; left: calc(100% + 10px); top: 50%;
+    transform: translateY(-50%); z-index: 60;
+    padding: 4px var(--s2); border-radius: 6px; white-space: nowrap;
+    background: var(--surface-2); border: 1px solid var(--line-strong); color: var(--fg);
+    font-size: 0.8125rem; font-weight: 500; box-shadow: var(--shadow-2);
+    pointer-events: none;
+  }
+  }
+
+/* --- sotto 1024: schede in basso ----------------------------------------- */
+@media (max-width: 1023px) {
+  .dash-shell { grid-template-columns: minmax(0, 1fr); padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+  .dash-nav {
+    position: fixed; z-index: 70; left: 0; right: 0; bottom: 0; top: auto;
+    padding: 6px var(--s2) calc(6px + env(safe-area-inset-bottom));
+    border: 0; border-top: 1px solid var(--line-strong); border-radius: 0;
+    background: rgba(var(--surface-rgb), 0.96);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+  }
+  .dash-nav ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dash-nav__link {
+    flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 0;
+    font-size: 0.6875rem;
+  }
+  .dash-nav__link.active::before { left: 25%; right: 25%; top: 0; bottom: auto; width: auto; height: 3px; border-radius: 0 0 3px 3px; }
+  .dash-nav__link:hover .dash-nav__short,
+  .dash-nav__link:focus-visible .dash-nav__short { position: static; transform: none; padding: 0; border: 0; background: none; box-shadow: none; }
+  .dash-nav__short { display: block; }
+}
+
+/* Su schermo stretto la sintesi della squadra va sopra la griglia: sotto,
+   arriverebbe dopo una stagione intera di partite. */
+@media (max-width: 1100px) {
+  .dash-layout--squadra > aside { order: -1; }
+}
+
+/* Prossima partita: i due modelli sulle stesse colonne, una riga ciascuno. */
+.fav-panel__probs { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
+.fav-panel__probs th, .fav-panel__probs td { font-variant-numeric: tabular-nums; }
+.fav-panel__probs thead th {
+  color: var(--faint); font-size: 0.75rem; font-weight: 500; text-align: center; padding-bottom: 2px;
+}
+.fav-panel__probs tbody th {
+  text-align: left; color: var(--muted); font-size: 0.8125rem; font-weight: 600; padding-right: var(--s2);
+}
+.fav-panel__probs tbody td {
+  text-align: center; padding: 6px 0;
+  background: var(--bg-2); border-block: 1px solid var(--line);
+  font-family: var(--display); font-weight: 700; font-size: 1rem;
+}
+.fav-panel__probs tbody td:nth-of-type(1) { border-left: 1px solid var(--line); border-radius: 8px 0 0 8px; }
+.fav-panel__probs tbody td:last-child { border-right: 1px solid var(--line); border-radius: 0 8px 8px 0; }
+.fav-panel__hint { margin: var(--s2) 0 0; color: var(--faint); font-size: 0.75rem; max-width: none; }
+.fav-panel__record { margin: 0; display: grid; gap: 4px; }
+.fav-panel__record > div { display: flex; justify-content: space-between; gap: var(--s3); font-size: 0.875rem; }
+.fav-panel__record dt { color: var(--muted); }
+.fav-panel__record dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Quale modello sta mostrando la griglia di "La mia squadra". */
+.squadra-nota {
+  margin: var(--s5) 0 var(--s4); padding: var(--s3) var(--s4);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface);
+  color: var(--muted); font-size: 0.875rem; line-height: 1.55; max-width: none;
+}
+.squadra-nota__tag {
+  display: inline-block; margin-right: var(--s2); padding: 1px var(--s2); border-radius: 999px;
+  font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
+}
+.squadra-nota__tag--classico { background: var(--idle-wash); color: var(--fg); }
+.squadra-nota__tag--ai { background: rgba(var(--accent-rgb), 0.16); color: var(--mint); }
+.squadra-modelli { margin: 0; }

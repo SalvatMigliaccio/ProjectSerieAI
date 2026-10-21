@@ -34,9 +34,8 @@ import {
   serverError,
   useValidation,
 } from "../components/Form";
+import { FavoritePicker } from "../components/FavoritePicker";
 import { Colophon, Masthead } from "../components/Layout";
-import { api } from "../api/client";
-import { useFavorite } from "../auth/Favorite";
 import { ago, localDateTime } from "../lib/format";
 
 /**
@@ -262,7 +261,7 @@ function SezioneProfilo({
         </dl>
       </section>
 
-      <SquadraPreferita />
+      <FavoritePicker />
 
       <div className="profilo__scorciatoie">
         {SEZIONI.filter((s) => s.id !== "profilo").map((s) => (
@@ -277,73 +276,6 @@ function SezioneProfilo({
         ))}
       </div>
     </>
-  );
-}
-
-/**
- * La squadra da seguire: evidenziata nella dashboard e messa in cima ai
- * pronostici. Le squadre vengono dalla classifica della stagione, cioe' dai
- * nomi esatti del track record — gli stessi che il server accetta.
- */
-function SquadraPreferita() {
-  const { team, scegli } = useFavorite();
-  const [squadre, setSquadre] = useState<string[] | null>(null);
-  const [inCorso, setInCorso] = useState(false);
-  const [esito, setEsito] = useState<string | null>(null);
-  const [errore, setErrore] = useState<string | null>(null);
-
-  useEffect(() => {
-    let annullato = false;
-    api
-      .standings()
-      .then((s) => {
-        if (!annullato) setSquadre(s.table.map((r) => r.team).sort((a, b) => a.localeCompare(b, "it")));
-      })
-      .catch(() => {
-        if (!annullato) setSquadre([]);
-      });
-    return () => {
-      annullato = true;
-    };
-  }, []);
-
-  async function cambia(valore: string) {
-    setInCorso(true);
-    setEsito(null);
-    setErrore(null);
-    try {
-      await scegli(valore || null);
-      setEsito(valore ? `Squadra salvata: ${valore}.` : "Nessuna squadra selezionata.");
-    } catch (e) {
-      setErrore(serverError(e, "Non riesco a salvare la squadra. Riprova."));
-    } finally {
-      setInCorso(false);
-    }
-  }
-
-  return (
-    <section className="profilo__blocco" aria-labelledby="squadra-titolo">
-      <h2 id="squadra-titolo">La tua squadra</h2>
-      <p className="profilo__hint">
-        Le sue partite compaiono evidenziate nella dashboard e in cima ai tuoi pronostici.
-      </p>
-      <div className="field profilo__squadra">
-        <label htmlFor="squadra">Squadra preferita</label>
-        <select
-          id="squadra"
-          value={team ?? ""}
-          disabled={inCorso || squadre === null}
-          onChange={(e) => void cambia(e.target.value)}
-        >
-          <option value="">Nessuna</option>
-          {(squadre ?? []).map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
-        </select>
-      </div>
-      <FormAlert>{errore}</FormAlert>
-      <FormSuccess>{esito}</FormSuccess>
-    </section>
   );
 }
 

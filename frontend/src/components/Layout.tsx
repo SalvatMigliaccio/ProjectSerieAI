@@ -212,14 +212,9 @@ function AccountLink() {
   // posto dove si clicca per sbaglio; e non lasciava nessun punto in cui
   // cambiare la password o vedere le sessioni aperte.
   return (
-    <>
-      <NavLink className="nav__account" to="/pronostici">
-        I miei pronostici
-      </NavLink>
-      <NavLink className="nav__account" to="/account" title={user?.email}>
-        Account
-      </NavLink>
-    </>
+    <NavLink className="nav__account" to="/account" title={user?.email}>
+      Account
+    </NavLink>
   );
 }
 

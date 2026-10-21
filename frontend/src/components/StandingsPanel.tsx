@@ -68,7 +68,7 @@ export function StandingsPanel({ limit }: { limit?: number }) {
               <th className="right hide-narrow" title="gol fatti">GF</th>
               <th className="right hide-narrow" title="gol subiti">GS</th>
               <th className="right hide-narrow" title="differenza reti">DR</th>
-              {!stretta && <th className="std__form" title="ultime cinque, dalla piu' vecchia">Forma</th>}
+              {!stretta && <th className="std__form" title="ultime quattro, dalla piu' vecchia">Forma</th>}
               <th className="right" title="punti">Pt</th>
             </tr>
           </thead>
@@ -102,7 +102,9 @@ export function StandingsPanel({ limit }: { limit?: number }) {
 
                 {!stretta && (
                   <td className="std__form">
-                    {(row.form ?? []).map((esito, indice) => (
+                    {/* Quattro e non cinque: con la quinta la colonna
+                        invadeva quella dei punti accanto. */}
+                    {(row.form ?? []).slice(-4).map((esito, indice) => (
                       <span
                         key={`${row.team}-${indice}`}
                         className={`std__pip std__pip--${esito.toLowerCase()}`}

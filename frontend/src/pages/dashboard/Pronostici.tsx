@@ -18,12 +18,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { ApiError } from "../api/client";
-import { me, type MyPredictions, type OpenMatch, type Pick } from "../api/me";
-import { FormAlert, serverError } from "../components/Form";
-import { Colophon, Masthead } from "../components/Layout";
-import { localTime, odds as fmtOdds, prob, score } from "../lib/format";
-import { useFavorite } from "../auth/Favorite";
+import { ApiError } from "../../api/client";
+import { me, type MyPredictions, type OpenMatch, type Pick } from "../../api/me";
+import { FormAlert, serverError } from "../../components/Form";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { localTime, odds as fmtOdds, prob, score } from "../../lib/format";
+import { useFavorite } from "../../auth/Favorite";
 
 /** "1" da solo non dice quale squadra: l'etichetta la nomina. */
 function etichetta(market: string, home: string, away: string): string {
@@ -313,18 +313,11 @@ export function Pronostici() {
   );
 
   return (
-    <>
-      <Masthead current="hero" />
-      <main id="contenuto" className="pronostici" tabIndex={-1}>
-        <div className="wrap">
-          <header className="profilo__head">
-            <p className="profilo__eyebrow">Stagione in corso</p>
-            <h1>I miei pronostici</h1>
-            <p className="profilo__lead">
-              Scegli le tue giocate prima del calcio d'inizio. Accanto a ognuna, la
-              probabilità che le dà il modello; dopo la partita, com'è andata.
-            </p>
-          </header>
+    <div className="pronostici">
+      <ScreenHeader
+        title="I miei pronostici"
+        subtitle="Scegli le tue giocate prima del calcio d'inizio: accanto a ognuna, la probabilità del modello e, dopo la partita, com'è andata"
+      />
 
           <FormAlert>{errore}</FormAlert>
 
@@ -369,9 +362,6 @@ export function Pronostici() {
               <Storico picks={dati.picks} inCorso={inCorso} onRitira={(p) => void onRitira(p)} />
             )}
           </section>
-        </div>
-      </main>
-      <Colophon modelVersion={null} />
-    </>
+    </div>
   );
 }
