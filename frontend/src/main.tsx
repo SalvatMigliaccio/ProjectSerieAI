@@ -1,18 +1,18 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-// Poppins per i titoli e l'interfaccia (grottesco geometrico, pesante nei
-// display), Inter per il testo e le cifre. Impacchettati con l'app e non presi
-// da un CDN: la dashboard deve funzionare anche senza rete, e un font che cade
-// in silenzio sul fallback di sistema cambia l'aspetto di tutta la pagina.
-import "@fontsource/poppins/500.css";
-import "@fontsource/poppins/600.css";
-import "@fontsource/poppins/700.css";
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/600.css";
-// Caveat serve a una cosa sola: la firma manoscritta in fondo alla hero.
-import "@fontsource/caveat/600.css";
+// IBM Plex Sans per titoli e testo, IBM Plex Mono per i numeri. Un carattere
+// solo e il suo gemello monospaziato: Poppins nei titoli era la firma di ogni
+// pagina "startup", e il corsivo Caveat non c'entrava con un prodotto di dati.
+// Impacchettati con l'app e non presi da un CDN: la dashboard deve funzionare
+// anche senza rete, e un font che cade in silenzio sul fallback di sistema
+// cambia l'aspetto di tutta la pagina.
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-sans/700.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 
 import { App } from "./App";
 import "./styles.css";
