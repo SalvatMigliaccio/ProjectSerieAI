@@ -159,7 +159,12 @@ def test_unplayed_match_is_null_not_zero() -> None:
 
         log_path = track / "predictions_log.csv"
         log = pd.read_csv(log_path)
-        future = log.iloc[-1].copy()
+        # UNA RIGA DEL MODELLO DI PRODUZIONE, non l'ultima del file. Da quando
+        # predict_round scrive anche il modello in parallelo (rho=-0.16) dopo
+        # ogni riga principale, l'ultima riga e' quella parallela: l'API la
+        # filtra, e la partita finta spariva. Il test si e' rotto il giorno in
+        # cui il registro ha avuto la prima giornata scritta dopo l'aggiunta.
+        future = log[log["model_version"] == store.PRODUCTION_MODEL].iloc[-1].copy()
         # SQUADRE INVENTATE, non una coppia vera. Il test usava Monza-Sassuolo
         # contando che non fosse giocata: da quando l'API cerca il risultato
         # nella catena delle fonti lo trovava — la partita si e' giocata davvero

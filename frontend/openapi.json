@@ -1415,6 +1415,50 @@
         }
       }
     },
+    "/api/me/predictions/save": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Save Predictions",
+        "description": "Save the picks of a round in one go: one per match, replaced or withdrawn.\n\nALL OR NOTHING. Every choice is checked BEFORE any row changes — the\nmarket exists, the match is open and in the next round — and one bad\nchoice refuses the whole save with 409, naming the match. Half a save\nwould leave the page showing picks that the server does not have.\n\nThe kickoff is read here, now, from the calendar, as in `add_prediction`:\nthe request carries no time. A match that has already started cannot be\nchanged, so its saved pick stays as it was.",
+        "operationId": "save_predictions_api_me_predictions_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePicks"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Save Predictions Api Me Predictions Save Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/predictions/{pick_id}/delete": {
       "post": {
         "tags": [
@@ -2797,6 +2841,14 @@
             },
             "type": "array",
             "title": "Picks"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/RoundScore"
+            },
+            "type": "array",
+            "title": "Rounds",
+            "default": []
           }
         },
         "type": "object",
@@ -3110,6 +3162,28 @@
               }
             ],
             "title": "Won"
+          },
+          "model_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Label"
+          },
+          "model_won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Won"
           }
         },
         "type": "object",
@@ -3131,6 +3205,39 @@
           "won"
         ],
         "title": "Pick"
+      },
+      "PickChoice": {
+        "properties": {
+          "home_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Away Team"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          }
+        },
+        "type": "object",
+        "required": [
+          "home_team",
+          "away_team"
+        ],
+        "title": "PickChoice",
+        "description": "The pick for one match; `market` null withdraws it."
       },
       "Picks": {
         "properties": {
@@ -3485,6 +3592,68 @@
         },
         "type": "object",
         "title": "RoundPoint"
+      },
+      "RoundScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved"
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "picks",
+          "resolved",
+          "won",
+          "model_resolved",
+          "model_won"
+        ],
+        "title": "RoundScore",
+        "description": "One matchday of the archive: the user and the model on the same matches."
+      },
+      "SavePicks": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "maxLength": 9,
+            "title": "Season"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/PickChoice"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Picks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "picks"
+        ],
+        "title": "SavePicks"
       },
       "SeasonSummary": {
         "properties": {
@@ -4167,6 +4336,27 @@
               }
             ],
             "title": "Mean Model Probability"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved",
+            "default": 0
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won",
+            "default": 0
+          },
+          "model_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Hit Rate"
           }
         },
         "type": "object",

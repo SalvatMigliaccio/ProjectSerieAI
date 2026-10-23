@@ -12,7 +12,7 @@ from __future__ import annotations
 import datetime as dt
 
 import pytest
-from backend.api import store
+from backend.api import selections, store
 from tests.test_auth_http import _register_and_verify, client, post  # noqa: F401
 
 SEASON = "2026-27"
@@ -25,6 +25,18 @@ def _match(home: str, away: str, hours_from_now: float, goals=None) -> dict:
     return {"season": SEASON, "matchday": 8, "home_team": home, "away_team": away,
             "kickoff_utc": kickoff.isoformat(), "lambda_home": 1.6, "lambda_away": 1.0,
             "goals_home": gh, "goals_away": ga, "actual_outcome": outcome}
+
+
+@pytest.fixture(autouse=True)
+def _nessuna_selezione_del_modello(monkeypatch):
+    """
+    Le selezioni del modello, vuote salvo dove un test le inietta.
+
+    Le partite qui sono righe finte senza quote, e le selezioni vere le
+    pretendono: questi test riguardano le giocate dell'utente, non la linea
+    del modello, che ha i suoi test in test_api.
+    """
+    monkeypatch.setattr(selections, "picks", lambda *a, **k: {"with_min_odds": []})
 
 
 @pytest.fixture
@@ -97,19 +109,83 @@ def test_a_pick_can_be_withdrawn_only_before_kickoff(signed_in, fixtures) -> Non
 
 
 def test_picks_resolve_against_the_result(signed_in, fixtures) -> None:
-    for market in ("over 2.5", "1", "gol-gol"):
-        assert _pick(signed_in, market=market).status_code == 201
+    assert _pick(signed_in, market="over 2.5").status_code == 201
     fixtures[0].update(goals_home=2, goals_away=1, actual_outcome="H",
                        kickoff_utc=(dt.datetime.now(dt.UTC)
                                     - dt.timedelta(hours=2)).isoformat())
 
     body = signed_in.get(f"/api/me/predictions/{SEASON}").json()
     won = {p["market"]: p["won"] for p in body["picks"]}
-    assert won == {"over 2.5": True, "1": True, "gol-gol": True}
+    assert won == {"over 2.5": True}
     s = body["summary"]
-    assert (s["resolved"], s["won"], s["hit_rate"]) == (3, 3, 1.0)
+    assert (s["resolved"], s["won"], s["hit_rate"]) == (1, 1, 1.0)
     assert 0 < s["mean_model_probability"] < 1
     assert all(p["locked"] for p in body["picks"])
+
+
+def test_the_archive_puts_the_model_beside_the_user(signed_in, fixtures, monkeypatch) -> None:
+    """Same matches, same moment: the two percentages compare like for like."""
+    assert _pick(signed_in, market="over 2.5").status_code == 201
+    fixtures[0].update(goals_home=0, goals_away=1, actual_outcome="A",
+                       kickoff_utc=(dt.datetime.now(dt.UTC)
+                                    - dt.timedelta(hours=2)).isoformat())
+    monkeypatch.setattr(selections, "picks", lambda *a, **k: {"with_min_odds": [
+        {"home_team": "Napoli", "away_team": "Lecce", "market_label": "under 3.5", "won": True},
+    ]})
+
+    body = signed_in.get(f"/api/me/predictions/{SEASON}").json()
+    pick = body["picks"][0]
+    assert (pick["won"], pick["model_label"], pick["model_won"]) == (False, "under 3.5", True)
+    s = body["summary"]
+    assert (s["hit_rate"], s["model_hit_rate"]) == (0.0, 1.0)
+    assert body["rounds"] == [{"matchday": 8, "picks": 1, "resolved": 1, "won": 0,
+                               "model_resolved": 1, "model_won": 1}]
+
+
+# --- one pick per match, saved together ----------------------------------------
+
+def _save(c, picks):
+    return c.post("/api/me/predictions/save", json={"season": SEASON, "picks": picks})
+
+
+def test_one_pick_per_match(signed_in, fixtures) -> None:
+    """Covering over and under on the same match would always be half right."""
+    assert _pick(signed_in, market="over 2.5").status_code == 201
+    assert _pick(signed_in, market="under 2.5").status_code == 409
+
+
+def test_saving_replaces_the_pick_of_a_match(signed_in, fixtures) -> None:
+    assert _save(signed_in, [{"home_team": "Napoli", "away_team": "Lecce",
+                              "market": "over 2.5"}]).json() == {"saved": 1, "removed": 0}
+    r = _save(signed_in, [{"home_team": "Napoli", "away_team": "Lecce", "market": "1"}])
+    assert r.json() == {"saved": 1, "removed": 1}
+    picks = signed_in.get(f"/api/me/predictions/{SEASON}").json()["picks"]
+    assert [p["market"] for p in picks] == ["1"], "changed, not added"
+
+    unchanged = _save(signed_in, [{"home_team": "Napoli", "away_team": "Lecce", "market": "1"}])
+    assert unchanged.json() == {"saved": 0, "removed": 0}, "the original time is kept"
+
+    gone = _save(signed_in, [{"home_team": "Napoli", "away_team": "Lecce", "market": None}])
+    assert gone.json() == {"saved": 0, "removed": 1}
+    assert signed_in.get(f"/api/me/predictions/{SEASON}").json()["picks"] == []
+
+
+def test_a_save_with_one_closed_match_changes_nothing(signed_in, fixtures) -> None:
+    """All or nothing: half a save would leave the page out of step with the server."""
+    r = _save(signed_in, [
+        {"home_team": "Napoli", "away_team": "Lecce", "market": "over 2.5"},
+        {"home_team": "Inter", "away_team": "Milan", "market": "gol-gol"},  # started
+    ])
+    assert r.status_code == 409
+    assert "Inter - Milan" in r.json()["detail"]
+    assert signed_in.get(f"/api/me/predictions/{SEASON}").json()["picks"] == []
+
+
+def test_a_save_refuses_unknown_markets_and_repeats(signed_in, fixtures) -> None:
+    assert _save(signed_in, [{"home_team": "Napoli", "away_team": "Lecce",
+                              "market": "over 9.5"}]).status_code == 422
+    twice = [{"home_team": "Napoli", "away_team": "Lecce", "market": "1"}] * 2
+    assert _save(signed_in, twice).status_code == 422
 
 
 def test_another_users_pick_cannot_be_deleted(client, db, fixtures) -> None:  # noqa: F811

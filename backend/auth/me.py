@@ -46,10 +46,12 @@ log = logging.getLogger("auth.me")
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
-# A ceiling per match. Ten covers every sensible combination (an outcome, a
-# double chance, a goals line, both teams to score...); past that it is not
-# an opinion any more, it is the whole catalogue.
-MAX_PICKS_PER_MATCH = 10
+# ONE PICK PER MATCH (23 October 2026, it was ten). A pick is an opinion on
+# how the match goes, and the comparison with the model is honest only if
+# there is one: with ten, a user could cover "over 2.5" and "under 2.5" on the
+# same match and always be half right. Changing one's mind before kick-off
+# REPLACES the pick (`save_predictions`), it does not add a second.
+MAX_PICKS_PER_MATCH = 1
 
 # The markets left out of the catalogue the page offers, as the dashboard
 # leaves them out: lines nobody plays (over 0.5, under 4.5) and the two
@@ -267,6 +269,22 @@ class Pick(BaseModel):
     goals_home: int | None
     goals_away: int | None
     won: bool | None
+    # The model's own selection on the same match (the declared line: the most
+    # likely market paying at least QUOTA_MINIMA_SELEZIONE), for the side by
+    # side. Null when the model has not priced the match.
+    model_label: str | None = None
+    model_won: bool | None = None
+
+
+class RoundScore(BaseModel):
+    """One matchday of the archive: the user and the model on the same matches."""
+
+    matchday: int
+    picks: int
+    resolved: int
+    won: int
+    model_resolved: int
+    model_won: int
 
 
 class Summary(BaseModel):
@@ -285,11 +303,19 @@ class Summary(BaseModel):
     won: int
     hit_rate: float | None
     mean_model_probability: float | None
+    # THE MODEL ON THE SAME MATCHES. Its own selection on every match the user
+    # picked and that has been played: same matches, same moment, so the two
+    # percentages compare like for like — not the user's matches against the
+    # model's whole season, which would be easier or harder by chance.
+    model_resolved: int = 0
+    model_won: int = 0
+    model_hit_rate: float | None = None
 
 
 class MyPredictions(BaseModel):
     summary: Summary
     picks: list[Pick]
+    rounds: list[RoundScore] = []
 
 
 class NewPick(BaseModel):
@@ -297,6 +323,20 @@ class NewPick(BaseModel):
     home_team: str = Field(max_length=64)
     away_team: str = Field(max_length=64)
     market: str = Field(max_length=16)
+
+
+class PickChoice(BaseModel):
+    """The pick for one match; `market` null withdraws it."""
+
+    home_team: str = Field(max_length=64)
+    away_team: str = Field(max_length=64)
+    market: str | None = Field(default=None, max_length=16)
+
+
+class SavePicks(BaseModel):
+    season: str = Field(max_length=9)
+    # A round is ten matches; fifty is room for a postponed one, not a dump.
+    picks: list[PickChoice] = Field(max_length=50)
 
 
 def _fair(p: float | None) -> float | None:
@@ -348,10 +388,15 @@ def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
 @router.get("/predictions/{season}")
 def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
     """Every pick of the season, newest match first, resolved against the result."""
+    from backend.api import selections as selections_mod
     from backend.api.selections import resolve
 
     code = _season_code(season)
     records = _records(code)
+    # The model's declared selection per match, the same list the dashboard
+    # shows under "Selezioni del modello".
+    modello = {(r["home_team"], r["away_team"]): r
+               for r in selections_mod.picks(code)["with_min_odds"]}
     at = now()
     rows = db.scalars(select(UserPrediction).where(
         UserPrediction.user_id == user.id, UserPrediction.season == code)).all()
@@ -375,11 +420,14 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
             locked=not _is_open(r, at) if r else True,
             goals_home=gh, goals_away=ga,
             won=resolve(p.market, gh, ga, r.get("actual_outcome")) if played else None,
+            model_label=(modello.get((p.home_team, p.away_team)) or {}).get("market_label"),
+            model_won=(modello.get((p.home_team, p.away_team)) or {}).get("won"),
         ))
     picks.sort(key=lambda k: (k.kickoff_utc or "", k.home_team, k.market), reverse=True)
 
     resolved = [k for k in picks if k.won is not None]
     probs = [k.model_probability for k in resolved if k.model_probability is not None]
+    confronto = [k for k in resolved if k.model_won is not None]
     summary = Summary(
         picks=len(picks),
         pending=len(picks) - len(resolved),
@@ -387,8 +435,22 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
         won=sum(1 for k in resolved if k.won),
         hit_rate=(sum(1 for k in resolved if k.won) / len(resolved)) if resolved else None,
         mean_model_probability=(sum(probs) / len(probs)) if probs else None,
+        model_resolved=len(confronto),
+        model_won=sum(1 for k in confronto if k.model_won),
+        model_hit_rate=(sum(1 for k in confronto if k.model_won) / len(confronto))
+        if confronto else None,
     )
-    return MyPredictions(summary=summary, picks=picks)
+
+    rounds: list[RoundScore] = []
+    for day in sorted({k.matchday for k in picks}, reverse=True):
+        mine = [k for k in picks if k.matchday == day]
+        done = [k for k in mine if k.won is not None]
+        model = [k for k in done if k.model_won is not None]
+        rounds.append(RoundScore(
+            matchday=day, picks=len(mine), resolved=len(done),
+            won=sum(1 for k in done if k.won),
+            model_resolved=len(model), model_won=sum(1 for k in model if k.model_won)))
+    return MyPredictions(summary=summary, picks=picks, rounds=rounds)
 
 
 @router.post("/predictions", status_code=status.HTTP_201_CREATED)
@@ -437,6 +499,64 @@ def add_prediction(payload: NewPick, request: Request, user: CurrentUser, db: Db
     except IntegrityError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "pick already recorded") from exc
     return {"id": str(row.id)}
+
+
+@router.post("/predictions/save")
+def save_predictions(payload: SavePicks, request: Request, user: CurrentUser, db: Db) -> dict:
+    """
+    Save the picks of a round in one go: one per match, replaced or withdrawn.
+
+    ALL OR NOTHING. Every choice is checked BEFORE any row changes — the
+    market exists, the match is open and in the next round — and one bad
+    choice refuses the whole save with 409, naming the match. Half a save
+    would leave the page showing picks that the server does not have.
+
+    The kickoff is read here, now, from the calendar, as in `add_prediction`:
+    the request carries no time. A match that has already started cannot be
+    changed, so its saved pick stays as it was.
+    """
+    _limit(request, user.id)
+    code = _season_code(payload.season)
+    records = _records(code)
+    at = now()
+    pickable = _pickable(records, at)
+
+    seen: set[tuple[str, str]] = set()
+    for c in payload.picks:
+        key = (c.home_team, c.away_team)
+        if key in seen:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"{c.home_team} - {c.away_team} appears twice")
+        seen.add(key)
+        if c.market is not None and c.market not in markets():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"unknown market '{c.market}'")
+        if key not in records:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                f"match not found: {c.home_team} - {c.away_team}")
+        if key not in pickable:
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                f"{c.home_team} - {c.away_team} is closed: picks stay as they were")
+
+    saved = removed = 0
+    for c in payload.picks:
+        old = db.scalars(select(UserPrediction).where(
+            UserPrediction.user_id == user.id, UserPrediction.season == code,
+            UserPrediction.home_team == c.home_team,
+            UserPrediction.away_team == c.away_team)).all()
+        if c.market is not None and len(old) == 1 and old[0].market == c.market:
+            continue  # unchanged: the original time of the pick is kept
+        for row in old:
+            db.delete(row)
+            removed += 1
+        if c.market is not None:
+            db.add(UserPrediction(
+                user_id=user.id, season=code,
+                matchday=records[(c.home_team, c.away_team)]["matchday"],
+                home_team=c.home_team, away_team=c.away_team, market=c.market))
+            saved += 1
+    db.flush()
+    return {"saved": saved, "removed": removed}
 
 
 @router.post("/predictions/{pick_id}/delete")

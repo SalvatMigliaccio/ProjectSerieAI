@@ -3404,3 +3404,104 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .aimc-panel__toggle { grid-template-columns: minmax(0, 1fr) auto; }
   .aimc-panel__sum { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* --- i miei pronostici: una scheda per partita, che si apre --------------- */
+.pron-card {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.pron-card.is-open { border-color: var(--line-strong); }
+.pron-card.is-fav { box-shadow: inset 3px 0 0 var(--mint); }
+.pron-card__head { margin: 0; font-size: inherit; font-weight: inherit; }
+.pron-card__toggle {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: var(--s4);
+  width: 100%; min-height: 64px; padding: var(--s3) var(--s5);
+  border: 0; border-radius: var(--radius); background: none;
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.pron-card__toggle:hover { background: var(--surface-2); }
+.pron-card__toggle:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; }
+.pron-card__teams { display: grid; gap: 4px; min-width: 0; }
+.pron-card__name { font-family: var(--display); font-weight: 600; font-size: 1.0625rem; }
+.pron-card__meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2);
+  color: var(--faint); font-size: 0.8125rem;
+}
+.pron-card__saved {
+  display: grid; gap: 2px; justify-items: end; text-align: right;
+  padding: 6px var(--s3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.pron-card__saved-key { color: var(--faint); font-size: 0.6875rem; letter-spacing: 0.04em; }
+.pron-card__saved-val { display: inline-flex; align-items: baseline; gap: var(--s2); font-weight: 600; font-size: 0.9375rem; }
+.pron-card__saved-p { font-family: var(--mono); font-weight: 500; font-size: 0.8125rem; color: var(--muted); }
+.pron-card__dirty {
+  padding: 2px var(--s2); border-radius: 999px; background: var(--warn-wash); color: var(--warn);
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+}
+.pron-card__chevron { color: var(--faint); display: inline-grid; transition: transform 160ms ease; }
+.pron-card.is-open .pron-card__chevron { transform: rotate(180deg); }
+.pron-card__body { padding: 0 var(--s5) var(--s5); border-top: 1px solid var(--line); }
+.pron-card__hint { margin: var(--s4) 0; color: var(--faint); font-size: 0.8125rem; max-width: none; }
+
+/* La barra di salvataggio: ferma in fondo allo schermo mentre si scorre le
+   schede, cosi' "Salva" e' sempre a portata. Sopra le schede in basso del
+   telefono, che stanno a 88px. */
+.pron-savebar {
+  position: sticky; bottom: var(--s4); z-index: 40;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s3);
+  margin-top: var(--s5); padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-2);
+  box-shadow: var(--shadow-3);
+}
+.pron-savebar__text { margin-right: auto; font-weight: 600; }
+.pron-savebar__ok {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600;
+}
+.pron-savebar__ok:empty { display: none; }
+@media (max-width: 1023px) {
+  .pron-savebar { bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 720px) {
+  .pron-card__toggle { grid-template-columns: minmax(0, 1fr) auto; padding-inline: var(--s4); }
+  .pron-card__saved { grid-column: 1 / 2; justify-items: start; text-align: left; }
+  .pron-card__dirty { grid-column: 1 / 2; justify-self: start; }
+  .pron-card__chevron { grid-row: 1; grid-column: 2; }
+  .pron-card__body { padding-inline: var(--s4); }
+}
+
+/* --- pronostici: tu contro il modello, e l'archivio ------------------------ */
+.pron-vs {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: var(--s5); padding: var(--s5);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface);
+}
+.pron-vs__side { display: grid; gap: 2px; }
+.pron-vs__side:last-child { text-align: right; }
+.pron-vs__value { font-family: var(--mono); font-size: 2.25rem; font-weight: 500; line-height: 1.1; }
+.pron-vs__sep {
+  color: var(--faint); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.pron-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pron-section__lead { margin: calc(var(--s2) * -1) 0 var(--s4); color: var(--muted); font-size: 0.875rem; max-width: none; }
+
+.pron-arch__toggle { grid-template-columns: minmax(0, 1fr) auto auto; }
+.pron-arch__score {
+  display: grid; gap: 2px; justify-items: end; text-align: right;
+  font-family: var(--mono); font-size: 0.875rem;
+}
+.pron-arch__who { font-family: var(--text); color: var(--faint); font-size: 0.75rem; margin-right: 4px; }
+.pron-arch__result { font-family: var(--mono); color: var(--muted); font-size: 0.8125rem; }
+.pron-arch__p { font-family: var(--mono); color: var(--faint); font-size: 0.8125rem; }
+.pron-esito { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8125rem; font-weight: 500; }
+.pron-esito.is-ok { color: var(--ok); }
+.pron-esito.is-ko { color: var(--ko); }
+
+@media (max-width: 720px) {
+  .pron-vs { grid-template-columns: minmax(0, 1fr); text-align: left; }
+  .pron-vs__side:last-child { text-align: left; }
+  .pron-vs__sep { justify-self: start; }
+  .pron-stats { grid-template-columns: minmax(0, 1fr); }
+  .pron-arch__toggle { grid-template-columns: minmax(0, 1fr) auto; }
+  .pron-arch__score { grid-column: 1 / 2; justify-items: start; text-align: left; }
+}

@@ -68,3 +68,17 @@ giocata non si ritira dopo il fischio. Si aggiunge un limite: si gioca solo la
 **prossima giornata**, non tutta la stagione — un pronostico fatto ad ottobre
 su una partita di maggio non e' confrontabile con un modello che quella
 partita la prezza la settimana stessa.
+
+## Aggiornamento, 23 ottobre 2026 — una giocata per partita, salvate insieme
+
+Il limite passa da dieci giocate per partita a **una**: con dieci si potevano
+coprire "over 2.5" e "under 2.5" sulla stessa partita ed essere sempre
+mezzi giusti, e il confronto con il modello perdeva senso. Cambiare idea prima
+del fischio **sostituisce** la giocata.
+
+Nuova rotta `POST /api/me/predictions/save`: le scelte di una giornata in una
+volta, **tutto o niente**. Ogni scelta si controlla prima che qualsiasi riga
+cambi — mercato esistente, partita aperta e nella prossima giornata — e una
+sola scelta non valida rifiuta l'intero salvataggio con 409, nominando la
+partita. Una giocata invariata non si riscrive, cosi' conserva l'orario in cui
+era stata fatta.

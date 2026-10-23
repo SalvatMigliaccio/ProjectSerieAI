@@ -52,6 +52,19 @@ export interface Pick {
   goals_home: number | null;
   goals_away: number | null;
   won: boolean | null;
+  /** La selezione del modello sulla stessa partita (la linea dichiarata). */
+  model_label: string | null;
+  model_won: boolean | null;
+}
+
+/** Una giornata dell'archivio: tu e il modello sulle stesse partite. */
+export interface RoundScore {
+  matchday: number;
+  picks: number;
+  resolved: number;
+  won: number;
+  model_resolved: number;
+  model_won: number;
 }
 
 export interface PicksSummary {
@@ -61,11 +74,16 @@ export interface PicksSummary {
   won: number;
   hit_rate: number | null;
   mean_model_probability: number | null;
+  /** Il modello sulle STESSE partite giocate dall'utente. */
+  model_resolved: number;
+  model_won: number;
+  model_hit_rate: number | null;
 }
 
 export interface MyPredictions {
   summary: PicksSummary;
   picks: Pick[];
+  rounds: RoundScore[];
 }
 
 export const me = {
@@ -78,6 +96,17 @@ export const me = {
     post<{ id: string }>(
       "/api/me/predictions",
       { season: code, home_team: home, away_team: away, market },
+      { renew: true },
+    ),
+  /** Una giocata per partita, salvate tutte insieme; market null la toglie.
+   *  Tutto o niente: se una partita e' chiusa, il server rifiuta tutto. */
+  savePicks: (
+    picks: { home_team: string; away_team: string; market: string | null }[],
+    code = season(),
+  ) =>
+    post<{ saved: number; removed: number }>(
+      "/api/me/predictions/save",
+      { season: code, picks },
       { renew: true },
     ),
   deletePick: (id: string) =>
