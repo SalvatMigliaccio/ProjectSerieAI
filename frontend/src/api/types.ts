@@ -351,3 +351,30 @@ export interface Fixture {
   goals_home: number | null;
   goals_away: number | null;
 }
+
+/** Il modello AI (M5) contro il classico (M1) sulle stesse partite giocate.
+ *  Diagnostica: il track record resta di M1. `difference` e' AI meno
+ *  classico, e l'RPS si minimizza: NEGATIVO vuol dire che l'AI ha fatto
+ *  meglio. L'intervallo e' nullo con meno di due giornate. */
+export interface MLTrackRecord {
+  season: string;
+  matches: number;
+  n_rounds: number;
+  rps_classic: number | null;
+  rps_ai: number | null;
+  difference: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  ai_better: number;
+  classic_better: number;
+  rounds: { matchday: number; matches: number; rps_classic: number; rps_ai: number }[];
+  per_match: {
+    matchday: number;
+    home_team: string;
+    away_team: string;
+    goals_home: number | null;
+    goals_away: number | null;
+    rps_classic: number;
+    rps_ai: number;
+  }[];
+}

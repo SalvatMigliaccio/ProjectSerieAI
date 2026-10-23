@@ -591,6 +591,46 @@
         }
       }
     },
+    "/api/ml-track-record/{season}": {
+      "get": {
+        "summary": "The AI model (M5) against the classic one (M1), played matches only",
+        "description": "How the second opinion is doing, scored like the first.\n\nPublic like the rest of the history: it is built only from played matches,\nand the price of a match that has not kicked off is not in it.",
+        "operationId": "get_ml_track_record_api_ml_track_record__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MLTrackRecord"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/fixtures/{season}": {
       "get": {
         "summary": "The calendar: every match of a season or round, predicted or not",
@@ -2036,6 +2076,63 @@
         ],
         "title": "MLMatch"
       },
+      "MLMatchScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "rps_classic": {
+            "type": "number",
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "type": "number",
+            "title": "Rps Ai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "home_team",
+          "away_team",
+          "goals_home",
+          "goals_away",
+          "rps_classic",
+          "rps_ai"
+        ],
+        "title": "MLMatchScore"
+      },
       "MLRound": {
         "properties": {
           "season": {
@@ -2079,6 +2176,144 @@
         ],
         "title": "MLRound",
         "description": "M5 on a matchday. DIAGNOSTICS, not the production model.\n\nOn the test set M5 is indistinguishable from the market, so the track\nrecord stays on M1. Nothing here feeds a metric."
+      },
+      "MLRoundScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "rps_classic": {
+            "type": "number",
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "type": "number",
+            "title": "Rps Ai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "matches",
+          "rps_classic",
+          "rps_ai"
+        ],
+        "title": "MLRoundScore"
+      },
+      "MLTrackRecord": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "n_rounds": {
+            "type": "integer",
+            "title": "N Rounds"
+          },
+          "rps_classic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Ai"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Low"
+          },
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          },
+          "ai_better": {
+            "type": "integer",
+            "title": "Ai Better"
+          },
+          "classic_better": {
+            "type": "integer",
+            "title": "Classic Better"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/MLRoundScore"
+            },
+            "type": "array",
+            "title": "Rounds"
+          },
+          "per_match": {
+            "items": {
+              "$ref": "#/components/schemas/MLMatchScore"
+            },
+            "type": "array",
+            "title": "Per Match"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches",
+          "n_rounds",
+          "rps_classic",
+          "rps_ai",
+          "difference",
+          "ci_low",
+          "ci_high",
+          "ai_better",
+          "classic_better",
+          "rounds",
+          "per_match"
+        ],
+        "title": "MLTrackRecord",
+        "description": "The AI model (M5) against the classic one (M1), on the same played matches.\n\nDiagnostics, not the track record: the production model stays M1.\n`difference` is AI minus classic, and RPS is minimised, so NEGATIVE means\nthe AI did better. `ci_low`/`ci_high` are the paired bootstrap interval\nclustered on the matchday; null with fewer than two rounds."
       },
       "MarketOption": {
         "properties": {

@@ -476,3 +476,44 @@ class Fixture(Base):
     predicted: bool
     goals_home: int | None = None
     goals_away: int | None = None
+
+
+class MLRoundScore(Base):
+    matchday: int
+    matches: int
+    rps_classic: float
+    rps_ai: float
+
+
+class MLMatchScore(Base):
+    matchday: int
+    home_team: str
+    away_team: str
+    goals_home: int | None
+    goals_away: int | None
+    rps_classic: float
+    rps_ai: float
+
+
+class MLTrackRecord(Base):
+    """
+    The AI model (M5) against the classic one (M1), on the same played matches.
+
+    Diagnostics, not the track record: the production model stays M1.
+    `difference` is AI minus classic, and RPS is minimised, so NEGATIVE means
+    the AI did better. `ci_low`/`ci_high` are the paired bootstrap interval
+    clustered on the matchday; null with fewer than two rounds.
+    """
+
+    season: str
+    matches: int
+    n_rounds: int
+    rps_classic: float | None
+    rps_ai: float | None
+    difference: float | None
+    ci_low: float | None
+    ci_high: float | None
+    ai_better: int
+    classic_better: int
+    rounds: list[MLRoundScore]
+    per_match: list[MLMatchScore]

@@ -345,6 +345,19 @@ def get_ml_round(season: str, matchday: int, user: Viewer = None) -> dict:
     return payload
 
 
+@public.get("/ml-track-record/{season}", response_model=schemas.MLTrackRecord,
+            summary="The AI model (M5) against the classic one (M1), played matches only")
+def get_ml_track_record(season: str) -> dict:
+    """
+    How the second opinion is doing, scored like the first.
+
+    Public like the rest of the history: it is built only from played matches,
+    and the price of a match that has not kicked off is not in it.
+    """
+    _known_season(season)
+    return ml_mod.track_record(season)
+
+
 @public.get("/fixtures/{season}", response_model=list[schemas.Fixture],
             summary="The calendar: every match of a season or round, predicted or not")
 def get_fixtures(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> list[dict]:

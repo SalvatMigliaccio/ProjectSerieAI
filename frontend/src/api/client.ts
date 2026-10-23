@@ -15,6 +15,7 @@ import type {
   Match,
   MLMatch,
   MLRound,
+  MLTrackRecord,
   Picks,
   Round,
   SeasonSummary,
@@ -302,6 +303,8 @@ export const api = {
     getOrNull<Match[]>(`/api/rounds/${code}/${matchday}`),
   trackRecord: (code = season()) => get<TrackRecord>(`/api/track-record/${code}`),
   standings: (code = season()) => get<Standings>(`/api/standings/${code}`),
+  /** Il modello AI contro il classico, sulle partite giocate. */
+  mlTrackRecord: (code = season()) => get<MLTrackRecord>(`/api/ml-track-record/${code}`),
   /** Il calendario di una giornata: le partite prima ancora delle quote. */
   fixtures: (matchday: number, code = season()) =>
     get<Fixture[]>(`/api/fixtures/${code}?matchday=${matchday}`),

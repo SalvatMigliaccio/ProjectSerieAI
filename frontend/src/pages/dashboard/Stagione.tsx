@@ -10,6 +10,8 @@
 
 import { api } from "../../api/client";
 import type { SeasonSummary, TrackRecord } from "../../api/types";
+import { AiExplainer } from "../../components/AiExplainer";
+import { AiTrackRecord } from "../../components/AiTrackRecord";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { Eyebrow } from "../../components/Layout";
 import { ScreenHeader } from "../../components/ScreenHeader";
@@ -32,7 +34,7 @@ export function Stagione() {
     <>
       <ScreenHeader
         title="Stagione"
-        subtitle="La classifica, e quanto ha sbagliato il modello giornata per giornata"
+        subtitle="La classifica, quanto ha sbagliato il modello giornata per giornata, e come se la cava il modello AI"
       />
 
       <div className="dash-bottom">
@@ -61,6 +63,16 @@ export function Stagione() {
             </ErrorBoundary>
           )}
         </div>
+      </div>
+
+      {/* LA SECONDA OPINIONE, MISURATA COME LA PRIMA: sotto il track record
+          ufficiale e non al suo posto, perche' il modello di produzione resta
+          il classico. */}
+      <div className="aitr-layout">
+        <ErrorBoundary label="modello AI" fallback={<p className="state">Confronto non disponibile.</p>}>
+          <AiTrackRecord />
+        </ErrorBoundary>
+        <AiExplainer />
       </div>
     </>
   );

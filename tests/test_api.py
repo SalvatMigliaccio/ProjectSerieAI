@@ -901,3 +901,22 @@ def test_fixtures_are_the_calendar_not_the_track_record() -> None:
         "the calendar carries no model output"
     whole = client.get(f"/api/fixtures/{SEASON}").json()
     assert len(whole) == 380
+
+
+def test_ml_track_record_scores_m1_like_the_track_record() -> None:
+    """
+    The classic model's RPS here must BE the archived one, round by round.
+
+    If it is not, the comparison with the AI is not on the same scale and
+    the page would be comparing two different things under one name.
+    """
+    tr = client.get(f"/api/ml-track-record/{SEASON}").json()
+    archived = {r["matchday"]: r["rps"] for r in client.get(f"/api/rounds/{SEASON}").json()
+                if r["closed"] and r["rps"] is not None}
+    for rnd in tr["rounds"]:
+        if rnd["matchday"] in archived and rnd["matches"] == 10:
+            assert abs(rnd["rps_classic"] - archived[rnd["matchday"]]) < 1e-6, rnd["matchday"]
+    assert tr["matches"] == len(tr["per_match"])
+    assert tr["ai_better"] + tr["classic_better"] <= tr["matches"]
+    if tr["n_rounds"] > 1:
+        assert tr["ci_low"] <= tr["difference"] <= tr["ci_high"]
