@@ -263,6 +263,10 @@ class Snapshot:
     kickoffs: dict              # (season, home, away) -> UTC Timestamp
     updated_at: str | None      # newest mtime among track record files
     results: dict               # (season, home, away) -> result row, unarchived matches
+    # The whole calendar, predicted or not: (season, matchday, home, away,
+    # kickoff). Defaulted so a test building a Snapshot by hand can leave it
+    # out; the track record views never read it.
+    calendar: tuple = ()
 
 
 def _read_predictions(src: Sources) -> pd.DataFrame:
@@ -329,7 +333,7 @@ def _read_summary(src: Sources) -> pd.DataFrame:
     return df
 
 
-def _read_kickoffs(src: Sources) -> dict:
+def _read_calendar(src: Sources) -> tuple:
     """
     Kickoff times, from the calendar, via `predict.kickoff`.
 
@@ -337,24 +341,26 @@ def _read_kickoffs(src: Sources) -> dict:
     and reading it as UTC shifts kickoff two hours forward in summer. That bug
     already put two rows in the track record written after the match started.
 
+    ONE READ, TWO USES. The kickoff map the records need, and the calendar
+    itself — the matches of a round before anything is predicted, which is
+    what lets users pick a round as soon as the previous one closes.
+
     If the calendar is missing the API still works — `kickoff_utc` comes back
     null, which is the honest answer, not an error.
     """
     if not src.schedule.exists():
         log.warning("no schedule at %s: kickoff_utc will be null", src.schedule)
-        return {}
+        return ()
     try:
         from goalmodel.prediction.rounds import calendario
 
         sched = calendario()
     except Exception as exc:
         log.warning("calendar unavailable (%s): kickoff_utc will be null", exc)
-        return {}
+        return ()
 
-    out = {}
-    for row in sched.itertuples(index=False):
-        out[(str(row.season), row.home_team, row.away_team)] = row.kickoff
-    return out
+    return tuple((str(row.season), int(row.matchday), row.home_team, row.away_team, row.kickoff)
+                 for row in sched.itertuples(index=False))
 
 
 @lru_cache(maxsize=2)
@@ -432,7 +438,8 @@ def _load(fingerprint: tuple, src: Sources) -> Snapshot:
     predictions = _read_predictions(src)
     closed = _read_closed(src)
     summary = _read_summary(src)
-    kickoffs = _read_kickoffs(src)
+    calendar = _read_calendar(src)
+    kickoffs = {(season, home, away): kickoff for season, _, home, away, kickoff in calendar}
     results = _read_results(src)
 
     mtimes = [m for _, m, _ in
@@ -442,7 +449,7 @@ def _load(fingerprint: tuple, src: Sources) -> Snapshot:
               if m is not None]
     updated = (_iso(pd.Timestamp(max(mtimes), unit="ns", tz="UTC"))
                if mtimes else None)
-    return Snapshot(predictions, closed, summary, kickoffs, updated, results)
+    return Snapshot(predictions, closed, summary, kickoffs, updated, results, calendar)
 
 
 def load(src: Sources | None = None) -> Snapshot:
@@ -466,6 +473,44 @@ def _round_states(fingerprint: tuple, season: str) -> pd.DataFrame:
     except Exception as exc:
         log.warning("round states unavailable for %s: %s", season, exc)
         return pd.DataFrame()
+
+
+def fixtures(season: str, matchday: int | None = None,
+             src: Sources | None = None) -> list[dict]:
+    """
+    The calendar of a season, each match with what the track record knows.
+
+    NOT A TRACK RECORD VIEW, and kept apart from `matches` on purpose. A match
+    that has not been predicted does not exist in the track record (see the
+    statuses above), and mixing it into those views would put unpredicted
+    rows into every count and metric. Here it exists as a fixture: who plays,
+    when, whether the model has priced it yet, and the score once played.
+    That is what a round looks like between the close of the previous one and
+    Friday's odds.
+    """
+    snap = load(src)
+    code = season_in(season)
+    recorded = {(r["home_team"], r["away_team"]): r for r in _all_records(season, snap)}
+    out = []
+    for c_season, c_day, home, away, kickoff in snap.calendar:
+        if c_season != code or (matchday is not None and c_day != int(matchday)):
+            continue
+        rec = recorded.get((home, away))
+        result = snap.results.get((code, home, away)) or {}
+        gh = rec["goals_home"] if rec else _opt_int(result.get("FTHG"))
+        ga = rec["goals_away"] if rec else _opt_int(result.get("FTAG"))
+        out.append({
+            "season": season_out(code),
+            "matchday": c_day,
+            "home_team": home,
+            "away_team": away,
+            "kickoff_utc": _iso(kickoff),
+            "predicted": rec is not None,
+            "goals_home": gh,
+            "goals_away": ga,
+        })
+    out.sort(key=lambda f: (f["kickoff_utc"] or "", f["home_team"]))
+    return out
 
 
 def round_states(season: str, src: Sources | None = None) -> pd.DataFrame:

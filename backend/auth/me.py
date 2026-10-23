@@ -110,10 +110,61 @@ def _season_code(season: str) -> str:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown season '{season}'") from exc
 
 
+def _outcome(gh: int | None, ga: int | None) -> str | None:
+    if gh is None or ga is None:
+        return None
+    return "H" if gh > ga else "A" if ga > gh else "D"
+
+
 def _records(code: str) -> dict[tuple[str, str], dict]:
-    """Every match of the season in the track record, by (home, away)."""
+    """
+    Every match of the season, by (home, away): the calendar, and over it what
+    the track record knows.
+
+    THE CALENDAR FIRST, so a round exists as soon as the league has published
+    it — not only once Friday's odds are in and the model has priced it. A
+    match the model has not priced yet has no goal expectations (`lambda_*`
+    null): it can be picked, and its probabilities appear the day the model
+    writes them, recomputed for the picks already made.
+    """
     from backend.api import store
-    return {(r["home_team"], r["away_team"]): r for r in store.matches(code)}
+
+    out: dict[tuple[str, str], dict] = {}
+    for f in store.fixtures(code):
+        out[(f["home_team"], f["away_team"])] = {
+            **f, "lambda_home": None, "lambda_away": None,
+            "actual_outcome": _outcome(f["goals_home"], f["goals_away"]),
+        }
+    for r in store.matches(code):
+        key = (r["home_team"], r["away_team"])
+        out[key] = {**out.get(key, {}), **r}
+    return out
+
+
+def _pickable(records: dict[tuple[str, str], dict], at: dt.datetime) -> set[tuple[str, str]]:
+    """
+    The matches a user may pick now: not started, and in the NEXT ROUND.
+
+    The next round is the lowest matchday that still has most of its matches
+    ahead: a single postponed match of an old round must not make that round
+    "next" and hide the real one. Matches the model has already priced stay
+    pickable whatever their round — a postponed match with odds is a match
+    like any other.
+
+    Not the whole season ahead: a pick made in October on a match in May would
+    be a guess about a team that does not exist yet, and the comparison with
+    the model — priced the week of the match — would be meaningless.
+    """
+    upcoming = [r for r in records.values() if _is_open(r, at)]
+    if not upcoming:
+        return set()
+    per_round: dict[int, int] = {}
+    for r in upcoming:
+        per_round[r["matchday"]] = per_round.get(r["matchday"], 0) + 1
+    full = [d for d, n in per_round.items() if n >= 5]
+    next_round = min(full) if full else min(per_round)
+    return {(r["home_team"], r["away_team"]) for r in upcoming
+            if r["matchday"] == next_round or r.get("lambda_home") is not None}
 
 
 def _is_open(record: dict, at: dt.datetime) -> bool:
@@ -158,7 +209,10 @@ def set_preferences(payload: Preferences, request: Request, user: CurrentUser) -
 
         from goalmodel import config
 
-        teams = {name for r in store.matches(config.CURRENT_SEASON)
+        # The calendar, not the track record: all twenty teams are in it from
+        # the first matchday, predicted or not.
+        teams = {name for r in [*store.fixtures(config.CURRENT_SEASON),
+                                *store.matches(config.CURRENT_SEASON)]
                  for name in (r["home_team"], r["away_team"])}
         if team not in teams:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -173,21 +227,27 @@ class MarketOption(BaseModel):
     market: str
     label: str
     group: str
-    probability: float
+    # Null until the model has priced the match (Friday's odds).
+    probability: float | None
     fair_odds: float | None
     picked: bool
 
 
 class OpenMatch(BaseModel):
-    """A match that can still be picked, with the model's price on every market."""
+    """
+    A match that can still be picked, with the model's price on every market
+    once the model has one. `priced` is false between the close of the
+    previous round and Friday's odds: the match is open, its numbers are not.
+    """
 
     season: str
     matchday: int
     home_team: str
     away_team: str
     kickoff_utc: str
-    lambda_home: float
-    lambda_away: float
+    priced: bool
+    lambda_home: float | None
+    lambda_away: float | None
     markets: list[MarketOption]
 
 
@@ -255,7 +315,8 @@ def _group(market: str) -> str:
             dependencies=[Depends(require_permission("picks:read"))])
 def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
     """
-    Matches not kicked off yet, with the model's price on every market.
+    Matches not kicked off yet in the next round, with the model's price on
+    every market where it exists.
 
     Behind `picks:read`, like the unplayed rounds on the dashboard: the price
     of a match that has not started is the product, here as there.
@@ -265,17 +326,18 @@ def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
     mine = {(p.home_team, p.away_team, p.market) for p in db.scalars(
         select(UserPrediction).where(UserPrediction.user_id == user.id,
                                      UserPrediction.season == code))}
+    records = _records(code)
     out = []
-    for (home, away), r in _records(code).items():
-        if not _is_open(r, at) or r["lambda_home"] is None or r["lambda_away"] is None:
-            continue
-        probs = _probabilities(r["lambda_home"], r["lambda_away"])
+    for home, away in _pickable(records, at):
+        r = records[(home, away)]
+        priced = r.get("lambda_home") is not None and r.get("lambda_away") is not None
+        probs = _probabilities(r["lambda_home"], r["lambda_away"]) if priced else {}
         out.append(OpenMatch(
             season=r["season"], matchday=r["matchday"], home_team=home, away_team=away,
-            kickoff_utc=r["kickoff_utc"], lambda_home=r["lambda_home"],
-            lambda_away=r["lambda_away"],
+            kickoff_utc=r["kickoff_utc"], priced=priced,
+            lambda_home=r.get("lambda_home"), lambda_away=r.get("lambda_away"),
             markets=[MarketOption(market=m, label=_label(m), group=_group(m),
-                                  probability=probs[m], fair_odds=_fair(probs[m]),
+                                  probability=probs.get(m), fair_odds=_fair(probs.get(m)),
                                   picked=(home, away, m) in mine)
                      for m in markets()],
         ))
@@ -298,6 +360,8 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
     for p in rows:
         r = records.get((p.home_team, p.away_team), {})
         lam_h, lam_a = r.get("lambda_home"), r.get("lambda_away")
+        # Recomputed every time: a pick made before Friday gets the model's
+        # probability as soon as the model writes one.
         prob = (_probabilities(lam_h, lam_a)[p.market]
                 if lam_h is not None and lam_a is not None else None)
         gh, ga = r.get("goals_home"), r.get("goals_away")
@@ -332,21 +396,28 @@ def add_prediction(payload: NewPick, request: Request, user: CurrentUser, db: Db
     """
     Record one pick. 409 once the match has started, or if it is already there.
 
-    The kickoff is read from the match files, here, now. The request carries no
+    The kickoff is read from the calendar, here, now. The request carries no
     time at all, so there is nothing a client can send to make a late pick
-    look early.
+    look early. The model need not have priced the match yet: picks open with
+    the round, not with the odds.
     """
     _limit(request, user.id)
     code = _season_code(payload.season)
     if payload.market not in markets():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             f"unknown market '{payload.market}'")
-    record = _records(code).get((payload.home_team, payload.away_team))
-    if record is None or record["lambda_home"] is None:
+    records = _records(code)
+    key = (payload.home_team, payload.away_team)
+    record = records.get(key)
+    if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "match not found")
-    if not _is_open(record, now()):
+    at = now()
+    if not _is_open(record, at):
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "the match has started: picks are closed")
+    if key not in _pickable(records, at):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "picks open with the round: this match is not in the next one")
 
     count = len(db.scalars(select(UserPrediction.id).where(
         UserPrediction.user_id == user.id, UserPrediction.season == code,

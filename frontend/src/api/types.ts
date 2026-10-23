@@ -337,3 +337,17 @@ export interface MLRound {
   written_at: string | null;
   matches: MLMatch[];
 }
+
+/** Una partita del calendario, prevista o no. Niente probabilita': e' il
+ *  calendario, non il track record. */
+export interface Fixture {
+  season: string;
+  matchday: number;
+  home_team: string;
+  away_team: string;
+  kickoff_utc: string | null;
+  /** Il modello l'ha gia' prezzata (escono le quote del venerdi'). */
+  predicted: boolean;
+  goals_home: number | null;
+  goals_away: number | null;
+}

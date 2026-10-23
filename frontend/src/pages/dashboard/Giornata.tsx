@@ -4,9 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { useFavorite } from "../../auth/Favorite";
-import type { Match, Round, Selection } from "../../api/types";
+import type { Fixture, Match, Round, Selection } from "../../api/types";
 import { AsideSelections } from "../../components/AsideSelections";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { FixturesList } from "../../components/FixturesList";
 import { Eyebrow } from "../../components/Layout";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { MERCATI, MatchesGrid, chiave, type Market, type SortBy } from "../../components/MatchesGrid";
@@ -33,25 +34,6 @@ function giorno(iso: string | null): string {
   return Number.isNaN(date.getTime())
     ? ""
     : date.toLocaleDateString("it-IT", { weekday: "short", day: "2-digit", month: "2-digit" });
-}
-
-/**
- * Una giornata si apre solo se ha almeno una previsione registrata.
- *
- * Le altre portavano a una pagina vuota con "nessuna previsione registrata":
- * un clic che non poteva dare niente. Restano visibili — il calendario intero
- * dice dove siamo nella stagione — ma non si premono, e il suggerimento dice
- * perche'. Un link diretto (`?g=1`) continua a funzionare e mostra il motivo.
- */
-function haPrevisioni(round: Round): boolean {
-  return (round.matches_predicted ?? 0) > 0;
-}
-
-function perche_non_disponibile(round: Round): string {
-  if (round.status === "future" || round.status === "open") {
-    return `Giornata ${round.matchday}: le previsioni escono quando il mercato pubblica le quote, di solito il venerdì`;
-  }
-  return `Giornata ${round.matchday}: giocata prima che il registro delle previsioni esistesse`;
 }
 
 /**
@@ -108,12 +90,11 @@ export function Giornata() {
   useEffect(() => {
     if (selected !== null || !rounds.data) return;
     const list = rounds.data;
-    const corrente = list.find((r) => r.matchday === status.data?.current_round);
-    const conPrevisioni = list.filter((r) => (r.matches_predicted ?? 0) > 0);
-    const iniziale =
-      corrente && (corrente.matches_predicted ?? 0) > 0
-        ? corrente
-        : (conPrevisioni.at(-1) ?? corrente ?? list[0]);
+    // LA PROSSIMA DA GIOCARE, prevista o no: chiusa la 7, si apre sulla 8 anche
+    // prima delle quote, perche' e' li' che si fanno i pronostici. A stagione
+    // finita, l'ultima.
+    const prossima = list.find((r) => !r.closed && r.status !== "played");
+    const iniziale = prossima ?? list.at(-1);
     if (iniziale) setSelected(iniziale.matchday);
   }, [rounds.data, status.data, selected]);
 
@@ -121,6 +102,11 @@ export function Giornata() {
     () => (selected === null ? Promise.resolve(null) : api.roundMatches(selected)),
     [selected],
   );
+  const calendario = useApi<Fixture[]>(
+    () => (selected === null ? Promise.resolve([]) : api.fixtures(selected)),
+    [selected],
+  );
+  const senzaPrevisione = (calendario.data ?? []).filter((f) => !f.predicted);
 
   // Una sola chiamata per la banda: la stessa risposta accende la griglia e
   // riempie la scheda laterale.
@@ -222,25 +208,24 @@ export function Giornata() {
             ‹
           </button>
           <div className="round-strip__track" ref={track}>
-            {(rounds.data ?? []).map((r) => {
-              const disponibile = haPrevisioni(r);
-              return (
+            {/* OGNI GIORNATA SI APRE. Prima solo quelle con una previsione:
+                le altre erano un clic che non dava niente. Ora una giornata
+                senza previsioni mostra il suo calendario — chi gioca, quando,
+                e che i pronostici sono aperti — che e' esattamente cio' che
+                serve fra la chiusura della precedente e le quote. */}
+            {(rounds.data ?? []).map((r) => (
                 <button
                   key={r.matchday}
                   type="button"
                   className={`round-chip${r.closed ? " round-chip--closed" : ""}`}
                   aria-pressed={r.matchday === selected}
-                  aria-disabled={!disponibile || undefined}
-                  onClick={() => { if (disponibile) setSelected(r.matchday); }}
-                  title={disponibile
-                    ? (r.status ? (ROUND_LABELS[r.status] ?? r.status) : "")
-                    : perche_non_disponibile(r)}
+                  onClick={() => setSelected(r.matchday)}
+                  title={r.status ? (ROUND_LABELS[r.status] ?? r.status) : ""}
                 >
                   <strong>{r.matchday}</strong>
                   <span>Giornata</span>
                 </button>
-              );
-            })}
+            ))}
           </div>
           <button
             type="button"
@@ -284,11 +269,13 @@ export function Giornata() {
               <ErrorState error={matches.error} what="Non riesco a caricare le partite." />
             )}
             {!matches.loading && !matches.error && matches.data === null && selected !== null && (
-              <EmptyState>
-                Nessuna previsione registrata per la giornata {selected}. Le quote
-                di apertura escono il venerdì: fino ad allora non c'è niente da
-                prevedere.
-              </EmptyState>
+              calendario.data && calendario.data.length > 0 ? (
+                <FixturesList fixtures={calendario.data} favorite={preferita} />
+              ) : (
+                !calendario.loading && (
+                  <EmptyState>Nessuna partita in calendario per la giornata {selected}.</EmptyState>
+                )
+              )
             )}
             {matches.data && matches.data.length > 0 && (
               <ErrorBoundary
@@ -304,6 +291,14 @@ export function Giornata() {
                   favorite={preferita}
                 />
               </ErrorBoundary>
+            )}
+
+            {matches.data && matches.data.length > 0 && senzaPrevisione.length > 0 && (
+              <FixturesList
+                fixtures={senzaPrevisione}
+                favorite={preferita}
+                title="Ancora senza quote"
+              />
             )}
 
             {/* ANALISI DEL MODELLO: le selezioni della giornata, con il
