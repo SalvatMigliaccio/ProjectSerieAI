@@ -20,6 +20,7 @@ tier is added. Roles are how permissions are granted, not what is checked.
 from __future__ import annotations
 
 import ipaddress
+import os
 from collections.abc import Callable
 from typing import Annotated
 
@@ -65,8 +66,25 @@ def client_ip(request: Request) -> str | None:
     addresses in `FORWARDED_ALLOW_IPS` — set in `compose.prod.yaml` to the
     Caddy container and nothing else. So `request.client.host` here is the real
     caller behind a configured proxy, and the raw socket peer everywhere else,
-    with no branch in this file.
+    with no branch in this file — except the one below.
+
+    ON VERCEL THE PROXY IS THE PLATFORM, and there is no uvicorn in front to
+    rewrite the address: `request.client.host` is Vercel's own infrastructure,
+    the same for every caller. The rate limiter would then put the whole
+    internet in one bucket and the audit log would record one address for
+    everyone. There, and ONLY there (`VERCEL`, set by the platform, not by
+    anyone sending a request), the address comes from `x-real-ip`, which
+    Vercel's edge sets itself on every request; the first entry of
+    `x-forwarded-for` is the fallback. Off Vercel both headers stay ignored,
+    exactly as before: any client can send them.
     """
+    if os.environ.get("VERCEL"):
+        forwarded = (request.headers.get("x-real-ip")
+                     or request.headers.get("x-forwarded-for", "").split(",")[0])
+        try:
+            return str(ipaddress.ip_address(forwarded.strip()))
+        except ValueError:
+            pass
     if request.client is None:
         return None
     try:

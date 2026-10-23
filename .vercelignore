@@ -1,0 +1,45 @@
+# What `vercel deploy` uploads. AN ALLOWLIST, NOT A DENYLIST.
+#
+# The Vercel CLI does NOT read .gitignore: without this file it would upload
+# everything, `.env` with the secret key included. Listing what may go is the
+# only form where forgetting a line fails safe — a missing entry breaks the
+# build, it does not publish a secret.
+#
+# data/ and experiments/output/ ARE uploaded on purpose, although git ignores
+# them: the API reads them, and the deploy runs from the machine where the
+# pipeline wrote them (docs/DEPLOY.md, "Vercel").
+
+/*
+!backend
+!src
+!frontend
+!data
+!experiments
+!track_record
+!manual
+!logs
+!pyproject.toml
+!README.md
+!requirements.txt
+!vercel.json
+
+# Inside what is allowed, what still stays home.
+**/__pycache__
+**/*.pyc
+*.egg-info
+frontend/node_modules
+frontend/dist
+frontend/.env*
+backend/auth/migrations
+track_record/*.bak
+track_record/predictions_backfill.csv
+track_record/report.html
+data/processed/reports
+# The experiments: only the M5 predictions the API serves, not the rest.
+experiments/*
+!experiments/output
+experiments/output/*
+!experiments/output/previsioni_m5_*.csv
+# Logs: only the scheduler state /api/status reads.
+logs/*
+!logs/last_run.json

@@ -28,7 +28,15 @@ from pathlib import Path
 #
 # `AI_NAPLES_ROOT` rimedia, e non cambia niente per chi lavora dal repository:
 # se la variabile non c'e', il calcolo resta quello di prima.
-ROOT = Path(os.environ.get("AI_NAPLES_ROOT") or Path(__file__).resolve().parents[2])
+# SU VERCEL il pacchetto e' installato fra le librerie, come nell'immagine
+# Docker, ma li' nessuno imposta `AI_NAPLES_ROOT`: la cartella di lavoro di una
+# funzione Vercel e' la radice del progetto caricato (documentato), ed e'
+# quella che si usa. La variabile `VERCEL` la imposta la piattaforma; fuori da
+# Vercel questo ramo non esiste.
+ROOT = Path(
+    os.environ.get("AI_NAPLES_ROOT")
+    or (Path.cwd() if os.environ.get("VERCEL") else Path(__file__).resolve().parents[2])
+)
 
 DATA = ROOT / "data"
 RAW = DATA / "raw"

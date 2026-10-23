@@ -207,3 +207,38 @@ def test_the_cleartext_is_not_recoverable_from_the_hash() -> None:
     """Trivial, but it is the invariant the whole scheme rests on."""
     clear, h = tokens.generate()
     assert clear not in h
+
+
+# --- the caller's address on Vercel ---------------------------------------------
+
+def _request(client_host: str, headers: dict[str, str]):
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http", "method": "GET", "path": "/", "query_string": b"",
+        "client": (client_host, 1234),
+        "headers": [(k.lower().encode(), v.encode()) for k, v in headers.items()],
+    }
+    return Request(scope)
+
+
+def test_off_vercel_the_forwarding_headers_are_ignored(monkeypatch) -> None:
+    """Anyone can send x-real-ip: believing it here would let a client pick its bucket."""
+    from backend.auth.deps import client_ip
+
+    monkeypatch.delenv("VERCEL", raising=False)
+    req = _request("203.0.113.7", {"x-real-ip": "198.51.100.1",
+                                   "x-forwarded-for": "198.51.100.2"})
+    assert client_ip(req) == "203.0.113.7"
+
+
+def test_on_vercel_the_platform_header_is_the_caller(monkeypatch) -> None:
+    """Otherwise every caller is Vercel's own address: one shared rate-limit bucket."""
+    from backend.auth.deps import client_ip
+
+    monkeypatch.setenv("VERCEL", "1")
+    assert client_ip(_request("10.0.0.1", {"x-real-ip": "198.51.100.1"})) == "198.51.100.1"
+    assert client_ip(_request("10.0.0.1", {"x-forwarded-for": "198.51.100.2, 10.0.0.9"})) \
+        == "198.51.100.2"
+    assert client_ip(_request("10.0.0.1", {"x-real-ip": "not-an-ip"})) == "10.0.0.1", \
+        "a header that is not an address falls back, it does not become the key"

@@ -1,0 +1,10 @@
+# FOR VERCEL ONLY: what the `api` service installs (vercel.json).
+#
+# The API needs the project plus two optional groups of pyproject.toml, `api`
+# (FastAPI, uvicorn) and `auth` (Postgres, argon2, JWT). Vercel reads
+# requirements.txt but documents no way to ask pyproject for extras, so the
+# line below installs the project with both — the same thing
+# backend/Dockerfile does with `pip install ".[api,auth]"`.
+#
+# Development and CI do NOT use this file: they install from requirements.lock.
+.[api,auth]
