@@ -13,5 +13,5 @@ REM
 REM Idempotent: the saved file is merged, not overwritten, and on equal matches
 REM the older row wins — so a Saturday run cannot erase Friday's prediction for
 REM a match already played.
-"%~dp0run_task.cmd" predict_m5
+call "%~dp0run_task.cmd" predict_m5
 exit /b %ERRORLEVEL%
