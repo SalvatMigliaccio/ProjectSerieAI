@@ -3505,3 +3505,19 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .pron-arch__toggle { grid-template-columns: minmax(0, 1fr) auto; }
   .pron-arch__score { grid-column: 1 / 2; justify-items: start; text-align: left; }
 }
+
+/* L'elenco delle partite dentro una giornata dell'archivio: le stesse schede
+   di "Da giocare", ferme (non si aprono), una sotto l'altra. */
+.pron-arch__list { list-style: none; margin: var(--s4) 0 0; padding: 0; display: grid; gap: 6px; }
+.pron-arch__item {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, auto) minmax(10rem, auto);
+  align-items: center; gap: var(--s4);
+  min-height: 64px; padding: var(--s3) var(--s4);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2);
+}
+.pron-arch__item .pron-card__saved { min-width: 0; }
+.pron-arch__model { background: transparent; border-style: dashed; }
+@media (max-width: 720px) {
+  .pron-arch__item { grid-template-columns: minmax(0, 1fr); }
+  .pron-arch__item .pron-card__saved { justify-items: start; text-align: left; }
+}

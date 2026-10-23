@@ -249,6 +249,65 @@ function Esito({ won }: { won: boolean | null }) {
 }
 
 /**
+ * Una partita dell'archivio, con l'aspetto delle schede di "Da giocare":
+ * squadre e orario (o il risultato), il tuo pronostico in anteprima e, sulla
+ * stessa partita, la selezione del modello. Ognuno con il suo esito, in
+ * parole e icona, non solo colore.
+ */
+function ArchivioPartita({
+  p,
+  inCorso,
+  onRitira,
+}: {
+  p: Pick;
+  inCorso: string | null;
+  onRitira: (pick: Pick) => void;
+}) {
+  const giocata = p.goals_home !== null && p.goals_away !== null;
+  return (
+    <li className="pron-arch__item">
+      <span className="pron-card__teams">
+        <span className="pron-card__name">
+          {p.home_team} <span className="faint">–</span> {p.away_team}
+        </span>
+        <span className="pron-card__meta">
+          {giocata ? (
+            <>Finita <span className="pron-arch__result">{score(p.goals_home, p.goals_away)}</span></>
+          ) : (
+            <>{localTime(p.kickoff_utc)}{p.locked ? " · in corso" : ""}</>
+          )}
+        </span>
+      </span>
+
+      <span className="pron-card__saved">
+        <span className="pron-card__saved-key">Il tuo pronostico</span>
+        <span className="pron-card__saved-val">
+          {etichetta(p.market, p.home_team, p.away_team)}
+          {p.model_probability !== null && (
+            <span className="pron-card__saved-p">{prob(p.model_probability)}</span>
+          )}
+        </span>
+        {p.won !== null ? (
+          <Esito won={p.won} />
+        ) : !p.locked ? (
+          <button type="button" className="link-button pron-ritira"
+            onClick={() => onRitira(p)} disabled={inCorso === p.id}
+            aria-label={`Ritira la giocata su ${p.home_team} – ${p.away_team}`}>
+            Ritira
+          </button>
+        ) : null}
+      </span>
+
+      <span className="pron-card__saved pron-arch__model">
+        <span className="pron-card__saved-key">Il modello</span>
+        <span className="pron-card__saved-val">{p.model_label ?? <span className="faint">–</span>}</span>
+        {p.model_won !== null && <Esito won={p.model_won} />}
+      </span>
+    </li>
+  );
+}
+
+/**
  * L'archivio: una scheda per giornata, chiusa, con tu contro il modello
  * nell'intestazione. Dentro, partita per partita, la tua giocata e la
  * selezione del modello affiancate, ognuna con il suo esito.
@@ -259,14 +318,16 @@ function GiornataArchivio({
   righe,
   inCorso,
   onRitira,
+  apertaAllInizio = false,
 }: {
   giornata: number;
   punteggio: RoundScore | undefined;
   righe: Pick[];
   inCorso: string | null;
   onRitira: (pick: Pick) => void;
+  apertaAllInizio?: boolean;
 }) {
-  const [aperta, setAperta] = useState(false);
+  const [aperta, setAperta] = useState(apertaAllInizio);
   const corpo = useId();
   const attesa = righe.filter((p) => p.won === null).length;
 
@@ -301,52 +362,13 @@ function GiornataArchivio({
       </h3>
 
       <div id={corpo} className="pron-card__body" hidden={!aperta}>
-        <div className="std">
-          <table className="std__table pron-table">
-            <thead>
-              <tr>
-                <th>Partita</th>
-                <th>La tua giocata</th>
-                <th className="right">Esito</th>
-                <th className="hide-narrow">Il modello</th>
-                <th className="right hide-narrow">Esito</th>
-              </tr>
-            </thead>
-            <tbody>
-              {righe.map((p) => (
-                <tr key={p.id}>
-                  <td className="picks__match">
-                    {p.home_team} <span className="faint">–</span> {p.away_team}
-                    {p.goals_home !== null && (
-                      <span className="pron-arch__result"> {score(p.goals_home, p.goals_away)}</span>
-                    )}
-                  </td>
-                  <td>
-                    {etichetta(p.market, p.home_team, p.away_team)}
-                    {p.model_probability !== null && (
-                      <span className="pron-arch__p"> {prob(p.model_probability)}</span>
-                    )}
-                  </td>
-                  <td className="right">
-                    {p.won === null && !p.locked ? (
-                      <button type="button" className="link-button pron-ritira"
-                        onClick={() => onRitira(p)} disabled={inCorso === p.id}
-                        aria-label={`Ritira la giocata su ${p.home_team} – ${p.away_team}`}>
-                        Ritira
-                      </button>
-                    ) : p.won === null ? (
-                      <span className="faint">in corso</span>
-                    ) : (
-                      <Esito won={p.won} />
-                    )}
-                  </td>
-                  <td className="hide-narrow">{p.model_label ?? <span className="faint">–</span>}</td>
-                  <td className="right hide-narrow"><Esito won={p.model_won} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="pron-arch__list">
+          {[...righe]
+            .sort((x, y) => (x.kickoff_utc ?? "").localeCompare(y.kickoff_utc ?? ""))
+            .map((p) => (
+              <ArchivioPartita key={p.id} p={p} inCorso={inCorso} onRitira={onRitira} />
+            ))}
+        </ul>
       </div>
     </article>
   );
@@ -373,9 +395,9 @@ function Archivio({
   }
   return (
     <div className="pron-list">
-      {giornate.map(([giornata, righe]) => (
+      {giornate.map(([giornata, righe], i) => (
         <GiornataArchivio key={giornata} giornata={giornata} punteggio={punteggi.get(giornata)}
-          righe={righe} inCorso={inCorso} onRitira={onRitira} />
+          righe={righe} inCorso={inCorso} onRitira={onRitira} apertaAllInizio={i === 0} />
       ))}
     </div>
   );
