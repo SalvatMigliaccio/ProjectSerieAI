@@ -17,7 +17,8 @@ export interface MarketOption {
   market: string;
   label: string;
   group: string;
-  probability: number;
+  /** Nulla finche' il modello non ha prezzato la partita. */
+  probability: number | null;
   fair_odds: number | null;
   picked: boolean;
 }
@@ -28,8 +29,10 @@ export interface OpenMatch {
   home_team: string;
   away_team: string;
   kickoff_utc: string;
-  lambda_home: number;
-  lambda_away: number;
+  /** Falso fra la chiusura della giornata prima e le quote del venerdi'. */
+  priced: boolean;
+  lambda_home: number | null;
+  lambda_away: number | null;
   markets: MarketOption[];
 }
 

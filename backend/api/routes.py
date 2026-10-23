@@ -345,6 +345,21 @@ def get_ml_round(season: str, matchday: int, user: Viewer = None) -> dict:
     return payload
 
 
+@public.get("/fixtures/{season}", response_model=list[schemas.Fixture],
+            summary="The calendar: every match of a season or round, predicted or not")
+def get_fixtures(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> list[dict]:
+    """
+    Who plays whom and when, before the model has priced anything.
+
+    PUBLIC, AND IT CAN BE: the calendar is published by the league months in
+    advance and carries no probability. It is what the dashboard shows of a
+    round between the close of the previous one and Friday's odds, and what
+    the users' own picks are made on.
+    """
+    _known_season(season)
+    return store.fixtures(season, matchday)
+
+
 @public.get("/ml-team/{season}", response_model=list[schemas.MLMatch],
             summary="The machine-learning model (M5) on every match of one team")
 def get_ml_team(season: str, team: str = Query(..., max_length=64,

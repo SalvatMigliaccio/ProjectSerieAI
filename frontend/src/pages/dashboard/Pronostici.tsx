@@ -13,6 +13,11 @@
  *
  * Le probabilita' arrivano dall'API, calcolate dagli stessi gol attesi che la
  * dashboard mostra: qui non si rifa' nessun conto.
+ *
+ * SI GIOCA DALLA CHIUSURA DELLA GIORNATA PRIMA, non dalle quote. Fino al
+ * venerdi' una partita e' aperta senza numeri ("quote in arrivo"); quando il
+ * modello la prezza, la probabilita' compare anche accanto alle giocate gia'
+ * fatte.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -116,6 +121,11 @@ function PartitaAperta({
         <p className="pron-match__meta">
           Giornata {partita.matchday} · {localTime(partita.kickoff_utc)} ·{" "}
           <time dateTime={partita.kickoff_utc}>{tra(partita.kickoff_utc)}</time>
+          {!partita.priced && (
+            <span className="pron-match__pending" title="Le probabilità del modello compaiono quando escono le quote, di solito il venerdì">
+              quote in arrivo
+            </span>
+          )}
           {scelte > 0 && <span className="pron-match__count">{scelte} {scelte === 1 ? "giocata" : "giocate"}</span>}
         </p>
       </header>
@@ -334,9 +344,9 @@ export function Pronostici() {
               </p>
             ) : ordinate.length === 0 ? (
               <p className="profilo__hint">
-                Nessuna partita aperta in questo momento. Le partite compaiono quando
-                escono le quote della giornata: il venerdì per il weekend, il martedì
-                per i turni infrasettimanali.
+                Nessuna partita aperta in questo momento. Le partite della prossima
+                giornata si aprono appena si chiude quella in corso; le probabilità
+                del modello arrivano con le quote, di solito il venerdì.
               </p>
             ) : (
               <div className="pron-list">

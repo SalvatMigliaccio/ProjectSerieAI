@@ -1,14 +1,18 @@
 /* ---------------------------------------------------------------------------
-   Sistema visivo scuro — impaginazione del mockup MatchPoint.
+   Sistema visivo scuro, sobrio. Refactor del 23 ottobre 2026: via aloni
+   colorati, vetro (backdrop-filter), gradienti decorativi, testo sfumato,
+   tablet inclinato in 3D, pallino che pulsa e pulsanti a pillola. Superfici
+   piatte color grafite separate da linee da 1px, ombre neutre e corte.
 
-   TIPOGRAFIA. Poppins per titoli e interfaccia: grottesco geometrico, pesante
-   nei display, ed e' quello che da' al titolo il peso che ha nel mockup. Inter
-   per il testo corrente e per le cifre, con `tabular-nums` dove i numeri si
-   incolonnano. Niente monospazio: nel mockup non ce n'e', e le percentuali
-   sono nello stesso carattere del resto.
+   TIPOGRAFIA. IBM Plex Sans per titoli e testo, IBM Plex Mono per i numeri
+   (probabilita', quote, punteggi, conteggi): in una colonna di percentuali
+   ogni cifra larga uguale si confronta senza leggere. Le regole sono in fondo
+   al foglio, alla voce "numeri: monospaziato".
 
    IL COLORE PORTA SIGNIFICATO
-     menta    = accento del marchio, ed esito azzeccato
+     verde    = l'UNICO accento: azione principale, cosa e' selezionato,
+                esito azzeccato. Non decorazione: i bordi e gli sfondi
+                tinti di verde sono diventati grigi
      corallo  = esito sbagliato
      ardesia  = non ancora giocata: assenza di informazione, non un giudizio
    I tre toni dell'1X2 restano categoriali e di uguale peso.
@@ -18,45 +22,52 @@
 --------------------------------------------------------------------------- */
 
 :root {
-  /* MENTA SOBRIA. Il verde resta il colore del marchio, ma non e' piu' un
-     neon su nero-verde: l'accento e' desaturato (#45c08a al posto di
-     #2ee88a) e i fondi sono grafite neutra — il nero tinto di verde era meta'
-     dell'effetto "AI". Contrasti verificati: testo 15.6:1, secondario 8.7:1,
-     terziario 5.9:1, testo sul pulsante 8.1:1. */
-  --bg: #0c1111;
-  --bg-2: #101615;
-  --surface: #151c1b;
-  --surface-2: #1b2321;
-  --line: #222b29;
-  --line-strong: #2e3936;
+  /* GRAFITE PIATTA E UN SOLO ACCENTO (refactor del 23 ottobre 2026).
+     Prima il verde era ovunque — bordi, aloni, sfondi, ombre — e quindi non
+     diceva piu' niente. Ora segna tre cose sole: l'azione principale, cio'
+     che e' selezionato, l'esito positivo. Tutto il resto e' grigio, separato
+     da linee sottili, senza vetro ne' gradienti: e' un prodotto di dati, e i
+     dati si leggono meglio su una superficie che non si fa notare.
+     Contrasti sul fondo delle schede (#181b1f): testo 14.9:1, secondario
+     8.3:1, terziario 5.1:1, accento 5.3:1, testo sul pulsante 5.5:1. */
+  --bg: #111315;
+  --bg-2: #14171a;
+  --surface: #181b1f;
+  --surface-2: #1e2226;
+  --line: #2a2e33;
+  --line-strong: #383d44;
 
-  --fg: #f1f4f2;
-  --muted: #b0bab6;
-  --faint: #8d9a95;
+  --fg: #e7e9eb;
+  --muted: #a8aeb5;
+  --faint: #868d95;
 
-  --mint: #45c08a;
-  --mint-2: #36a877;
-  --mint-ink: #06170f;
-  --mint-wash: rgba(var(--accent-rgb), 0.12);
+  --mint: #4e9e78;
+  --mint-2: #44896a;
+  --mint-ink: #0c1712;
+  --mint-wash: rgba(var(--accent-rgb), 0.08);
 
   /* L'esito e' un colore suo, anche se oggi coincide con l'accento: i
      segnali di vittoria passano da --ok e non da --mint, cosi' cambiare
      marchio non trasforma una vittoria in un pareggio. */
-  --ok: #45c08a;
-  --ok-wash: rgba(69, 192, 138, 0.14);
-  --ko: #e6776f;
-  --ko-wash: rgba(230, 119, 111, 0.14);
-  --idle: #8a9591;
-  --idle-wash: rgba(138, 149, 145, 0.14);
-  --warn: #e3bd62;
-  --warn-wash: rgba(227, 189, 98, 0.12);
+  --ok: #4e9e78;
+  --ok-wash: rgba(78, 158, 120, 0.12);
+  --ko: #d06b62;
+  --ko-wash: rgba(208, 107, 98, 0.12);
+  --idle: #868d95;
+  --idle-wash: rgba(134, 141, 149, 0.12);
+  --warn: #c8a45c;
+  --warn-wash: rgba(200, 164, 92, 0.12);
 
-  --cat-1: #6aa9dd;
-  --cat-x: #97a19d;
-  --cat-2: #dfa56b;
+  --cat-1: #6e9cc6;
+  --cat-x: #9aa0a6;
+  --cat-2: #c99668;
 
-  --display: "Poppins", "Segoe UI", system-ui, sans-serif;
-  --text: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Un solo carattere per titoli e testo, e il suo monospaziato per i
+     numeri: probabilita' e quote in colonna si confrontano a colpo d'occhio
+     solo se ogni cifra occupa lo stesso spazio. */
+  --display: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --text: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
 
   --s1: 0.25rem;
   --s2: 0.5rem;
@@ -68,18 +79,17 @@
   --s8: 4.5rem;
 
   --max: 1280px;
-  --radius: 14px;
-  --radius-sm: 8px;
+  --radius: 10px;
+  --radius-sm: 6px;
 
   /* LA PALETTE IN CANALI. Ogni colore del tema usato con trasparenza passa da
      qui, cosi' cambiare palette e' cambiare queste righe e non cercare
-     cinquanta rgba() sparsi nel foglio. `--mint` e compagni restano coi nomi
-     storici, ma sono l'ACCENTO del tema, qualunque colore sia. */
-  --accent-rgb: 69, 192, 138;
-  --accent-hi: #5fcf9d;
-  --bg-rgb: 12, 17, 17;
-  --bg2-rgb: 16, 22, 21;
-  --surface-rgb: 21, 28, 27;
+     cinquanta rgba() sparsi nel foglio. */
+  --accent-rgb: 78, 158, 120;
+  --accent-hi: #5aaa84;
+  --bg-rgb: 17, 19, 21;
+  --bg2-rgb: 20, 23, 26;
+  --surface-rgb: 24, 27, 31;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -173,9 +183,7 @@ p { margin: 0 0 var(--s4); max-width: 62ch; }
    hero, che arrivano a 4. */
 .masthead {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(var(--bg-rgb), 0.82);
-  backdrop-filter: blur(12px) saturate(120%);
-  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
 
@@ -199,7 +207,7 @@ html { scroll-padding-top: 104px; }
   font-family: var(--display);
   font-size: 1.45rem;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   line-height: 1;
 }
 
@@ -247,7 +255,7 @@ html { scroll-padding-top: 104px; }
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-.nav-cta:hover { border-color: var(--mint); background: rgba(var(--accent-rgb), 0.12); color: var(--mint); }
+.nav-cta:hover { border-color: var(--mint); background: var(--mint-wash); color: var(--mint); }
 
 /* --- hero ----------------------------------------------------------------- */
 
@@ -258,8 +266,6 @@ html { scroll-padding-top: 104px; }
   position: absolute; inset: 0; z-index: -2;
   background-color: var(--bg);
   background-image:
-    radial-gradient(70% 60% at 72% 8%, rgba(var(--accent-rgb), 0.07), transparent 62%),
-    radial-gradient(60% 55% at 18% 92%, rgba(var(--accent-rgb), 0.03), transparent 70%),
     /* WebP da 79 kB invece del JPG da 1.7 MB: la foto sta sotto due veli
        scuri e la differenza non si vede. `image-set` prende il primo formato
        che il browser sa leggere; il JPG resta come ripiego. */
@@ -362,9 +368,9 @@ html { scroll-padding-top: 104px; }
 .cta {
   display: inline-flex; align-items: center; gap: var(--s3);
   padding: var(--s4) var(--s6);
-  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  background: var(--mint);
   color: var(--mint-ink);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-family: var(--display);
   font-weight: 600;
   font-size: 1rem;
@@ -401,19 +407,14 @@ html { scroll-padding-top: 104px; }
 .stage { position: relative; perspective: 1800px; padding-right: 200px; }
 
 .device {
-  transform: rotateY(-11deg) rotateX(2deg) rotate(-1deg);
   transform-origin: center center;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 22px;
   /* Semi-trasparente: sopra la fotografia il pannello deve lasciar vedere la
      scena, come nel riferimento. Su fondo nero resta comunque leggibile. */
-  background: linear-gradient(165deg, rgba(var(--surface-rgb), 0.94), rgba(var(--bg2-rgb), 0.96));
-  backdrop-filter: blur(10px);
+  background: var(--surface);
   padding: var(--s5);
-  box-shadow:
-    -30px 50px 90px -40px rgba(0, 0, 0, 0.95),
-    0 0 0 1px rgba(var(--accent-rgb), 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  box-shadow: var(--shadow-3);
 }
 
 .device__brand {
@@ -438,7 +439,7 @@ html { scroll-padding-top: 104px; }
   transition: border-color 160ms ease, background 160ms ease;
 }
 
-.device__status:hover { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.06); }
+.device__status:hover { border-color: var(--line-strong); background: var(--mint-wash); }
 .device__status-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .device__status-go { color: var(--mint); font-weight: 600; font-size: 0.75rem; }
 
@@ -449,18 +450,7 @@ html { scroll-padding-top: 104px; }
   background: var(--mint);
 }
 
-.device__dot::after {
-  content: ""; position: absolute; inset: -4px; border-radius: 50%;
-  border: 1px solid var(--mint); opacity: 0;
-  animation: impulso 2.4s ease-out infinite;
-}
-
-@keyframes impulso {
-  0% { transform: scale(0.6); opacity: 0.7; }
-  100% { transform: scale(1.6); opacity: 0; }
-}
-
-@media (prefers-reduced-motion: reduce) { .device__dot::after { animation: none; } }
+/* Il pallino non pulsa piu': un dato fermo non ha bisogno di chiamare l'occhio. */
 
 /* La card della partita in evidenza: un riquadro dentro il riquadro, come nel
    mockup — il tablet mostra un'interfaccia, non una lista piatta. */
@@ -470,9 +460,8 @@ html { scroll-padding-top: 104px; }
 .device__feature {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  background: var(--surface-2);
   padding: var(--s4);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .device__label { font-size: 0.75rem; color: var(--faint); margin-bottom: var(--s2); }
@@ -509,9 +498,9 @@ html { scroll-padding-top: 104px; }
   display: block; width: 100%;
   margin-top: var(--s4);
   padding: var(--s3);
-  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  background: var(--mint);
   color: var(--mint-ink);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   text-align: center; font-weight: 600; font-size: 0.875rem;
   font-family: var(--display);
   box-shadow:
@@ -557,14 +546,11 @@ html { scroll-padding-top: 104px; }
 /* Vetro sopra la fotografia: nel riferimento le schede lasciano intravedere la
    scena, ed e' quello che le fa galleggiare invece di stare appiccicate. */
 .floater {
-  background: rgba(var(--surface-rgb), 0.72);
-  backdrop-filter: blur(14px);
+  background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius);
   padding: var(--s4);
-  box-shadow:
-    -16px 26px 50px -28px rgba(0, 0, 0, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  box-shadow: var(--shadow-3);
 }
 
 .floater__title { margin: 0 0 var(--s3); font-family: var(--display); font-size: 0.8125rem; font-weight: 600; }
@@ -581,7 +567,7 @@ html { scroll-padding-top: 104px; }
   width: 30px; height: 30px; flex: none;
   border-radius: var(--radius-sm);
   background: var(--mint-wash);
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
+  border: 1px solid var(--line-strong);
   color: var(--mint);
   display: grid; place-items: center;
 }
@@ -591,9 +577,10 @@ html { scroll-padding-top: 104px; }
 .signature {
   margin-top: var(--s5);
   text-align: right;
-  font-family: "Caveat", "Segoe Script", cursive;
-  font-size: 1.75rem;
-  line-height: 1.15;
+  font-family: var(--text);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  line-height: 1.4;
   color: var(--fg);
 }
 
@@ -675,7 +662,6 @@ html { scroll-padding-top: 104px; }
   content: "";
   position: absolute; inset: 0; z-index: -1;
   background:
-    radial-gradient(100% 70% at 50% 34%, rgba(var(--accent-rgb), 0.05), transparent 64%),
     linear-gradient(
       180deg,
       var(--bg) 0%,
@@ -691,7 +677,7 @@ html { scroll-padding-top: 104px; }
   gap: var(--s5) var(--s7); align-items: start; margin-bottom: var(--s7);
 }
 
-.howto__title { margin: var(--s3) 0 var(--s4); font-size: clamp(2rem, 3.6vw, 3rem); letter-spacing: -0.03em; }
+.howto__title { margin: var(--s3) 0 var(--s4); font-size: clamp(2rem, 3.6vw, 3rem); letter-spacing: -0.01em; }
 .howto__title em { font-style: normal; color: var(--mint); }
 
 /* La postilla sta accanto al titolo e non in fondo: e' il limite dichiarato del
@@ -737,19 +723,12 @@ html { scroll-padding-top: 104px; }
      sfocatura tiene leggibile il testo sopra le luci dei riflettori, che sono
      la zona piu' chiara e mossa della foto. */
   background:
-    radial-gradient(130% 90% at 0% 0%, rgba(var(--accent-rgb), 0.04), transparent 58%),
-    linear-gradient(152deg, rgba(var(--surface-rgb), 0.86) 0%, rgba(var(--surface-rgb), 0.88) 40%, rgba(var(--bg2-rgb), 0.9) 76%, rgba(var(--bg2-rgb), 0.92) 100%);
-  backdrop-filter: blur(10px) saturate(115%);
-  -webkit-backdrop-filter: blur(10px) saturate(115%);
+    var(--surface);
   /* Quattro livelli: contatto stretto, distacco medio, caduta lunga, e un filo
      di luce interno sul bordo alto. Una sola ombra morbida non stacca la scheda
      dal fondo, ne fa una macchia sfocata. */
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 6px 14px -8px rgba(0, 0, 0, 0.5),
-    0 22px 36px -28px rgba(0, 0, 0, 0.75),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  box-shadow: var(--shadow-1);
+  transition: border-color 160ms ease;
 }
 
 /* Il bordo acceso solo dove batte la luce: un anello di 1px disegnato con una
@@ -758,7 +737,7 @@ html { scroll-padding-top: 104px; }
   content: "";
   position: absolute; inset: 0; z-index: -1;
   border-radius: inherit; padding: 1px;
-  background: linear-gradient(152deg, rgba(var(--accent-rgb), 0.3), rgba(255, 255, 255, 0.06) 34%, transparent 62%);
+  background: none; display: none;
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
@@ -766,14 +745,7 @@ html { scroll-padding-top: 104px; }
   pointer-events: none;
 }
 
-.step:hover {
-  transform: translateY(-3px);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.35),
-    0 12px 22px -10px rgba(0, 0, 0, 0.55),
-    0 34px 52px -30px rgba(0, 0, 0, 0.8),
-    inset 0 1px 0 rgba(255, 255, 255, 0.09);
-}
+.step:hover { border-color: var(--line-strong); }
 
 /* La freccia vive nel vuoto fra due schede, non dentro una: sta nel gap, cosi'
    resta a meta' strada qualunque sia l'altezza delle due colonne. */
@@ -790,10 +762,9 @@ html { scroll-padding-top: 104px; }
    dall'alto, come la scheda. Pieno e bianco sarebbe l'elemento piu' forte della
    scheda, e a contare sono i titoli. */
 .step__n {
-  font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.03em;
+  font-family: var(--display); font-weight: 700; font-size: 1.75rem; letter-spacing: -0.01em;
   line-height: 1;
-  background: linear-gradient(170deg, #ffffff 10%, rgba(255, 255, 255, 0.55) 90%);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
+  color: var(--faint);
 }
 
 .step__glyph { color: var(--mint); display: inline-flex; }
@@ -808,8 +779,7 @@ html { scroll-padding-top: 104px; }
 .pipe {
   display: grid; align-content: start;
   border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--bg-2);
   overflow: hidden;
 }
 
@@ -820,7 +790,7 @@ html { scroll-padding-top: 104px; }
 }
 
 .pipe__row:last-child { border-bottom: 0; }
-.pipe__row--out { background: rgba(var(--accent-rgb), 0.07); }
+.pipe__row--out { background: var(--mint-wash); }
 .pipe__key { font-size: 0.6875rem; color: var(--muted); }
 .pipe__val { font-size: 0.75rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .pipe__val--quieta { font-weight: 500; color: var(--faint); }
@@ -832,11 +802,11 @@ html { scroll-padding-top: 104px; }
   display: flex; align-items: center; gap: var(--s2);
   padding: 7px var(--s3);
   font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mint);
-  background: rgba(var(--accent-rgb), 0.04);
+  background: var(--mint-wash);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.pipe__line { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--accent-rgb), 0.45), transparent); }
+.pipe__line { flex: 1; height: 1px; background: var(--line-strong); }
 
 /* I riquadri dei dati sono INCASSATI nella scheda: fondo piu' scuro di quello
    su cui stanno e ombra interna in alto. Cosi' si leggono come una finestra
@@ -845,8 +815,7 @@ html { scroll-padding-top: 104px; }
 .mini {
   display: grid; gap: 6px; padding: var(--s3);
   border: 1px solid rgba(0, 0, 0, 0.3); border-radius: var(--radius-sm);
-  background: linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), rgba(var(--bg-rgb), 0.35));
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.42), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  background: var(--bg-2);
 }
 
 .mini-coppia { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
@@ -861,11 +830,10 @@ html { scroll-padding-top: 104px; }
 
 .scene {
   display: grid; gap: var(--s3); padding: var(--s3);
-  border: 1px solid rgba(var(--accent-rgb), 0.28); border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   background:
-    radial-gradient(120% 90% at 0% 0%, rgba(var(--accent-rgb), 0.07), transparent 62%),
-    linear-gradient(180deg, rgba(var(--bg2-rgb), 0.9), rgba(var(--bg-rgb), 0.75));
-  box-shadow: inset 0 1px 0 rgba(var(--accent-rgb), 0.18), 0 10px 20px -14px rgba(0, 0, 0, 0.9);
+    var(--bg-2);
+  box-shadow: none;
 }
 
 .scene__teams { font-size: 0.8125rem; font-weight: 600; }
@@ -878,7 +846,7 @@ html { scroll-padding-top: 104px; }
   background: rgba(var(--bg-rgb), 0.55);
 }
 
-.scene__box--mint { border-color: rgba(var(--accent-rgb), 0.45); background: rgba(var(--accent-rgb), 0.1); }
+.scene__box--mint { border-color: var(--line-strong); background: var(--mint-wash); }
 
 .scene__esito {
   display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
@@ -899,8 +867,8 @@ html { scroll-padding-top: 104px; }
 
 .howto__fact-glyph {
   display: grid; place-items: center; flex: none; width: 28px; height: 28px;
-  border-radius: 50%; border: 1px solid rgba(var(--accent-rgb), 0.3);
-  background: rgba(var(--accent-rgb), 0.08); color: var(--mint);
+  border-radius: 50%; border: 1px solid var(--line-strong);
+  background: var(--mint-wash); color: var(--mint);
 }
 
 /* --- sezioni -------------------------------------------------------------- */
@@ -918,11 +886,11 @@ html { scroll-padding-top: 104px; }
 
 .section h2 {
   font-size: clamp(1.9rem, 1.3rem + 2vw, 2.6rem);
-  line-height: 1.08; letter-spacing: -0.03em; font-weight: 700;
+  line-height: 1.08; letter-spacing: -0.01em; font-weight: 700;
   margin: 0 0 var(--s4);
 }
 
-h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0 var(--s2); }
+h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0 var(--s2); }
 .lead { font-size: 1rem; color: var(--muted); }
 
 .link-mint { display: inline-block; padding-block: 3px; color: var(--mint); font-weight: 600; font-size: 0.875rem; }
@@ -949,15 +917,12 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .showcase > .side-card { flex: 1.8 1 0; min-width: 0; }
 
 .matchcard {
-  background: rgba(var(--surface-rgb), 0.72);
-  backdrop-filter: blur(10px);
+  background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   overflow: hidden;
   display: grid;
-  box-shadow:
-    0 26px 50px -30px rgba(0, 0, 0, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-2);
 }
 
 /* Testata della card: nel riferimento c'e' una fotografia sotto un velo scuro.
@@ -965,7 +930,6 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .matchcard__head {
   padding: var(--s3) var(--s4);
   background:
-    linear-gradient(180deg, rgba(var(--bg-rgb), 0.35), rgba(var(--bg-rgb), 0.75)),
     var(--surface-2);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   font-size: 0.6875rem; color: var(--muted); text-align: center;
@@ -1006,7 +970,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 
 /* A partita giocata la selezione dice anche com'e' finita: stessa convenzione
    della griglia in dashboard, verde se e' uscita, corallo se no. */
-.matchcard__pick--ok { border-color: rgba(var(--accent-rgb), 0.35); background: var(--ok-wash); }
+.matchcard__pick--ok { border-color: var(--line-strong); background: var(--ok-wash); }
 .matchcard__pick--ok .matchcard__pick-val { color: var(--ok); }
 .matchcard__pick--ko { border-color: rgba(255, 123, 123, 0.35); background: var(--ko-wash); }
 .matchcard__pick--ko .matchcard__pick-val { color: var(--ko); }
@@ -1014,27 +978,22 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .matchcard__cta {
   display: block; text-align: center;
   padding: var(--s3);
-  background: linear-gradient(180deg, var(--accent-hi), var(--mint) 55%, var(--mint-2));
+  background: var(--mint);
   color: var(--mint-ink);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   font-family: var(--display); font-weight: 600; font-size: 0.8125rem;
-  box-shadow:
-    0 12px 26px -12px rgba(var(--accent-rgb), 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: none;
 }
 
 .matchcard__cta:hover { box-shadow: none; }
 .matchcard__note { font-size: 0.75rem; color: var(--faint); text-align: center; }
 
 .side-card {
-  background: rgba(var(--surface-rgb), 0.72);
-  backdrop-filter: blur(10px);
+  background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   padding: var(--s4);
-  box-shadow:
-    0 26px 50px -30px rgba(0, 0, 0, 0.95),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-2);
 }
 
 .side-card__head {
@@ -1071,7 +1030,7 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.02em; margin: 0 0
 .figure__value {
   font-family: var(--display);
   font-variant-numeric: tabular-nums;
-  font-size: 2.1rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.05;
+  font-size: 2.1rem; font-weight: 700; letter-spacing: -0.01em; line-height: 1.05;
   min-height: 2.2rem;
 }
 
@@ -1173,7 +1132,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   padding: var(--s5);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  background: rgba(var(--accent-rgb), 0.025);
+  background: var(--mint-wash);
 }
 .analysis__head .eyebrow { margin-bottom: var(--s1); }
 .analysis__head h2 { margin: 0; font-size: 1.375rem; letter-spacing: -0.01em; }
@@ -1213,9 +1172,9 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
    lasciate libere si spalmano sull'intera riga e fra la squadra e i suoi punti
    finiscono ottocento pixel di vuoto, che e' come non incolonnarli affatto. */
 .std {
-  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
   overflow: hidden;
 }
 
@@ -1292,7 +1251,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 
 .std__track i {
   display: block; height: 100%; border-radius: 2px;
-  background: linear-gradient(90deg, var(--mint-2), var(--mint));
+  background: var(--mint);
   opacity: 0.85;
 }
 
@@ -1324,9 +1283,9 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .tr {
   display: grid; gap: var(--s5);
   padding: var(--s5);
-  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(var(--surface-rgb), 0.5), rgba(var(--bg2-rgb), 0.5));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 34px -30px rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 .tr__stats { display: grid; }
@@ -1350,7 +1309,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .tr__value {
   grid-column: 2; grid-row: 1 / span 2; align-self: center;
   font-family: var(--display); font-weight: 700; font-size: 1.6rem;
-  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap;
+  letter-spacing: -0.01em; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
 .tr__note { grid-column: 1; font-size: 0.75rem; color: var(--muted); line-height: 1.5; }
@@ -1391,7 +1350,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
   margin-top: var(--s5);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  background: rgba(var(--surface-rgb), 0.72);
+  background: var(--surface);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
@@ -1400,11 +1359,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .dash-banner::before {
   content: "";
   position: absolute; inset: 0; z-index: -1;
-  background-image:
-    linear-gradient(90deg, rgba(var(--surface-rgb), 0.98) 34%, rgba(var(--surface-rgb), 0.55) 70%, rgba(var(--surface-rgb), 0.9)),
-    image-set(url("/hero-bg.webp") type("image/webp"), url("/hero-bg.jpg") type("image/jpeg"));
-  background-size: cover;
-  background-position: center 28%;
+  display: none;
 }
 
 .dash-banner__title { display: grid; gap: 2px; }
@@ -1414,7 +1369,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .dash-banner__row h1 {
   margin: 0;
   font-family: var(--display);
-  font-size: 1.75rem; font-weight: 700; letter-spacing: -0.03em;
+  font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em;
 }
 
 .dash-banner__dates { font-size: 0.8125rem; color: var(--muted); }
@@ -1492,7 +1447,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 
 .round-chip strong { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .round-chip span { font-size: 0.6875rem; letter-spacing: 0.04em; }
-.round-chip:hover { color: var(--fg); border-color: rgba(var(--accent-rgb), 0.4); }
+.round-chip:hover { color: var(--fg); border-color: var(--line-strong); }
 
 .round-chip[aria-pressed="true"] {
   background: var(--mint); border-color: var(--mint); color: var(--mint-ink);
@@ -1530,7 +1485,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .filter:hover { color: var(--fg); }
 
 .filter[aria-pressed="true"] {
-  border-color: rgba(var(--accent-rgb), 0.5);
+  border-color: var(--line-strong);
   background: var(--mint-wash);
   color: var(--mint);
 }
@@ -1573,7 +1528,7 @@ tr.detail td { background: var(--bg-2); padding: var(--s4) var(--s4) var(--s5); 
 .grid-wrap {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
-  background: rgba(var(--surface-rgb), 0.72);
+  background: var(--surface);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
@@ -1634,7 +1589,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    nella colonna a fianco, cosi' il filtro si vede sulla giornata e non solo
    nella scheda. */
 .pick--picked {
-  background: rgba(var(--accent-rgb), 0.1);
+  background: var(--mint-wash);
   box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.45);
 }
 
@@ -1671,7 +1626,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* --- dashboard: colonna laterale ------------------------------------------- */
 
 .aside-card {
-  background: rgba(var(--surface-rgb), 0.72);
+  background: var(--surface);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
   padding: var(--s4);
@@ -1850,7 +1805,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* Nessun filetto in cima nemmeno qui: il piede si stacca perche' il fondo
    cambia, non perche' c'e' una riga. */
 .colophon {
-  background: linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 22%);
+  background: var(--bg-2);
+  border-top: 1px solid var(--line);
   padding-top: var(--s8);
 }
 
@@ -1893,7 +1849,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    ngrok arriva a sessanta caratteri): va a capo invece di allargare la colonna. */
 .colophon__api { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 
-.colophon__rule { height: 1px; background: linear-gradient(90deg, transparent, var(--line), transparent); }
+.colophon__rule { height: 1px; background: var(--line); }
 
 .colophon__bottom {
   display: flex; flex-wrap: wrap; gap: var(--s2) var(--s6); align-items: baseline;
@@ -1915,11 +1871,11 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
      3  oggetti sospesi sopra la scena (il tablet e le schede fluttuanti)
    La luce viene sempre dall'alto: filo chiaro sopra, ombra sotto. */
 :root {
-  --shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 6px 14px -8px rgba(0, 0, 0, 0.5),
-              0 22px 36px -28px rgba(0, 0, 0, 0.75);
-  --shadow-3: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 40px -18px rgba(0, 0, 0, 0.8),
-              0 40px 80px -40px rgba(0, 0, 0, 0.9);
+  /* Ombre neutre e corte: staccano, non illuminano. Niente filo di luce
+     interno, niente ombre colorate. */
+  --shadow-1: 0 1px 0 rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-3: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
 
 .std, .tr, .grid-wrap, .aside-card, .faq__item, .dash-banner { box-shadow: var(--shadow-1); }
@@ -1934,14 +1890,14 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    hero; gli altri portano nello stesso posto e lo dicono piu' piano, con il
    contorno. */
 .device__cta, .matchcard__cta {
-  background: rgba(var(--accent-rgb), 0.08);
+  background: var(--mint-wash);
   color: var(--mint);
-  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  border: 1px solid var(--line-strong);
   box-shadow: none;
 }
 
 .device__cta:hover, .matchcard__cta:hover {
-  background: rgba(var(--accent-rgb), 0.16);
+  background: var(--mint-wash);
   border-color: var(--mint);
   box-shadow: none;
 }
@@ -2175,8 +2131,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   display: grid; place-items: center;
   width: 52px; height: 52px; margin-bottom: var(--s4);
   border-radius: 14px;
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid var(--line-strong);
+  background: var(--mint-wash);
   color: var(--mint);
 }
 .account-card__mark img { width: 34px; height: auto; }
@@ -2272,7 +2228,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .form-alert svg, .form-success svg { flex: none; margin-top: 1px; }
 .form-alert { border: 1px solid rgba(230, 119, 111, 0.4); background: var(--ko-wash); color: var(--fg); }
 .form-alert svg { color: var(--ko); }
-.form-success { border: 1px solid rgba(var(--accent-rgb), 0.4); background: var(--ok-wash); color: var(--fg); }
+.form-success { border: 1px solid var(--line-strong); background: var(--ok-wash); color: var(--fg); }
 .form-success svg { color: var(--ok); }
 
 /* Un solo pulsante principale per schermata, a tutta larghezza: e' l'azione
@@ -2319,7 +2275,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   min-height: 44px;
   padding-inline: var(--s5);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   background: var(--mint);
   color: var(--mint-ink);
   font-weight: 600;
@@ -2338,7 +2294,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .btn--ghost:hover:not(:disabled) {
   border-color: var(--mint);
   color: var(--mint);
-  background: rgba(var(--accent-rgb), 0.1);
+  background: var(--mint-wash);
 }
 
 .account-links {
@@ -2385,16 +2341,13 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   display: grid;
   place-items: center;
   padding: var(--s7) var(--s4);
-  /* Un alone di colore dietro la scheda: la stacca dallo sfondo senza un'ombra
-     piu' pesante, che su un fondo cosi' scuro si vedrebbe appena. */
-  background:
-    radial-gradient(38rem 26rem at 50% 30%, rgba(var(--accent-rgb), 0.07), transparent 70%);
+  background: transparent;
 }
 
 .auth .account-card { animation: auth-in 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @keyframes auth-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .auth__brand {
@@ -2402,8 +2355,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   overflow: hidden;
   border-top: 1px solid var(--line);
   background:
-    radial-gradient(60rem 40rem at 0% 0%, rgba(var(--accent-rgb), 0.16), transparent 60%),
-    linear-gradient(180deg, var(--bg-2), var(--bg));
+    var(--bg-2);
 }
 
 .auth__brand-inner {
@@ -2424,7 +2376,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .auth__claim {
   margin: 0 0 var(--s6);
   font-family: var(--display); font-weight: 700;
-  font-size: clamp(2rem, 3.2vw, 2.75rem); line-height: 1.12; letter-spacing: -0.02em;
+  font-size: clamp(2rem, 3.2vw, 2.75rem); line-height: 1.12; letter-spacing: -0.01em;
   text-wrap: balance; max-width: 16ch;
 }
 .auth__claim em { font-style: normal; color: var(--mint); }
@@ -2437,8 +2389,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .auth__point-icon {
   display: grid; place-items: center;
   width: 36px; height: 36px; border-radius: 10px;
-  border: 1px solid rgba(var(--accent-rgb), 0.3);
-  background: rgba(var(--accent-rgb), 0.08);
+  border: 1px solid var(--line-strong);
+  background: var(--mint-wash);
   color: var(--mint);
 }
 
@@ -2463,9 +2415,9 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   max-width: 31rem;
   padding: var(--s7) var(--s6);
   border-radius: 20px;
-  box-shadow: var(--shadow-3), 0 0 0 1px rgba(var(--accent-rgb), 0.05);
+  box-shadow: var(--shadow-2);
 }
-.auth .account-card h1 { font-size: 2rem; letter-spacing: -0.02em; margin-bottom: var(--s3); }
+.auth .account-card h1 { font-size: 2rem; letter-spacing: -0.01em; margin-bottom: var(--s3); }
 .auth .account-card .lead { font-size: 1rem; margin-bottom: var(--s6); }
 .auth .account-card__mark { width: 60px; height: 60px; border-radius: 16px; margin-bottom: var(--s5); }
 .auth .account-card__mark img { width: 40px; }
@@ -2569,8 +2521,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .profilo__avatar {
   display: grid; place-items: center;
   width: 44px; height: 44px; border-radius: 50%;
-  background: rgba(var(--accent-rgb), 0.14); color: var(--mint);
-  border: 1px solid rgba(var(--accent-rgb), 0.4);
+  background: var(--mint-wash); color: var(--mint);
+  border: 1px solid var(--line-strong);
   font-family: var(--display); font-weight: 700; font-size: 1.125rem;
 }
 .profilo__chi { min-width: 0; }
@@ -2593,7 +2545,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .profilo__nav-link:focus-visible { outline: 2px solid var(--mint); outline-offset: 1px; }
 /* La sezione aperta: sfondo, colore E una barra a sinistra — il colore da
    solo non basta a chi non lo distingue. */
-.profilo__nav-link.active { background: rgba(var(--accent-rgb), 0.1); color: var(--fg); font-weight: 600; }
+.profilo__nav-link.active { background: var(--mint-wash); color: var(--fg); font-weight: 600; }
 .profilo__nav-link.active svg { color: var(--mint); }
 .profilo__nav-link.active::before {
   content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
@@ -2664,7 +2616,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .profilo__ruoli { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .profilo__ruolo {
   padding: 2px var(--s3); border-radius: 999px;
-  border: 1px solid rgba(var(--accent-rgb), 0.45); color: var(--mint);
+  border: 1px solid var(--line-strong); color: var(--mint);
   font-weight: 600; font-size: 0.8125rem;
 }
 .profilo__stato {
@@ -2686,11 +2638,11 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   background: var(--surface); color: inherit; text-decoration: none;
   transition: border-color 160ms ease, background 160ms ease;
 }
-.scorciatoia:hover { border-color: rgba(var(--accent-rgb), 0.45); background: var(--surface-2); }
+.scorciatoia:hover { border-color: var(--line-strong); background: var(--surface-2); }
 .scorciatoia:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
 .scorciatoia__icon {
   display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px;
-  background: rgba(var(--accent-rgb), 0.1); color: var(--mint);
+  background: var(--mint-wash); color: var(--mint);
 }
 .scorciatoia__testo strong { display: block; font-size: 0.9375rem; margin-bottom: 2px; }
 .scorciatoia__testo span { color: var(--faint); font-size: 0.8125rem; line-height: 1.5; }
@@ -2736,14 +2688,14 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   background: var(--bg-2);
   transition: border-color 160ms ease, background 160ms ease;
 }
-.sessione.is-current { border-color: rgba(var(--accent-rgb), 0.45); }
+.sessione.is-current { border-color: var(--line-strong); }
 .sessione.is-confirming { border-color: rgba(230, 119, 111, 0.45); background: var(--ko-wash); }
 
 .sessione__icon {
   display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px;
   background: var(--surface-2); color: var(--muted);
 }
-.sessione.is-current .sessione__icon { background: rgba(var(--accent-rgb), 0.12); color: var(--mint); }
+.sessione.is-current .sessione__icon { background: var(--mint-wash); color: var(--mint); }
 
 .sessione__info { min-width: 0; display: grid; gap: 4px; }
 .sessione__device {
@@ -2754,7 +2706,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .sessione__badge {
   font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--mint);
-  border: 1px solid rgba(var(--accent-rgb), 0.45); border-radius: 999px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
   padding: 1px var(--s2);
 }
 .sessione__meta {
@@ -2921,7 +2873,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .account-card__brand {
   margin: 0 0 var(--s5);
   font-family: var(--display); font-weight: 700;
-  font-size: 1.75rem; letter-spacing: -0.02em; line-height: 1;
+  font-size: 1.75rem; letter-spacing: -0.01em; line-height: 1;
   max-width: none;
 }
 .account-card__brand em { font-style: normal; color: var(--mint); }
@@ -2960,7 +2912,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     linear-gradient(180deg, rgba(var(--bg-rgb), 0.5), transparent 18%, transparent 82%, rgba(var(--bg-rgb), 0.5));
 }
 .auth__brand { background: transparent; }
-.auth__form { background: radial-gradient(34rem 26rem at 50% 45%, rgba(var(--bg-rgb), 0.9), transparent 75%); }
+.auth__form { background: transparent; }
 
 @media (min-width: 960px) {
   /* Colonne uguali: la meta' campo cade sul confine fra le due. */
@@ -2988,7 +2940,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
    la riga deve restare leggibile come le altre, solo trovarsi a colpo
    d'occhio. Il nome "la tua squadra" e' comunque nel testo, per chi non vede
    la barra. */
-.grid tr.is-fav td, .std__table tr.is-fav td { background: rgba(var(--accent-rgb), 0.07); }
+.grid tr.is-fav td, .std__table tr.is-fav td { background: var(--mint-wash); }
 .grid tr.is-fav td:first-child, .std__table tr.is-fav td:first-child {
   box-shadow: inset 3px 0 0 var(--mint);
 }
@@ -2997,8 +2949,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* --- pannello "la tua squadra" -------------------------------------------- */
 .fav-panel {
   margin-bottom: var(--s5); padding: var(--s5);
-  border: 1px solid rgba(var(--accent-rgb), 0.35); border-radius: var(--radius);
-  background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.08), var(--surface) 60%);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface);
   display: grid; gap: var(--s4);
 }
 .fav-panel__head { display: flex; align-items: center; gap: var(--s2); }
@@ -3045,7 +2997,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   padding: var(--s5); border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface);
 }
-.pron-match.is-fav { border-color: rgba(var(--accent-rgb), 0.45); box-shadow: inset 3px 0 0 var(--mint); }
+.pron-match.is-fav { border-color: var(--line-strong); box-shadow: inset 3px 0 0 var(--mint); }
 .pron-match__head { margin-bottom: var(--s4); }
 .pron-match__head h3 { margin: 0 0 var(--s1); font-family: var(--display); font-size: 1.125rem; }
 .pron-match__meta {
@@ -3054,7 +3006,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 }
 .pron-match__count {
   margin-left: auto; padding: 2px var(--s2); border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.12); color: var(--mint); font-weight: 600;
+  background: var(--mint-wash); color: var(--mint); font-weight: 600;
 }
 
 .pron-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: var(--s4); }
@@ -3071,10 +3023,10 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   text-align: left; cursor: pointer;
   transition: border-color 140ms ease, background 140ms ease;
 }
-.pron-chip:hover:not(:disabled) { border-color: rgba(var(--accent-rgb), 0.6); }
+.pron-chip:hover:not(:disabled) { border-color: var(--line-strong); }
 .pron-chip:focus-visible { outline: 2px solid var(--mint); outline-offset: 1px; }
 .pron-chip[aria-pressed="true"] {
-  border-color: var(--mint); background: rgba(var(--accent-rgb), 0.14);
+  border-color: var(--mint); background: var(--mint-wash);
   box-shadow: inset 3px 0 0 var(--mint);
 }
 .pron-chip:disabled { cursor: progress; opacity: 0.7; }
@@ -3135,7 +3087,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .dash-nav__link svg { flex: none; }
 .dash-nav__link:hover { background: rgba(255, 255, 255, 0.04); color: var(--fg); }
 .dash-nav__link:focus-visible { outline: 2px solid var(--mint); outline-offset: 1px; }
-.dash-nav__link.active { background: rgba(var(--accent-rgb), 0.1); color: var(--fg); font-weight: 600; }
+.dash-nav__link.active { background: var(--mint-wash); color: var(--fg); font-weight: 600; }
 .dash-nav__link.active svg { color: var(--mint); }
 .dash-nav__link.active::before {
   content: ""; position: absolute; left: 0; top: 10px; bottom: 10px;
@@ -3146,7 +3098,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* La squadra scelta, sotto la voce: dice dove porta prima di cliccare. */
 .dash-nav__team {
   margin-left: auto; padding: 1px var(--s2); border-radius: 999px;
-  background: rgba(var(--accent-rgb), 0.12); color: var(--mint);
+  background: var(--mint-wash); color: var(--mint);
   font-size: 0.6875rem; font-weight: 600;
   max-width: 6.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -3206,7 +3158,6 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     padding: 6px var(--s2) calc(6px + env(safe-area-inset-bottom));
     border: 0; border-top: 1px solid var(--line-strong); border-radius: 0;
     background: rgba(var(--surface-rgb), 0.96);
-    backdrop-filter: blur(10px);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
   .dash-nav ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -3259,5 +3210,54 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   font-size: 0.75rem; font-weight: 700; letter-spacing: 0.04em;
 }
 .squadra-nota__tag--classico { background: var(--idle-wash); color: var(--fg); }
-.squadra-nota__tag--ai { background: rgba(var(--accent-rgb), 0.16); color: var(--mint); }
+.squadra-nota__tag--ai { background: var(--mint-wash); color: var(--mint); }
 .squadra-modelli { margin: 0; }
+
+/* --- il calendario prima delle quote -------------------------------------- */
+.pron-match__pending, .fixture__pending {
+  padding: 2px var(--s2); border-radius: 999px;
+  background: var(--warn-wash); color: var(--warn);
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+}
+
+.fixtures { margin-top: var(--s5); }
+.fixtures__title { font-family: var(--display); font-size: 1.0625rem; margin: 0 0 var(--s3); }
+.fixtures__list {
+  list-style: none; margin: 0; padding: 0;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  overflow: hidden;
+}
+.fixture {
+  display: grid; grid-template-columns: 9.5rem minmax(0, 1fr) auto;
+  align-items: center; gap: var(--s4);
+  min-height: 52px; padding: var(--s2) var(--s5);
+  border-top: 1px solid var(--line);
+}
+.fixture:first-child { border-top: 0; }
+.fixture.is-fav { background: var(--mint-wash); box-shadow: inset 3px 0 0 var(--mint); }
+.fixture__time { color: var(--faint); font-size: 0.8125rem; font-variant-numeric: tabular-nums; }
+.fixture__teams { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.fixtures__cta {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s4);
+  margin-top: var(--s4); padding: var(--s4) var(--s5);
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--mint-wash);
+}
+.fixtures__cta p { margin: 0; color: var(--muted); font-size: 0.9375rem; max-width: 52ch; }
+
+@media (max-width: 560px) {
+  .fixture { grid-template-columns: minmax(0, 1fr) auto; padding-inline: var(--s4); }
+  .fixture__time { grid-column: 1 / -1; }
+}
+
+/* --- numeri: monospaziato (refactor sobrio) ---------------------------------
+   Probabilita', quote, conteggi e punteggi: ogni cifra larga uguale, cosi'
+   una colonna di percentuali si allinea da sola e "48%" sotto "52%" si
+   confronta senza leggere. Il testo resta in Plex Sans. */
+.num, .pick__pct, .pick__odds, .picks__odds, .score-chip, .std__table td.right,
+.pron-stat__value, .pron-chip__nums, .fav-panel__probs td, .fav-panel__record dd,
+.dash-chip__value, .sessione__meta, .fixture__time, .round-chip strong,
+.profilo__conta, .strength__text {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}

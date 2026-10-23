@@ -457,3 +457,22 @@ class MLRound(Base):
     model: str
     written_at: str | None = Field(None, description="When M5 wrote the earliest row")
     matches: list[MLMatch]
+
+
+class Fixture(Base):
+    """
+    A match of the calendar, predicted or not.
+
+    Not a track record row: no probabilities, no metrics. `predicted` says
+    whether the model has priced it yet — before Friday's odds it has not, and
+    the match still exists, which is the point of this shape.
+    """
+
+    season: str
+    matchday: int
+    home_team: str
+    away_team: str
+    kickoff_utc: str | None = Field(description="ISO 8601, UTC; null if the calendar has no time")
+    predicted: bool
+    goals_home: int | None = None
+    goals_away: int | None = None

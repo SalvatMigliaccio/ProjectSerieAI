@@ -31,6 +31,8 @@ def _match(home: str, away: str, hours_from_now: float, goals=None) -> dict:
 def fixtures(monkeypatch):
     rows = [_match("Napoli", "Lecce", 48), _match("Inter", "Milan", -3, goals=(2, 2))]
     monkeypatch.setattr(store, "matches", lambda *a, **k: rows)
+    # The real calendar stays out: these tests are about the registry rows above.
+    monkeypatch.setattr(store, "fixtures", lambda *a, **k: [])
     return rows
 
 
@@ -121,6 +123,50 @@ def test_me_needs_a_session(client, fixtures) -> None:  # noqa: F811
     assert client.get(f"/api/me/predictions/{SEASON}").status_code == 401
     assert _pick(client).status_code == 401
     assert client.get("/api/me/preferences").status_code == 401
+
+
+# --- picks before the odds: the calendar --------------------------------------
+
+def _fixture(home: str, away: str, matchday: int, hours_from_now: float) -> dict:
+    kickoff = dt.datetime.now(dt.UTC) + dt.timedelta(hours=hours_from_now)
+    return {"season": SEASON, "matchday": matchday, "home_team": home, "away_team": away,
+            "kickoff_utc": kickoff.isoformat(), "predicted": False,
+            "goals_home": None, "goals_away": None}
+
+
+@pytest.fixture
+def calendar(monkeypatch):
+    """Round 9 fully ahead and not priced; one match of round 10 too."""
+    teams = [("Bologna", "Torino"), ("Como", "Lazio"), ("Genoa", "Inter"),
+             ("Lecce", "Parma"), ("Milan", "Udinese"), ("Juventus", "Roma")]
+    rows = [_fixture(h, a, 9, 72 + i) for i, (h, a) in enumerate(teams)]
+    rows.append(_fixture("Napoli", "Atalanta", 10, 240))
+    monkeypatch.setattr(store, "fixtures", lambda *a, **k: rows)
+    monkeypatch.setattr(store, "matches", lambda *a, **k: [])
+    return rows
+
+
+def test_the_next_round_is_open_before_the_odds(signed_in, calendar) -> None:
+    """Picks open with the round, not with Friday's odds."""
+    rows = signed_in.get(f"/api/me/predictions/{SEASON}/open").json()
+    assert {r["matchday"] for r in rows} == {9}, "only the next round, not the one after"
+    assert all(not r["priced"] for r in rows)
+    assert all(m["probability"] is None for r in rows for m in r["markets"])
+
+    assert _pick(signed_in, "Bologna", "Torino", "1").status_code == 201
+    assert _pick(signed_in, "Napoli", "Atalanta", "1").status_code == 409, \
+        "a round further ahead is not open yet"
+
+
+def test_a_pick_made_before_the_odds_gets_the_price_later(signed_in, calendar, monkeypatch) -> None:
+    assert _pick(signed_in, "Bologna", "Torino", "over 2.5").status_code == 201
+    before = signed_in.get(f"/api/me/predictions/{SEASON}").json()["picks"][0]
+    assert before["model_probability"] is None
+
+    priced = {**calendar[0], "lambda_home": 1.5, "lambda_away": 1.2, "actual_outcome": None}
+    monkeypatch.setattr(store, "matches", lambda *a, **k: [priced])
+    after = signed_in.get(f"/api/me/predictions/{SEASON}").json()["picks"][0]
+    assert 0 < after["model_probability"] < 1, "the model's number arrives with the odds"
 
 
 # --- favourite team -----------------------------------------------------------

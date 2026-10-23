@@ -591,6 +591,68 @@
         }
       }
     },
+    "/api/fixtures/{season}": {
+      "get": {
+        "summary": "The calendar: every match of a season or round, predicted or not",
+        "description": "Who plays whom and when, before the model has priced anything.\n\nPUBLIC, AND IT CAN BE: the calendar is published by the league months in\nadvance and carries no probability. It is what the dashboard shows of a\nround between the close of the previous one and Friday's odds, and what\nthe users' own picks are made on.",
+        "operationId": "get_fixtures_api_fixtures__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "matchday",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 38,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matchday"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Fixture"
+                  },
+                  "title": "Response Get Fixtures Api Fixtures  Season  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/ml-team/{season}": {
       "get": {
         "summary": "The machine-learning model (M5) on every match of one team",
@@ -1185,7 +1247,7 @@
           "me"
         ],
         "summary": "Open Matches",
-        "description": "Matches not kicked off yet, with the model's price on every market.\n\nBehind `picks:read`, like the unplayed rounds on the dashboard: the price\nof a match that has not started is the product, here as there.",
+        "description": "Matches not kicked off yet in the next round, with the model's price on\nevery market where it exists.\n\nBehind `picks:read`, like the unplayed rounds on the dashboard: the price\nof a match that has not started is the product, here as there.",
         "operationId": "open_matches_api_me_predictions__season__open_get",
         "parameters": [
           {
@@ -1275,7 +1337,7 @@
           "me"
         ],
         "summary": "Add Prediction",
-        "description": "Record one pick. 409 once the match has started, or if it is already there.\n\nThe kickoff is read from the match files, here, now. The request carries no\ntime at all, so there is nothing a client can send to make a late pick\nlook early.",
+        "description": "Record one pick. 409 once the match has started, or if it is already there.\n\nThe kickoff is read from the calendar, here, now. The request carries no\ntime at all, so there is nothing a client can send to make a late pick\nlook early. The model need not have priced the match yet: picks open with\nthe round, not with the odds.",
         "operationId": "add_prediction_api_me_predictions_post",
         "requestBody": {
           "content": {
@@ -1536,6 +1598,75 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "Fixture": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc",
+            "description": "ISO 8601, UTC; null if the calendar has no time"
+          },
+          "predicted": {
+            "type": "boolean",
+            "title": "Predicted"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matchday",
+          "home_team",
+          "away_team",
+          "kickoff_utc",
+          "predicted"
+        ],
+        "title": "Fixture",
+        "description": "A match of the calendar, predicted or not.\n\nNot a track record row: no probabilities, no metrics. `predicted` says\nwhether the model has priced it yet — before Friday's odds it has not, and\nthe match still exists, which is the point of this shape."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1964,7 +2095,14 @@
             "title": "Group"
           },
           "probability": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Probability"
           },
           "fair_odds": {
@@ -2585,12 +2723,30 @@
             "type": "string",
             "title": "Kickoff Utc"
           },
+          "priced": {
+            "type": "boolean",
+            "title": "Priced"
+          },
           "lambda_home": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Lambda Home"
           },
           "lambda_away": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Lambda Away"
           },
           "markets": {
@@ -2608,12 +2764,13 @@
           "home_team",
           "away_team",
           "kickoff_utc",
+          "priced",
           "lambda_home",
           "lambda_away",
           "markets"
         ],
         "title": "OpenMatch",
-        "description": "A match that can still be picked, with the model's price on every market."
+        "description": "A match that can still be picked, with the model's price on every market\nonce the model has one. `priced` is false between the close of the\nprevious round and Friday's odds: the match is open, its numbers are not."
       },
       "Pick": {
         "properties": {

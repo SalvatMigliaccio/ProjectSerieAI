@@ -890,3 +890,14 @@ def test_ml_team_gathers_one_teams_matches() -> None:
     assert {r["matchday"] for r in rows} <= set(ml_mod.available(SEASON))
     assert len({(r["home_team"], r["away_team"]) for r in rows}) == len(rows)
     assert client.get(f"/api/ml-team/{SEASON}", params={"team": "Nessuno"}).json() == []
+
+
+def test_fixtures_are_the_calendar_not_the_track_record() -> None:
+    """A round exists before it is predicted; nothing in it carries a probability."""
+    rows = client.get(f"/api/fixtures/{SEASON}", params={"matchday": 8}).json()
+    assert len(rows) == 10, "a Serie A round has ten matches"
+    assert all(r["matchday"] == 8 for r in rows)
+    assert all(not any(k.startswith("p_") or k.startswith("lambda") for k in r) for r in rows), \
+        "the calendar carries no model output"
+    whole = client.get(f"/api/fixtures/{SEASON}").json()
+    assert len(whole) == 380

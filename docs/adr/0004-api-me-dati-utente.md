@@ -53,3 +53,18 @@ Il pacchetto `backend/auth` legge il track record tramite `backend.api.store`
 (in sola lettura), come gia' facevano le selezioni. La tabella
 `user_predictions` e la colonna `users.favorite_team` arrivano con la
 migrazione `7c1e5a2d9b40`.
+
+## Aggiornamento, 23 ottobre 2026 — si gioca dalla chiusura della giornata prima
+
+I pronostici non aspettano piu' le quote. Chiusa una giornata, quella dopo si
+apre subito dal **calendario** (`store.fixtures`, nuova rotta pubblica
+`GET /api/fixtures/{season}`): partite e orari, nessuna probabilita'. Le
+probabilita' del modello compaiono quando `predict_round` registra la
+giornata, e valgono anche per le giocate gia' fatte, perche' si ricalcolano.
+
+Restano invariate le due regole che contano: il calcio d'inizio lo decide il
+server (ora dal calendario, anche per le partite non ancora prezzate), e una
+giocata non si ritira dopo il fischio. Si aggiunge un limite: si gioca solo la
+**prossima giornata**, non tutta la stagione — un pronostico fatto ad ottobre
+su una partita di maggio non e' confrontabile con un modello che quella
+partita la prezza la settimana stessa.

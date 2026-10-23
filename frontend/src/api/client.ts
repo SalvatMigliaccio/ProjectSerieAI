@@ -10,6 +10,7 @@
  */
 
 import type {
+  Fixture,
   Health,
   Match,
   MLMatch,
@@ -301,6 +302,9 @@ export const api = {
     getOrNull<Match[]>(`/api/rounds/${code}/${matchday}`),
   trackRecord: (code = season()) => get<TrackRecord>(`/api/track-record/${code}`),
   standings: (code = season()) => get<Standings>(`/api/standings/${code}`),
+  /** Il calendario di una giornata: le partite prima ancora delle quote. */
+  fixtures: (matchday: number, code = season()) =>
+    get<Fixture[]>(`/api/fixtures/${code}?matchday=${matchday}`),
   /** Il modello AI (M5) su tutte le partite di una squadra. */
   mlTeam: (team: string, code = season()) =>
     get<MLMatch[]>(`/api/ml-team/${code}?team=${encodeURIComponent(team)}`),
