@@ -34,6 +34,7 @@ import {
   serverError,
   useValidation,
 } from "../components/Form";
+import { FavoritePicker } from "../components/FavoritePicker";
 import { Colophon, Masthead } from "../components/Layout";
 import { ago, localDateTime } from "../lib/format";
 
@@ -259,6 +260,8 @@ function SezioneProfilo({
           )}
         </dl>
       </section>
+
+      <FavoritePicker />
 
       <div className="profilo__scorciatoie">
         {SEZIONI.filter((s) => s.id !== "profilo").map((s) => (

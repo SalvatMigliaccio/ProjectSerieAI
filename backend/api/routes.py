@@ -345,6 +345,29 @@ def get_ml_round(season: str, matchday: int, user: Viewer = None) -> dict:
     return payload
 
 
+@public.get("/ml-team/{season}", response_model=list[schemas.MLMatch],
+            summary="The machine-learning model (M5) on every match of one team")
+def get_ml_team(season: str, team: str = Query(..., max_length=64,
+                                                description="Home or away, exact name"),
+                user: Viewer = None) -> list[dict]:
+    """
+    M5 on a whole season of one team, for the "La mia squadra" screen.
+
+    One call instead of one per matchday: a season is 38 of them, and the
+    screen needs every match at once. Same payloads and same visibility as
+    `/api/ml/{season}/{matchday}` — this only gathers them. Matchdays M5 was
+    not run on are simply absent; an empty list is not an error.
+    """
+    _known_season(season)
+    out: list[dict] = []
+    for matchday in ml_mod.available(season):
+        payload = ml_mod.round_ml(season, matchday)
+        if payload is None:
+            continue
+        out.extend(m for m in payload["matches"] if team in (m["home_team"], m["away_team"]))
+    return only_played(out, user)
+
+
 @router.get("/status", response_model=schemas.Status,
             summary="Last scheduler runs, current round, snapshot age")
 def get_status() -> dict:

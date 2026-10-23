@@ -163,7 +163,12 @@ def config_digest() -> str:
 # process that did not know the result. A write endpoint over the registry is
 # precisely how that guarantee is lost, so the day someone needs one, the
 # answer is still no.
-WRITABLE_PREFIX = "/api/auth/"
+#
+# /api/me joined on 21 October 2026 (ADR 0004): the user's own rows — the
+# favourite team, the picks of "My Prediction" — in Postgres, with a server-side
+# kickoff check on every pick. It is a second narrow door, not a wider one:
+# the track record is still out of reach of every route.
+WRITABLE_PREFIX = ("/api/auth/", "/api/me/")
 
 
 def iter_routes(app: FastAPI) -> Iterator[tuple[str, set[str]]]:
@@ -375,9 +380,11 @@ def create_app() -> FastAPI:
     # guards with it and serve everything to anyone, while looking healthy.
     #
     # A broken install must stop the process, not quietly widen access.
+    from backend.auth import me as me_routes
     from backend.auth import routes as auth_routes
 
     app.include_router(auth_routes.router)
+    app.include_router(me_routes.router)
 
     _assert_read_only_routes(app)
     return app

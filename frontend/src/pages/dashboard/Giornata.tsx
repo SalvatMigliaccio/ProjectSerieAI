@@ -1,28 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { api } from "../api/client";
-import { useAuth } from "../auth/AuthContext";
-import type { Match, Round, SeasonSummary, Selection, TrackRecord } from "../api/types";
-import { AsideSelections } from "../components/AsideSelections";
-import { ErrorBoundary } from "../components/ErrorBoundary";
-import { Colophon, Eyebrow, Masthead } from "../components/Layout";
-import { MatchesGrid, chiave, type Market, type SortBy } from "../components/MatchesGrid";
-import { ModelPicks } from "../components/ModelPicks";
-import { StandingsPanel } from "../components/StandingsPanel";
-import { EmptyState, ErrorState, Loading, SoloAbbonati } from "../components/States";
-import { TrackRecordPanel } from "../components/TrackRecordPanel";
-import { useApi } from "../hooks/useApi";
-import { ROUND_LABELS, localDateTime } from "../lib/format";
-import { scorrimento } from "../lib/motion";
+import { api } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
+import { useFavorite } from "../../auth/Favorite";
+import type { Match, Round, Selection } from "../../api/types";
+import { AsideSelections } from "../../components/AsideSelections";
+import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { Eyebrow } from "../../components/Layout";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { MERCATI, MatchesGrid, chiave, type Market, type SortBy } from "../../components/MatchesGrid";
+import { ModelPicks } from "../../components/ModelPicks";
+import { EmptyState, ErrorState, Loading, SoloAbbonati } from "../../components/States";
+import { useApi } from "../../hooks/useApi";
+import { ROUND_LABELS, localDateTime } from "../../lib/format";
+import { scorrimento } from "../../lib/motion";
 
-const MERCATI: Array<[Market, string]> = [
-  ["all", "Tutte le partite"],
-  ["1x2", "1X2"],
-  ["ou", "Over/Under"],
-  ["gg", "Goal/No Goal"],
-  ["result", "Risultato finale"],
-];
 
 /** Una giornata non chiusa e gia' cominciata e' "in corso"; le altre prendono
  *  l'etichetta dello stato che l'API dichiara. */
@@ -61,7 +54,15 @@ function perche_non_disponibile(round: Round): string {
   return `Giornata ${round.matchday}: giocata prima che il registro delle previsioni esistesse`;
 }
 
-export function Dashboard() {
+/**
+ * La giornata: griglia delle partite, selezioni e analisi del modello.
+ *
+ * E' la prima schermata della dashboard (`/dashboard`). Testata, barra
+ * laterale e piede li mette `DashboardShell`; classifica e track record stanno
+ * in "Stagione", la squadra preferita in "La mia squadra" — qui resta solo
+ * l'evidenziazione delle sue partite nella griglia.
+ */
+export function Giornata() {
   // deep-linking: la giornata scelta sta nell'URL (`#/dashboard?g=5`). Prima
   // viveva solo nello stato del componente: un link mandato a qualcuno apriva
   // sempre la giornata corrente, e tornando indietro dal browser si perdeva.
@@ -76,6 +77,7 @@ export function Dashboard() {
     setParams({ g: String(giornata) }, { replace: true });
   };
   const [market, setMarket] = useState<Market>("all");
+  const { team: preferita } = useFavorite();
   const [sort, setSort] = useState<SortBy>("time");
   // La soglia di quota sta QUI e non nella scheda laterale: sceglierla accende
   // anche le celle della griglia, quindi e' stato della pagina. Vedi
@@ -102,14 +104,6 @@ export function Dashboard() {
     [operatore],
   );
   const rounds = useApi(() => api.rounds(), []);
-  const record = useApi<{ record: TrackRecord; summary: SeasonSummary }>(
-    () =>
-      Promise.all([api.trackRecord(), api.season()]).then(([r, s]) => ({
-        record: r,
-        summary: s,
-      })),
-    [],
-  );
 
   useEffect(() => {
     if (selected !== null || !rounds.data) return;
@@ -161,29 +155,22 @@ export function Dashboard() {
   };
 
   return (
-    <div className="page--wide">
-      <Masthead current="dashboard" />
-
-      <main className="wrap" id="contenuto" tabIndex={-1}>
-        <section className="dash-banner">
-          <div className="dash-banner__title">
-            <div className="dash-banner__row">
-              <h1>{selected === null ? "Giornata" : `Giornata ${selected}`}</h1>
-              {stato.testo && (
-                <span className={`badge${stato.forte ? "" : " badge--quiet"}`}>
-                  {stato.testo}
-                </span>
-              )}
-            </div>
-            <span className="dash-banner__dates">
+    <>
+        <ScreenHeader
+          title={selected === null ? "Giornata" : `Giornata ${selected}`}
+          badge={stato.testo ? (
+            <span className={`badge${stato.forte ? "" : " badge--quiet"}`}>{stato.testo}</span>
+          ) : undefined}
+          subtitle={
+            <>
               {round?.first_date && round?.last_date
                 ? `${giorno(round.first_date)} – ${giorno(round.last_date)}`
                 : "Serie A"}
               {round?.status ? ` · ${ROUND_LABELS[round.status] ?? ""}` : ""}
-            </span>
-          </div>
-
-          <div className="dash-chips">
+            </>
+          }
+          aside={
+            <>
             <div className="dash-chip">
               <span className="dash-chip__glyph">
                 <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -213,8 +200,9 @@ export function Dashboard() {
                 </span>
               </span>
             </div>
-          </div>
-        </section>
+            </>
+          }
+        />
 
         {operatore && (status.data?.warnings ?? []).length > 0 && (
           <ul className="notes">
@@ -313,6 +301,7 @@ export function Dashboard() {
                   sort={sort}
                   picked={scelte}
                   soglia={soglia}
+                  favorite={preferita}
                 />
               </ErrorBoundary>
             )}
@@ -359,39 +348,6 @@ export function Dashboard() {
           </aside>
         </div>
 
-        <div className="dash-bottom">
-          <div>
-            <Eyebrow>classifica</Eyebrow>
-            <ErrorBoundary
-              label="classifica"
-              fallback={<p className="state">Classifica non disponibile.</p>}
-            >
-              <StandingsPanel />
-            </ErrorBoundary>
-          </div>
-
-          <div>
-            <Eyebrow>track record</Eyebrow>
-            {record.loading && <Loading what="carico il track record…" />}
-            {record.error && (
-              <ErrorState error={record.error} what="Non riesco a caricare il track record." />
-            )}
-            {record.data && (
-              <ErrorBoundary
-                label="track record"
-                fallback={<p className="state">Track record non disponibile.</p>}
-              >
-                <TrackRecordPanel record={record.data.record} summary={record.data.summary} />
-              </ErrorBoundary>
-            )}
-          </div>
-        </div>
-      </main>
-
-      <Colophon
-        modelVersion={record.data?.summary.model_version ?? null}
-        showApi
-      />
-    </div>
+    </>
   );
 }

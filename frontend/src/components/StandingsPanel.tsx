@@ -1,4 +1,5 @@
 import { api } from "../api/client";
+import { useFavorite } from "../auth/Favorite";
 import { useApi } from "../hooks/useApi";
 import { ErrorState, Loading } from "./States";
 
@@ -29,6 +30,7 @@ const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
 
 export function StandingsPanel({ limit }: { limit?: number }) {
   const state = useApi(() => api.standings(), []);
+  const { team: preferita } = useFavorite();
 
   if (state.loading) return <Loading what="carico la classifica…" />;
   if (state.error) {
@@ -66,14 +68,15 @@ export function StandingsPanel({ limit }: { limit?: number }) {
               <th className="right hide-narrow" title="gol fatti">GF</th>
               <th className="right hide-narrow" title="gol subiti">GS</th>
               <th className="right hide-narrow" title="differenza reti">DR</th>
-              {!stretta && <th className="std__form" title="ultime cinque, dalla piu' vecchia">Forma</th>}
+              {!stretta && <th className="std__form" title="ultime quattro, dalla piu' vecchia">Forma</th>}
               <th className="right" title="punti">Pt</th>
             </tr>
           </thead>
 
           <tbody>
             {rows.map((row) => (
-              <tr key={row.team}>
+              <tr key={row.team} className={row.team === preferita ? "is-fav" : undefined}
+                aria-current={row.team === preferita ? "true" : undefined}>
                 <td className="right">
                   <span className="std__rank">{row.position}</span>
                 </td>
@@ -99,7 +102,9 @@ export function StandingsPanel({ limit }: { limit?: number }) {
 
                 {!stretta && (
                   <td className="std__form">
-                    {(row.form ?? []).map((esito, indice) => (
+                    {/* Quattro e non cinque: con la quinta la colonna
+                        invadeva quella dei punti accanto. */}
+                    {(row.form ?? []).slice(-4).map((esito, indice) => (
                       <span
                         key={`${row.team}-${indice}`}
                         className={`std__pip std__pip--${esito.toLowerCase()}`}

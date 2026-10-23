@@ -118,3 +118,88 @@ HTTP can write either.
   `--no-deps`, which was smaller and wrong: the list missed scikit-learn, the
   build passed, and `/api/health` answered 500 because a route reaches
   `models/baseline.py` through a lazy import.
+
+---
+
+# Deploying on Vercel
+
+An alternative to the VPS, with the same split: **Vercel serves the dashboard
+and the API; the pipeline stays on your machine.** `vercel.json` declares two
+services in one project:
+
+| service | what | public on |
+|---|---|---|
+| `api` | FastAPI, `backend.api:app` | `/api/*`, `/openapi.json` |
+| `frontend` | the Vite build of `frontend/` | everything else |
+
+No bindings: the frontend is static and the browser calls `/api` on the same
+origin, through the public route. `/docs` (Swagger) is not public, as behind
+Caddy.
+
+## Once
+
+1. **Database.** Add Neon from the Vercel Marketplace and connect it to the
+   project. Neon sets its own `DATABASE_URL`; the API reads
+   `AI_NAPLES_DATABASE_URL`, with the psycopg driver. Copy the **pooled**
+   connection string (host with `-pooler`: serverless instances open many
+   short connections) and change the scheme:
+
+   ```
+   postgresql+psycopg://USER:PASSWORD@HOST-pooler.REGION.aws.neon.tech/DB?sslmode=require
+   ```
+
+2. **Environment variables** (Project → Settings → Environment Variables,
+   Production):
+
+   | variable | value |
+   |---|---|
+   | `AI_NAPLES_DATABASE_URL` | the string above |
+   | `AI_NAPLES_SECRET_KEY` | `python -c "import secrets; print(secrets.token_urlsafe(64))"` |
+   | `AI_NAPLES_COOKIE_SECURE` | `1` |
+   | `AI_NAPLES_PUBLIC_URL` | `https://<your-domain>` — builds the links in emails |
+   | `AI_NAPLES_SMTP_*` | a real provider, `starttls` or `ssl` |
+
+   Not needed: `AI_NAPLES_ROOT` (on Vercel the package uses the working
+   directory, see `src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`
+   (one origin, no CORS).
+
+3. **Migrations**, from your machine against Neon — Vercel runs no command at
+   deploy, and `backend/auth/migrations` is not even uploaded:
+
+   ```bash
+   AI_NAPLES_DATABASE_URL="<the string above>" alembic -c alembic.ini upgrade head
+   AI_NAPLES_DATABASE_URL="<...>" python -m backend.auth.cli create-superadmin --email you@example.com
+   ```
+
+## Deploying: from the pipeline machine, after every matchday
+
+`data/` and `experiments/output/` are not in git, by design, and a deploy from
+Git would ship an API with no data. **Deploy with the CLI from the machine
+where `predict_round` and `close_round` run**: the CLI ignores `.gitignore`
+and uploads what `.vercelignore` allows — an allowlist, so `.env` never leaves.
+
+```bash
+npm i -g vercel          # once
+vercel link              # once, picks the project
+vercel deploy --prod     # after predict-round and after close-round
+```
+
+The data on Vercel is a snapshot: it changes only with the next deploy. A
+matchday predicted on Friday reaches the dashboard when the Friday deploy
+does.
+
+**Check the first build log**: it must show `fastapi`, `sqlalchemy` and
+`pyjwt` being installed. They come from the `api` and `auth` extras through
+`requirements.txt` (`.[api,auth]`); Vercel documents no other way to ask
+pyproject for extras.
+
+Locally, `vercel dev` runs both services with the same routing.
+
+## What changes against the VPS
+
+| thing | VPS | Vercel |
+|---|---|---|
+| Track record | mounted read-only | a read-only copy in the bundle; the guards in `backend/api` still refuse writes |
+| Caller's address | from Caddy via `FORWARDED_ALLOW_IPS` | from `x-real-ip`, trusted only when `VERCEL` is set (`client_ip`) |
+| Rate limits | one process, one counter | **one counter per instance**: the effective limit grows with the instances Vercel starts. The account lockout, in Postgres, is unaffected |
+| Scheduler | the host | still the host. Vercel runs no pipeline step |

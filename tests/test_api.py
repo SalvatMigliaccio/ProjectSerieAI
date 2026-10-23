@@ -879,3 +879,14 @@ def test_ml_picks_follow_the_same_rule_as_m1() -> None:
     again = selections.picks("2627", lambdas=same)
     assert [(r["home_team"], r["market"]) for r in again["with_min_odds"]] ==            [(r["home_team"], r["market"]) for r in m1["with_min_odds"]]
     assert client.get(f"/api/picks-ml/{SEASON}").status_code == 200
+
+
+def test_ml_team_gathers_one_teams_matches() -> None:
+    """Every row is the team's, from a matchday M5 was run on; none twice."""
+    from backend.api import ml as ml_mod
+
+    rows = client.get(f"/api/ml-team/{SEASON}", params={"team": "Napoli"}).json()
+    assert all("Napoli" in (r["home_team"], r["away_team"]) for r in rows)
+    assert {r["matchday"] for r in rows} <= set(ml_mod.available(SEASON))
+    assert len({(r["home_team"], r["away_team"]) for r in rows}) == len(rows)
+    assert client.get(f"/api/ml-team/{SEASON}", params={"team": "Nessuno"}).json() == []

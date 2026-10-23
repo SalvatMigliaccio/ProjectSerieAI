@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
-import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 
 import { AuthProvider } from "./auth/AuthContext";
+import { FavoriteProvider } from "./auth/Favorite";
 import { RequireAuth } from "./auth/RequireAuth";
 import {
   ForgotPassword,
@@ -10,7 +11,11 @@ import {
   SignUp,
   VerifyEmail,
 } from "./pages/Account";
-import { Dashboard } from "./pages/Dashboard";
+import { Giornata } from "./pages/dashboard/Giornata";
+import { Pronostici } from "./pages/dashboard/Pronostici";
+import { DashboardShell } from "./pages/dashboard/Shell";
+import { Squadra } from "./pages/dashboard/Squadra";
+import { Stagione } from "./pages/dashboard/Stagione";
 import { Hero } from "./pages/Hero";
 import { Profile } from "./pages/Profile";
 
@@ -22,6 +27,9 @@ const TITOLI: Record<string, string> = {
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
   "/verify-email": "Attivazione · MatchPoint",
+  "/dashboard/pronostici": "I miei pronostici · MatchPoint",
+  "/dashboard/squadra": "La mia squadra · MatchPoint",
+  "/dashboard/stagione": "Stagione · MatchPoint",
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
@@ -76,6 +84,7 @@ export function App() {
   return (
     <HashRouter>
       <AuthProvider>
+        <FavoriteProvider>
         <CambioPagina />
         <Routes>
           {/* The landing page stays open: it sells the thing. */}
@@ -97,12 +106,21 @@ export function App() {
             path="/dashboard"
             element={
               <RequireAuth>
-                <Dashboard />
+                <DashboardShell />
               </RequireAuth>
             }
-          />
+          >
+            <Route index element={<Giornata />} />
+            <Route path="pronostici" element={<Pronostici />} />
+            <Route path="squadra" element={<Squadra />} />
+            <Route path="stagione" element={<Stagione />} />
+          </Route>
+          {/* Il primo indirizzo dei pronostici, prima che entrassero nella
+              dashboard: un link salvato continua a portare nel posto giusto. */}
+          <Route path="/pronostici" element={<Navigate to="/dashboard/pronostici" replace />} />
           <Route path="*" element={<Hero />} />
         </Routes>
+        </FavoriteProvider>
       </AuthProvider>
     </HashRouter>
   );

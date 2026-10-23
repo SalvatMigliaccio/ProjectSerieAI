@@ -591,6 +591,62 @@
         }
       }
     },
+    "/api/ml-team/{season}": {
+      "get": {
+        "summary": "The machine-learning model (M5) on every match of one team",
+        "description": "M5 on a whole season of one team, for the \"La mia squadra\" screen.\n\nOne call instead of one per matchday: a season is 38 of them, and the\nscreen needs every match at once. Same payloads and same visibility as\n`/api/ml/{season}/{matchday}` — this only gathers them. Matchdays M5 was\nnot run on are simply absent; an empty list is not an error.",
+        "operationId": "get_ml_team_api_ml_team__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "team",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 64,
+              "description": "Home or away, exact name",
+              "title": "Team"
+            },
+            "description": "Home or away, exact name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MLMatch"
+                  },
+                  "title": "Response Get Ml Team Api Ml Team  Season  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "summary": "Liveness and data freshness",
@@ -1048,6 +1104,247 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/preferences": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Get Preferences",
+        "operationId": "get_preferences_api_me_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Set Preferences",
+        "description": "Save the favourite team, or clear it with `null`.\n\nThe name must be a team of the current season, as the track record spells\nit. A free string would be stored and never match a single fixture, and\nthe page would highlight nothing with no error anywhere.",
+        "operationId": "set_preferences_api_me_preferences_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Preferences"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Preferences"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/predictions/{season}/open": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Open Matches",
+        "description": "Matches not kicked off yet, with the model's price on every market.\n\nBehind `picks:read`, like the unplayed rounds on the dashboard: the price\nof a match that has not started is the product, here as there.",
+        "operationId": "open_matches_api_me_predictions__season__open_get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenMatch"
+                  },
+                  "title": "Response Open Matches Api Me Predictions  Season  Open Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/predictions/{season}": {
+      "get": {
+        "tags": [
+          "me"
+        ],
+        "summary": "My Predictions",
+        "description": "Every pick of the season, newest match first, resolved against the result.",
+        "operationId": "my_predictions_api_me_predictions__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyPredictions"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/predictions": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Add Prediction",
+        "description": "Record one pick. 409 once the match has started, or if it is already there.\n\nThe kickoff is read from the match files, here, now. The request carries no\ntime at all, so there is nothing a client can send to make a late pick\nlook early.",
+        "operationId": "add_prediction_api_me_predictions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewPick"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Add Prediction Api Me Predictions Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/predictions/{pick_id}/delete": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Delete Prediction",
+        "description": "Withdraw a pick, before kick-off only.\n\nAfter it, a deletion is how a losing pick would disappear from the\ncomparison: the same reason the track record is append-only. Another\naccount's pick answers 404, like one that does not exist.",
+        "operationId": "delete_prediction_api_me_predictions__pick_id__delete_post",
+        "parameters": [
+          {
+            "name": "pick_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Pick Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Prediction Api Me Predictions  Pick Id  Delete Post"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1652,6 +1949,51 @@
         "title": "MLRound",
         "description": "M5 on a matchday. DIAGNOSTICS, not the production model.\n\nOn the test set M5 is indistinguishable from the market, so the track\nrecord stays on M1. Nothing here feeds a metric."
       },
+      "MarketOption": {
+        "properties": {
+          "market": {
+            "type": "string",
+            "title": "Market"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "group": {
+            "type": "string",
+            "title": "Group"
+          },
+          "probability": {
+            "type": "number",
+            "title": "Probability"
+          },
+          "fair_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds"
+          },
+          "picked": {
+            "type": "boolean",
+            "title": "Picked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "market",
+          "label",
+          "group",
+          "probability",
+          "fair_odds",
+          "picked"
+        ],
+        "title": "MarketOption"
+      },
       "Match": {
         "properties": {
           "season": {
@@ -2071,6 +2413,58 @@
         "type": "object",
         "title": "MatchPoint"
       },
+      "MyPredictions": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/Summary"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/Pick"
+            },
+            "type": "array",
+            "title": "Picks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "picks"
+        ],
+        "title": "MyPredictions"
+      },
+      "NewPick": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "maxLength": 9,
+            "title": "Season"
+          },
+          "home_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Away Team"
+          },
+          "market": {
+            "type": "string",
+            "maxLength": 16,
+            "title": "Market"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "home_team",
+          "away_team",
+          "market"
+        ],
+        "title": "NewPick"
+      },
       "NextAction": {
         "properties": {
           "command": {
@@ -2169,6 +2563,183 @@
         "title": "OddsSnapshot",
         "description": "The upcoming-odds file. An EMPTY snapshot is a normal state between rounds,\nnot a failure: football-data answers but has not published the round yet."
       },
+      "OpenMatch": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "kickoff_utc": {
+            "type": "string",
+            "title": "Kickoff Utc"
+          },
+          "lambda_home": {
+            "type": "number",
+            "title": "Lambda Home"
+          },
+          "lambda_away": {
+            "type": "number",
+            "title": "Lambda Away"
+          },
+          "markets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketOption"
+            },
+            "type": "array",
+            "title": "Markets"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matchday",
+          "home_team",
+          "away_team",
+          "kickoff_utc",
+          "lambda_home",
+          "lambda_away",
+          "markets"
+        ],
+        "title": "OpenMatch",
+        "description": "A match that can still be picked, with the model's price on every market."
+      },
+      "Pick": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "kickoff_utc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kickoff Utc"
+          },
+          "market": {
+            "type": "string",
+            "title": "Market"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "model_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Probability"
+          },
+          "fair_odds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fair Odds"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "season",
+          "matchday",
+          "home_team",
+          "away_team",
+          "kickoff_utc",
+          "market",
+          "label",
+          "model_probability",
+          "fair_odds",
+          "created_at",
+          "locked",
+          "goals_home",
+          "goals_away",
+          "won"
+        ],
+        "title": "Pick"
+      },
       "Picks": {
         "properties": {
           "season": {
@@ -2240,6 +2811,24 @@
         ],
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
+      },
+      "Preferences": {
+        "properties": {
+          "favorite_team": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favorite Team"
+          }
+        },
+        "type": "object",
+        "title": "Preferences"
       },
       "Refreshed": {
         "properties": {
@@ -3146,6 +3735,59 @@
         ],
         "title": "Status",
         "description": "Enough for a frontend to show that the system is alive — and no way to\ncommand it. Writing happens only from local processes."
+      },
+      "Summary": {
+        "properties": {
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "mean_model_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Model Probability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "picks",
+          "pending",
+          "resolved",
+          "won",
+          "hit_rate",
+          "mean_model_probability"
+        ],
+        "title": "Summary",
+        "description": "The comparison without a score.\n\n`mean_model_probability` is what the model expected of the resolved picks\non average; `hit_rate` is what actually happened. Side by side they say\nwhether the user's picks did better or worse than the model thought they\nwould — the one honest comparison with no points table."
       },
       "TokenOnly": {
         "properties": {
