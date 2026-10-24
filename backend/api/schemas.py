@@ -353,6 +353,36 @@ class ExpectedPoints(Base):
     table: list[ExpectedPointsRow] = []
 
 
+class MarketHit(Base):
+    key: str
+    label: str
+    outcomes: int = Field(description="How many outcomes the market has: 3 for 1X2")
+    hits: int
+    resolved: int
+    base_rate: float | None = Field(
+        None, description="How often the 'yes' side happened on the same matches. "
+                          "The yardstick: 'home team scores' happens 3 times in 4 anyway")
+
+
+class RoundHits(Base):
+    matchday: int
+    hits: int
+    resolved: int = Field(description="Matches x markets in the round")
+
+
+class MarketHits(Base):
+    """
+    How often the most likely side of each market came out, on the closed
+    rounds — the same matches as the official 1X2 count.
+    """
+
+    season: str
+    matches: int
+    markets: list[MarketHit] = []
+    by_round: list[RoundHits] = Field(
+        [], description="Per closed round, hits summed over every market")
+
+
 class Picks(Base):
     """
     The canonical selections. No threshold field to move, by design.

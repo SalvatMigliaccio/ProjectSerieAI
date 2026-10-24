@@ -361,6 +361,29 @@ def test_expected_points_never_use_unplayed_matches() -> None:
         assert row["predicted_matches"] == played.get(row["team"], 0), row["team"]
 
 
+def test_market_hits_1x2_is_the_official_count() -> None:
+    """
+    The 1X2 row must be the headline hit count, on the same matches. If it
+    were not, the home page would show two different "1X2 indovinati".
+    """
+    summary = client.get(f"/api/season/{SEASON}").json()
+    payload = client.get(f"/api/market-hits/{SEASON}").json()
+    first = payload["markets"][0]
+    assert first["key"] == "1x2"
+    assert (first["hits"], first["resolved"]) == (summary["hits"], summary["hits_denominator"])
+    for market in payload["markets"]:
+        assert market["resolved"] == payload["matches"], market["key"]
+        assert 0 <= market["hits"] <= market["resolved"], market["key"]
+        if market["outcomes"] == 2:
+            assert market["base_rate"] is not None and 0 <= market["base_rate"] <= 1
+
+    # The per-round tallies are the same predictions, regrouped.
+    assert sum(r["hits"] for r in payload["by_round"]) == sum(
+        m["hits"] for m in payload["markets"])
+    assert sum(r["resolved"] for r in payload["by_round"]) == (
+        payload["matches"] * len(payload["markets"]))
+
+
 def test_picks_use_the_threshold_the_project_declared() -> None:
     """The main line comes from config, not from the caller."""
     payload = client.get(f"/api/picks/{SEASON}").json()

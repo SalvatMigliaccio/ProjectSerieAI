@@ -276,6 +276,35 @@ export interface ExpectedPoints {
   table: ExpectedPointsRow[];
 }
 
+export interface MarketHit {
+  key: string;
+  label: string;
+  /** Quanti esiti ha il mercato: 3 per l'1X2, 2 per gli altri. */
+  outcomes: number;
+  hits: number;
+  resolved: number;
+  /** Quanto spesso l'esito "si'" e' capitato sulle stesse partite: il metro.
+   *  "Segna la squadra di casa" esce tre volte su quattro comunque. */
+  base_rate: number | null;
+}
+
+/** Quante volte il lato piu' probabile di ogni mercato e' uscito, sulle
+ *  giornate chiuse: le stesse partite del conto 1X2 ufficiale. */
+export interface RoundHits {
+  matchday: number;
+  hits: number;
+  /** Partite x mercati della giornata. */
+  resolved: number;
+}
+
+export interface MarketHits {
+  season: string;
+  matches: number;
+  markets: MarketHit[];
+  /** Per giornata chiusa, i pronostici indovinati su tutti i mercati. */
+  by_round: RoundHits[];
+}
+
 export interface Picks {
   season: string;
   matchday: number | null;

@@ -521,6 +521,7 @@ sono bloccate a runtime. Il track record lo scrivono `predict_round` e
 | `GET /api/track-record/{season}` | serie per giornata e per partita, calibrazione |
 | `GET /api/standings/{season}` | la classifica calcolata dai risultati. Spareggio: punti, **scontri diretti**, differenza reti |
 | `GET /api/players/{season}?limit=10` | capocannonieri e assistman da `understat_shots` (autogol esclusi, rigori = `situation` nullo). Si aggiorna con `ingest --stage shots` |
+| `GET /api/market-hits/{season}` | quante volte il lato piu' probabile di 1X2, over/under 2.5, goal/no goal e "segna casa/ospite" e' uscito, sulle giornate chiuse, con la frequenza di base accanto |
 | `GET /api/expected-points/{season}` | punti attesi a partita dal modello di produzione, **solo partite giocate**, e proiezione a 38 giornate (estrapolazione, avversari ignorati) |
 | `GET /api/picks/{season}` | **le selezioni principali**: una per partita, con la soglia dichiarata in `config.QUOTA_MINIMA_SELEZIONE`. Nessun parametro di quota |
 | `GET /api/selections/{season}` | esploratore: i mercati dentro una banda. Filtri: `min_odds`/`max_odds` (default 1.30-1.40), `matchday` |

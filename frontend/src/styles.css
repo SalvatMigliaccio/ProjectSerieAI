@@ -1036,6 +1036,31 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0
 
 .figure__note { font-size: 0.8125rem; color: var(--faint); }
 
+/* --- quante ne indovina, mercato per mercato (home) -----------------------
+   Cinque schede in riga, poi a capo da sole: `auto-fit` invece di un numero
+   fisso di colonne, cosi' su telefono diventano due per riga senza una regola
+   in piu'. */
+.hits {
+  margin-top: var(--s5);
+  display: grid; gap: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+.hits__card {
+  display: grid; gap: 4px; align-content: start;
+  padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-1);
+}
+.hits__label {
+  margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.hits__value {
+  font-family: var(--display); font-variant-numeric: tabular-nums;
+  font-size: 2rem; font-weight: 700; line-height: 1.1;
+}
+.hits__count { font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.hits__base { font-size: 0.75rem; color: var(--faint); }
+
 /* --- avvertenza ----------------------------------------------------------- */
 
 .notice {

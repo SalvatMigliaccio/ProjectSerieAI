@@ -426,6 +426,46 @@
         }
       }
     },
+    "/api/market-hits/{season}": {
+      "get": {
+        "summary": "Hit rate per market, on the closed rounds",
+        "description": "1X2, over/under 2.5, goal/no goal, each team to score: how often the side\nabove 50% came out. Closed rounds only, so it is history and public.",
+        "operationId": "get_market_hits_api_market_hits__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketHits"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/picks/{season}": {
       "get": {
         "summary": "The canonical M1 selections — no threshold to move",
@@ -2615,6 +2655,88 @@
         "title": "MLTrackRecord",
         "description": "The AI model (M5) against the classic one (M1), on the same played matches.\n\nDiagnostics, not the track record: the production model stays M1.\n`difference` is AI minus classic, and RPS is minimised, so NEGATIVE means\nthe AI did better. `ci_low`/`ci_high` are the paired bootstrap interval\nclustered on the matchday; null with fewer than two rounds."
       },
+      "MarketHit": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "outcomes": {
+            "type": "integer",
+            "title": "Outcomes",
+            "description": "How many outcomes the market has: 3 for 1X2"
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "base_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Rate",
+            "description": "How often the 'yes' side happened on the same matches. The yardstick: 'home team scores' happens 3 times in 4 anyway"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "outcomes",
+          "hits",
+          "resolved"
+        ],
+        "title": "MarketHit"
+      },
+      "MarketHits": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "markets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketHit"
+            },
+            "type": "array",
+            "title": "Markets",
+            "default": []
+          },
+          "by_round": {
+            "items": {
+              "$ref": "#/components/schemas/RoundHits"
+            },
+            "type": "array",
+            "title": "By Round",
+            "description": "Per closed round, hits summed over every market",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches"
+        ],
+        "title": "MarketHits",
+        "description": "How often the most likely side of each market came out, on the closed\nrounds — the same matches as the official 1X2 count."
+      },
       "MarketOption": {
         "properties": {
           "market": {
@@ -3794,6 +3916,30 @@
         ],
         "title": "Round",
         "description": "A matchday and where it stands.\n\n`status` is translated from the project's single state machine\n(`rounds.stato_giornate`), never recomputed here: future, open, predicted,\npartially_predicted, played, closed."
+      },
+      "RoundHits": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved",
+            "description": "Matches x markets in the round"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "hits",
+          "resolved"
+        ],
+        "title": "RoundHits"
       },
       "RoundPoint": {
         "properties": {

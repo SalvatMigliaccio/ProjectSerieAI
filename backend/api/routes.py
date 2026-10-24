@@ -292,6 +292,17 @@ def get_expected_points(season: str) -> dict:
     return payload
 
 
+@public.get("/market-hits/{season}", response_model=schemas.MarketHits,
+            summary="Hit rate per market, on the closed rounds")
+def get_market_hits(season: str) -> dict:
+    """
+    1X2, over/under 2.5, goal/no goal, each team to score: how often the side
+    above 50% came out. Closed rounds only, so it is history and public.
+    """
+    _known_season(season)
+    return selections_mod.market_hits(season)
+
+
 @public.get("/picks/{season}", response_model=schemas.Picks,
             summary="The canonical M1 selections — no threshold to move")
 def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38),
