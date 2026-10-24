@@ -302,6 +302,65 @@ def test_standings_404_when_nothing_was_played() -> None:
     assert "1999-00" in response.json()["detail"]
 
 
+def test_players_teams_are_the_tables_teams() -> None:
+    """
+    Understat writes "AC Milan" and "Parma Calcio 1913". A team name that the
+    map misses would not raise: the player would just never be highlighted for
+    his club, and a later join on the name would drop him.
+    """
+    teams = {row["team"] for row in client.get(f"/api/standings/{SEASON}").json()["table"]}
+    payload = client.get(f"/api/players/{SEASON}?limit=50").json()
+    for row in payload["scorers"] + payload["assists"]:
+        assert row["team"] in teams, f"{row['player']}: unmapped team {row['team']!r}"
+
+
+def test_players_are_ranked_and_count_no_own_goals() -> None:
+    payload = client.get(f"/api/players/{SEASON}?limit=50").json()
+    goals = [row["goals"] for row in payload["scorers"]]
+    assert goals == sorted(goals, reverse=True)
+    for row in payload["scorers"]:
+        assert 0 <= row["penalties"] <= row["goals"] <= row["shots"], row["player"]
+        assert row["position"] == 1 + sum(g > row["goals"] for g in goals)
+
+    # Goals scored in the table include own goals; the scorers' tally must not
+    # exceed it. Equality would mean own goals are being credited to players.
+    table = client.get(f"/api/standings/{SEASON}").json()["table"]
+    shots = pd.read_parquet(store.default_sources().understat_shots,
+                            columns=["league", "season", "result"])
+    shots = shots[(shots["season"] == store.season_in(SEASON))
+                  & shots["league"].isin(config.LEAGUES_PRODUZIONE)]
+    assert (shots["result"] == "Goal").sum() <= sum(r["goals_for"] for r in table)
+
+
+def test_expected_points_arithmetic_holds() -> None:
+    """3*p(win) + p(draw) per match: never above 3 a game, never below 0."""
+    payload = client.get(f"/api/expected-points/{SEASON}").json()
+    standings = {r["team"]: r for r in client.get(f"/api/standings/{SEASON}").json()["table"]}
+    assert payload["total_games"] == 38
+    assert len(payload["table"]) == len(standings)
+    for row in payload["table"]:
+        assert row["points"] == standings[row["team"]]["points"]
+        assert row["predicted_matches"] <= row["played"]
+        if row["expected_points_per_game"] is not None:
+            assert 0 <= row["expected_points_per_game"] <= 3
+            assert row["points_in_predicted"] <= row["points"]
+            assert row["projected_points"] >= row["points"]
+
+
+def test_expected_points_never_use_unplayed_matches() -> None:
+    """
+    Summed per team, the upcoming round's probabilities would leak what
+    `picks:read` gates. Only played matches may enter.
+    """
+    played: dict[str, int] = {}
+    for match in client.get(f"/api/matches/{SEASON}").json():
+        if match["goals_home"] is not None and match["p_home"] is not None:
+            for team in (match["home_team"], match["away_team"]):
+                played[team] = played.get(team, 0) + 1
+    for row in client.get(f"/api/expected-points/{SEASON}").json()["table"]:
+        assert row["predicted_matches"] == played.get(row["team"], 0), row["team"]
+
+
 def test_picks_use_the_threshold_the_project_declared() -> None:
     """The main line comes from config, not from the caller."""
     payload = client.get(f"/api/picks/{SEASON}").json()

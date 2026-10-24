@@ -1,40 +1,30 @@
 /**
- * La stagione: classifica e track record, in una schermata loro.
+ * La stagione: il campionato visto dai numeri — classifica, capocannonieri,
+ * assistman e punti attesi.
  *
- * Stavano in fondo alla giornata, sotto griglia e analisi: chi li cercava
- * doveva scorrere oltre tutto il resto, e chi guardava la giornata se li
- * trovava sotto senza averli chiesti. La classifica e' aritmetica sui
- * risultati, il track record e' quanto ha sbagliato il modello: vicini perche'
- * non vanno confusi, separati dalla giornata perche' sono un'altra domanda.
+ * TRE FATTI E UNA PREVISIONE. Classifica, marcatori e assist sono aritmetica
+ * su cose gia' successe; i punti attesi sono il modello. Stanno nella stessa
+ * schermata perche' rispondono alla stessa domanda — come sta andando il
+ * campionato — e la tabella del modello lo dichiara nel titolo, per non
+ * confondersi con le altre.
+ *
+ * Track record e modello AI stavano qui: ora sono in "Modello", che e'
+ * un'altra domanda.
  */
 
-import { api } from "../../api/client";
-import type { SeasonSummary, TrackRecord } from "../../api/types";
-import { AiExplainer } from "../../components/AiExplainer";
-import { AiTrackRecord } from "../../components/AiTrackRecord";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
+import { ExpectedPointsPanel } from "../../components/ExpectedPointsPanel";
 import { Eyebrow } from "../../components/Layout";
+import { PlayersPanel } from "../../components/PlayersPanel";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { StandingsPanel } from "../../components/StandingsPanel";
-import { ErrorState, Loading } from "../../components/States";
-import { TrackRecordPanel } from "../../components/TrackRecordPanel";
-import { useApi } from "../../hooks/useApi";
 
 export function Stagione() {
-  const record = useApi<{ record: TrackRecord; summary: SeasonSummary }>(
-    () =>
-      Promise.all([api.trackRecord(), api.season()]).then(([r, s]) => ({
-        record: r,
-        summary: s,
-      })),
-    [],
-  );
-
   return (
     <>
       <ScreenHeader
         title="Stagione"
-        subtitle="La classifica, quanto ha sbagliato il modello giornata per giornata, e come se la cava il modello AI"
+        subtitle="Classifica, capocannonieri, assistman e i punti che il modello si aspettava da ogni squadra"
       />
 
       <div className="dash-bottom">
@@ -48,31 +38,27 @@ export function Stagione() {
           </ErrorBoundary>
         </div>
 
-        <div>
-          <Eyebrow>track record</Eyebrow>
-          {record.loading && <Loading what="carico il track record…" />}
-          {record.error && (
-            <ErrorState error={record.error} what="Non riesco a caricare il track record." />
-          )}
-          {record.data && (
-            <ErrorBoundary
-              label="track record"
-              fallback={<p className="state">Track record non disponibile.</p>}
-            >
-              <TrackRecordPanel record={record.data.record} summary={record.data.summary} />
+        <div className="stagione-giocatori">
+          <div>
+            <Eyebrow>capocannonieri</Eyebrow>
+            <ErrorBoundary label="capocannonieri" fallback={<p className="state">Marcatori non disponibili.</p>}>
+              <PlayersPanel tipo="gol" />
             </ErrorBoundary>
-          )}
+          </div>
+          <div>
+            <Eyebrow>assistman</Eyebrow>
+            <ErrorBoundary label="assistman" fallback={<p className="state">Assist non disponibili.</p>}>
+              <PlayersPanel tipo="assist" />
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
 
-      {/* LA SECONDA OPINIONE, MISURATA COME LA PRIMA: sotto il track record
-          ufficiale e non al suo posto, perche' il modello di produzione resta
-          il classico. */}
-      <div className="aitr-layout">
-        <ErrorBoundary label="modello AI" fallback={<p className="state">Confronto non disponibile.</p>}>
-          <AiTrackRecord />
+      <div className="stagione-xpts">
+        <Eyebrow>punti attesi dal modello</Eyebrow>
+        <ErrorBoundary label="punti attesi" fallback={<p className="state">Punti attesi non disponibili.</p>}>
+          <ExpectedPointsPanel />
         </ErrorBoundary>
-        <AiExplainer />
       </div>
     </>
   );

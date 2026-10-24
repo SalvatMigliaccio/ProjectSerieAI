@@ -291,6 +291,68 @@ class Standings(Base):
     table: list[StandingRow] = []
 
 
+class Scorer(Base):
+    position: int
+    player: str
+    team: str
+    goals: int
+    penalties: int = Field(description="Of which from the spot")
+    shots: int
+    xg: float = Field(description="xG of every shot, scored or not")
+
+
+class AssistMan(Base):
+    position: int
+    player: str
+    team: str
+    assists: int
+    key_passes: int = Field(description="Passes that led to a shot")
+    xa: float = Field(description="xG of the shots the player set up")
+
+
+class Players(Base):
+    """
+    Top scorers and assist men: facts, like the table. From Understat's shots,
+    own goals excluded; an assist is the last pass before a goal.
+    """
+
+    season: str
+    matches: int
+    source: str
+    scorers: list[Scorer] = []
+    assists: list[AssistMan] = []
+
+
+class ExpectedPointsRow(Base):
+    team: str
+    position: int
+    played: int
+    points: int
+    points_per_game: float | None = None
+    predicted_matches: int = Field(
+        0, description="Played matches with a prediction in the log")
+    expected_points: float | None = Field(
+        None, description="Sum of 3*p(win) + p(draw) over those matches")
+    points_in_predicted: int | None = Field(
+        None, description="Points actually taken in the same matches")
+    expected_points_per_game: float | None = None
+    projected_points: float | None = Field(
+        None, description="Points so far + expected per game x games left. "
+                          "An extrapolation: remaining opponents are ignored")
+
+
+class ExpectedPoints(Base):
+    """
+    Expected points per team from the production model, on played matches
+    only: the upcoming round's probabilities stay behind `picks:read`.
+    """
+
+    season: str
+    total_games: int
+    model_version: str
+    table: list[ExpectedPointsRow] = []
+
+
 class Picks(Base):
     """
     The canonical selections. No threshold field to move, by design.

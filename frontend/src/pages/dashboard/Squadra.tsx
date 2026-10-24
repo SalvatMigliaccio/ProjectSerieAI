@@ -23,16 +23,17 @@
 import { useState } from "react";
 
 import { api } from "../../api/client";
-import type { MLMatch, Match } from "../../api/types";
+import type { MLMatch, Match, Selection } from "../../api/types";
 import { useFavorite } from "../../auth/Favorite";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { FavoritePanel } from "../../components/FavoritePanel";
 import { FavoritePicker } from "../../components/FavoritePicker";
-import { MatchesGrid } from "../../components/MatchesGrid";
+import { MatchesGrid, chiave } from "../../components/MatchesGrid";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "../../components/States";
 import { useApi } from "../../hooks/useApi";
 import { chiavePartita, conModelloAi } from "../../lib/ai";
+import { num } from "../../lib/format";
 
 type Modello = "classico" | "ai";
 
@@ -42,6 +43,18 @@ function Partite({ team, modello }: { team: string; modello: Modello }) {
     () => (modello === "ai" ? api.mlTeam(team) : Promise.resolve([])),
     [team, modello],
   );
+  // LA SELEZIONE DEL MODELLO, la stessa di "Selezioni del modello" nella
+  // giornata: una per partita, soglia dichiarata dal progetto. Senza, la
+  // griglia mostrava solo le probabilita' e nessuna cella diceva cosa il
+  // modello avesse scelto.
+  const picks = useApi(
+    () => (modello === "ai" ? api.picksMl() : api.picks()),
+    [modello],
+  );
+  const scelte = new Map<string, Selection>();
+  for (const s of picks.data?.with_min_odds ?? []) {
+    if (s.home_team === team || s.away_team === team) scelte.set(chiave(s), s);
+  }
 
   if (partite.loading || (modello === "ai" && ai.loading)) {
     return <Loading what="carico le partite…" />;
@@ -74,8 +87,22 @@ function Partite({ team, modello }: { team: string; modello: Modello }) {
           {modello === "ai" ? "Modello AI" : "Modello classico"}
         </span>
         {nota}
+        {picks.data && (
+          <>
+            {" "}La cella accesa è la selezione del modello, la più probabile fra quelle che
+            pagano almeno {num(picks.data.min_odds, 2)}; se il mercato non ha una colonna,
+            compare sotto i nomi delle squadre.
+          </>
+        )}
       </p>
-      <MatchesGrid matches={righe} market="all" sort="time" favorite={team} perGiornata />
+      <MatchesGrid
+        matches={righe}
+        market="all"
+        sort="time"
+        favorite={team}
+        picked={scelte}
+        perGiornata
+      />
     </>
   );
 }

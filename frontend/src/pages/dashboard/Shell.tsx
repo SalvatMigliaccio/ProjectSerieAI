@@ -1,14 +1,15 @@
 /**
  * La cornice della dashboard: testata, barra laterale, schermata, piede.
  *
- * QUATTRO SCHERMATE CON UN INDIRIZZO CIASCUNA (`/dashboard`,
- * `/dashboard/pronostici`, `/dashboard/squadra`, `/dashboard/stagione`), non
+ * CINQUE SCHERMATE CON UN INDIRIZZO CIASCUNA (`/dashboard`,
+ * `/dashboard/pronostici`, `/dashboard/squadra`, `/dashboard/stagione`,
+ * `/dashboard/modello`), non
  * schede in memoria: un link porta dritto alla schermata, e il tasto indietro
  * del browser torna a quella di prima invece di uscire dalla dashboard.
  *
  * BARRA LATERALE SOPRA I 1024px, SCHEDE IN BASSO SOTTO. Una colonna di 15rem
  * su un telefono mangerebbe meta' schermo; in basso, con icona ed etichetta,
- * le quattro voci restano a portata di pollice. E' la stessa lista di link,
+ * le cinque voci restano a portata di pollice. E' la stessa lista di link,
  * disegnata due volte dal CSS: un solo `<nav>`, una sola fonte delle voci.
  *
  * La griglia della giornata e le tabelle sono larghe: per questo la barra e'
@@ -76,12 +77,23 @@ const VOCI: { to: string; end?: boolean; label: string; breve: string; icon: Rea
       </Icon>
     ),
   },
+  {
+    to: "/dashboard/modello",
+    label: "Modello",
+    breve: "Modello",
+    icon: (
+      <Icon>
+        <path d="M3 17l5-5 4 4 8-8" />
+        <path d="M15 8h5v5" />
+      </Icon>
+    ),
+  },
 ];
 
 export function DashboardShell() {
   const { team } = useFavorite();
   // Solo per il piede: la versione del modello. Una chiamata leggera, gia'
-  // fatta anche dalla schermata Stagione; la cache del browser non serve, la
+  // fatta anche dalla schermata Modello; la cache del browser non serve, la
   // risposta e' piccola.
   const season = useApi(() => api.season(), []);
 

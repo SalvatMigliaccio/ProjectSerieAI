@@ -12,6 +12,7 @@ import {
   VerifyEmail,
 } from "./pages/Account";
 import { Giornata } from "./pages/dashboard/Giornata";
+import { Modello } from "./pages/dashboard/Modello";
 import { Pronostici } from "./pages/dashboard/Pronostici";
 import { DashboardShell } from "./pages/dashboard/Shell";
 import { Squadra } from "./pages/dashboard/Squadra";
@@ -30,6 +31,7 @@ const TITOLI: Record<string, string> = {
   "/dashboard/pronostici": "I miei pronostici · MatchPoint",
   "/dashboard/squadra": "La mia squadra · MatchPoint",
   "/dashboard/stagione": "Stagione · MatchPoint",
+  "/dashboard/modello": "Modello · MatchPoint",
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
@@ -114,6 +116,7 @@ export function App() {
             <Route path="pronostici" element={<Pronostici />} />
             <Route path="squadra" element={<Squadra />} />
             <Route path="stagione" element={<Stagione />} />
+            <Route path="modello" element={<Modello />} />
           </Route>
           {/* Il primo indirizzo dei pronostici, prima che entrassero nella
               dashboard: un link salvato continua a portare nel posto giusto. */}

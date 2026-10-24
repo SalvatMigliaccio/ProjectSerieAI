@@ -217,6 +217,65 @@ export interface Standings {
   table: StandingRow[];
 }
 
+export interface Scorer {
+  position: number;
+  player: string;
+  team: string;
+  goals: number;
+  /** Di cui su rigore. */
+  penalties: number;
+  shots: number;
+  /** xG di tutti i tiri, segnati o no. */
+  xg: number;
+}
+
+export interface AssistMan {
+  position: number;
+  player: string;
+  team: string;
+  assists: number;
+  /** Passaggi che hanno portato a un tiro. */
+  key_passes: number;
+  /** xG dei tiri che il giocatore ha servito. */
+  xa: number;
+}
+
+/** Marcatori e assistman: fatti, come la classifica. Da Understat, autogol
+ *  esclusi; l'assist e' l'ultimo passaggio prima del gol. */
+export interface Players {
+  season: string;
+  matches: number;
+  source: string;
+  scorers: Scorer[];
+  assists: AssistMan[];
+}
+
+export interface ExpectedPointsRow {
+  team: string;
+  position: number;
+  played: number;
+  points: number;
+  points_per_game: number | null;
+  /** Partite giocate con una previsione nel registro. */
+  predicted_matches: number;
+  /** Somma di 3·p(vittoria) + p(pareggio) su quelle partite. */
+  expected_points: number | null;
+  /** I punti fatti davvero nelle stesse partite. */
+  points_in_predicted: number | null;
+  expected_points_per_game: number | null;
+  /** Punti fatti + attesi a partita × partite rimaste. Un'estrapolazione:
+   *  gli avversari che restano non contano. */
+  projected_points: number | null;
+}
+
+/** Punti attesi dal modello di produzione, solo sulle partite giocate. */
+export interface ExpectedPoints {
+  season: string;
+  total_games: number;
+  model_version: string;
+  table: ExpectedPointsRow[];
+}
+
 export interface Picks {
   season: string;
   matchday: number | null;

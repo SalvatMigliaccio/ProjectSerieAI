@@ -22,6 +22,7 @@ WHAT IT READS, AND WHY THE PERIMETER IS WIDER THAN track_record/
   data/interim/matches_master.parquet  results, needed by the round state machine
   data/raw/fixtures_odds.parquet     odds snapshot age, for /api/status
   experiments/output/previsioni_m5_*.csv   M5 per matchday, for /api/ml (ml.py)
+  data/raw/understat_shots.parquet   scorers and assists, for /api/players (players.py)
 
 The last three are the reason the perimeter is not just `track_record/`: the
 log stores `match_date` (a date), never a kickoff time, and the round state
@@ -104,6 +105,7 @@ class Sources:
     odds_snapshot: Path
     understat_schedule: Path
     ml_predictions: Path        # experiments/output: M5, for `ml.py`
+    understat_shots: Path       # shots with scorer and assist, for `players.py`
 
     @classmethod
     def at(cls, track_record: Path, data: Path) -> Sources:
@@ -119,6 +121,7 @@ class Sources:
             # `experiments/output/`. A deployment that does not mount it simply
             # has no M5 to show, and the route answers 404.
             ml_predictions=data.parent / "experiments" / "output",
+            understat_shots=data / "raw" / "understat_shots.parquet",
         )
 
 

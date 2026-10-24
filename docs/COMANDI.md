@@ -520,6 +520,8 @@ sono bloccate a runtime. Il track record lo scrivono `predict_round` e
 | `GET /api/matches/{season}` | tutte le partite. Filtri: `team`, `status`, `from`, `to` |
 | `GET /api/track-record/{season}` | serie per giornata e per partita, calibrazione |
 | `GET /api/standings/{season}` | la classifica calcolata dai risultati. Spareggio: punti, **scontri diretti**, differenza reti |
+| `GET /api/players/{season}?limit=10` | capocannonieri e assistman da `understat_shots` (autogol esclusi, rigori = `situation` nullo). Si aggiorna con `ingest --stage shots` |
+| `GET /api/expected-points/{season}` | punti attesi a partita dal modello di produzione, **solo partite giocate**, e proiezione a 38 giornate (estrapolazione, avversari ignorati) |
 | `GET /api/picks/{season}` | **le selezioni principali**: una per partita, con la soglia dichiarata in `config.QUOTA_MINIMA_SELEZIONE`. Nessun parametro di quota |
 | `GET /api/selections/{season}` | esploratore: i mercati dentro una banda. Filtri: `min_odds`/`max_odds` (default 1.30-1.40), `matchday` |
 | `GET /api/picks-ml/{season}` | le stesse selezioni di `/api/picks` (stessa soglia, stesso criterio, stesso codice), dai gol attesi del modello AI (M5). E' il pulsante "Modello AI" della dashboard |

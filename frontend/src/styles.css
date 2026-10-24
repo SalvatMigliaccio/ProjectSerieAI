@@ -1681,6 +1681,25 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .dash-bottom { grid-template-columns: 1fr; }
 }
 
+/* --- stagione: marcatori, assist, punti attesi ----------------------------
+   Riusano il guscio della classifica (`.std`): stessa pagina, stessa lingua
+   visiva. Cambiano solo le colonne. */
+.stagione-giocatori { display: grid; gap: var(--s5); }
+.stagione-xpts { margin-top: var(--s6); }
+
+.players__c-pos { width: 12%; }
+.players__c-player { width: 58%; }
+.players__c-num { width: 15%; }
+.players__who { min-width: 0; }
+.players__team {
+  display: block; color: var(--faint); font-size: 0.75rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.xpts__c-pos { width: 6%; }
+.xpts__c-team { width: 22%; }
+.xpts__c-num { width: 12%; }
+
 /* --- barra di stato ------------------------------------------------------- */
 
 .status {
@@ -3160,7 +3179,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     background: rgba(var(--surface-rgb), 0.96);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
-  .dash-nav ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dash-nav ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .dash-nav__link {
     flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 0;
     font-size: 0.6875rem;

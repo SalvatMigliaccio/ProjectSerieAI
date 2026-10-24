@@ -29,6 +29,12 @@ from . import (
     ml as ml_mod,
 )
 from . import (
+    expected_points as xpts_mod,
+)
+from . import (
+    players as players_mod,
+)
+from . import (
     schemas,
     store,
 )
@@ -254,6 +260,36 @@ def get_standings(season: str) -> dict:
             detail=f"no played match for season '{season}': the table is empty",
         )
     return table
+
+
+@public.get("/players/{season}", response_model=schemas.Players,
+            summary="Top scorers and assist men")
+def get_players(season: str, limit: int = Query(10, ge=1, le=50)) -> dict:
+    """Goals and assists from Understat's shots — facts, not a forecast."""
+    payload = players_mod.leaders(season, limit=limit)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no shot data for season '{season}': run "
+                   f"'goalmodel ingest --stage shots'",
+        )
+    return payload
+
+
+@public.get("/expected-points/{season}", response_model=schemas.ExpectedPoints,
+            summary="Expected points per team, on played matches")
+def get_expected_points(season: str) -> dict:
+    """
+    3*p(win) + p(draw) from the production model, against the points taken.
+    Played matches only: summed per team, the upcoming round would leak.
+    """
+    payload = xpts_mod.expected_points(season)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no played match for season '{season}'",
+        )
+    return payload
 
 
 @public.get("/picks/{season}", response_model=schemas.Picks,

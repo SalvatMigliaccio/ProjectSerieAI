@@ -334,6 +334,98 @@
         }
       }
     },
+    "/api/players/{season}": {
+      "get": {
+        "summary": "Top scorers and assist men",
+        "description": "Goals and assists from Understat's shots — facts, not a forecast.",
+        "operationId": "get_players_api_players__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Players"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expected-points/{season}": {
+      "get": {
+        "summary": "Expected points per team, on played matches",
+        "description": "3*p(win) + p(draw) from the production model, against the points taken.\nPlayed matches only: summed per team, the upcoming round would leak.",
+        "operationId": "get_expected_points_api_expected_points__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpectedPoints"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/picks/{season}": {
       "get": {
         "summary": "The canonical M1 selections — no threshold to move",
@@ -1554,6 +1646,46 @@
         "title": "ActivityRow",
         "description": "One entry of the account's own audit trail, as its owner sees it.\n\nNO `details`. That column holds context for whoever investigates — the id\nof the admin who granted a role, the reason of a refusal — and none of it\nis the user's to read. What is left is what a person can act on: what\nhappened, whether it worked, when, from where."
       },
+      "AssistMan": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "player": {
+            "type": "string",
+            "title": "Player"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "assists": {
+            "type": "integer",
+            "title": "Assists"
+          },
+          "key_passes": {
+            "type": "integer",
+            "title": "Key Passes",
+            "description": "Passes that led to a shot"
+          },
+          "xa": {
+            "type": "number",
+            "title": "Xa",
+            "description": "xG of the shots the player set up"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "player",
+          "team",
+          "assists",
+          "key_passes",
+          "xa"
+        ],
+        "title": "AssistMan"
+      },
       "CalibrationBin": {
         "properties": {
           "bin": {
@@ -1682,6 +1814,130 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "ExpectedPoints": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "total_games": {
+            "type": "integer",
+            "title": "Total Games"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "table": {
+            "items": {
+              "$ref": "#/components/schemas/ExpectedPointsRow"
+            },
+            "type": "array",
+            "title": "Table",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "total_games",
+          "model_version"
+        ],
+        "title": "ExpectedPoints",
+        "description": "Expected points per team from the production model, on played matches\nonly: the upcoming round's probabilities stay behind `picks:read`."
+      },
+      "ExpectedPointsRow": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "played": {
+            "type": "integer",
+            "title": "Played"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "points_per_game": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Per Game"
+          },
+          "predicted_matches": {
+            "type": "integer",
+            "title": "Predicted Matches",
+            "description": "Played matches with a prediction in the log",
+            "default": 0
+          },
+          "expected_points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Points",
+            "description": "Sum of 3*p(win) + p(draw) over those matches"
+          },
+          "points_in_predicted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points In Predicted",
+            "description": "Points actually taken in the same matches"
+          },
+          "expected_points_per_game": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Points Per Game"
+          },
+          "projected_points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projected Points",
+            "description": "Points so far + expected per game x games left. An extrapolation: remaining opponents are ignored"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "position",
+          "played",
+          "points"
+        ],
+        "title": "ExpectedPointsRow"
       },
       "Fixture": {
         "properties": {
@@ -3311,6 +3567,46 @@
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
       },
+      "Players": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "scorers": {
+            "items": {
+              "$ref": "#/components/schemas/Scorer"
+            },
+            "type": "array",
+            "title": "Scorers",
+            "default": []
+          },
+          "assists": {
+            "items": {
+              "$ref": "#/components/schemas/AssistMan"
+            },
+            "type": "array",
+            "title": "Assists",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches",
+          "source"
+        ],
+        "title": "Players",
+        "description": "Top scorers and assist men: facts, like the table. From Understat's shots,\nown goals excluded; an assist is the last pass before a goal."
+      },
       "Preferences": {
         "properties": {
           "favorite_team": {
@@ -3654,6 +3950,51 @@
           "picks"
         ],
         "title": "SavePicks"
+      },
+      "Scorer": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "player": {
+            "type": "string",
+            "title": "Player"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "goals": {
+            "type": "integer",
+            "title": "Goals"
+          },
+          "penalties": {
+            "type": "integer",
+            "title": "Penalties",
+            "description": "Of which from the spot"
+          },
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          },
+          "xg": {
+            "type": "number",
+            "title": "Xg",
+            "description": "xG of every shot, scored or not"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "player",
+          "team",
+          "goals",
+          "penalties",
+          "shots",
+          "xg"
+        ],
+        "title": "Scorer"
       },
       "SeasonSummary": {
         "properties": {
