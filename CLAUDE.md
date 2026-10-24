@@ -985,10 +985,19 @@ mercato = -0.00011, IC [-0.00081, +0.00057]. La produzione resta su M1.
 - **Copertura parziale**: 39.1% delle partite in tutto il dataset, ma **91%
   sul test set** (1037 su 1140). Le stagioni precedenti al 2021/22 restano a
   NaN, che LightGBM tratta nativamente.
-- **L'orizzonte poggia su un assunto non verificato**: che la lista degli
-  indisponibili di WhoScored sia quella pubblicata PRIMA della partita e non
-  aggiornata a posteriori. Se cosi' non fosse, il blocco andrebbe buttato, non
-  corretto.
+- **L'orizzonte: VERIFICATO il 23 ottobre 2026, con una sorpresa.**
+  (`python -m goalmodel.experiments.assenze_orizzonte`, riassunto in
+  `experiments/output/riassunto_bloccoB_orizzonte.md`.) La regola scritta prima
+  dei numeri NON e' superata: l'8% degli "infortunati" in lista ha giocato, e
+  chi esce presto e risulta infortunato alla partita dopo era gia' in lista
+  nel 19% dei casi. La diagnosi dice perche', ed e' innocua: chi e' in lista e
+  gioca lo fa soprattutto per pochi minuti (meta' entro i 30) e quasi mai la
+  partita prima — sono i RIENTRI dalla panchina, che WhoScored tiene ancora
+  in lista. Ristretta al caso decisivo (giocatore sano alla t-1, infortunato
+  nella t), la lista della t lo contiene in 3 casi su 285 (1.1%) contro lo
+  0.6% del controllo: **nessuna informazione dal futuro**. Le liste sono
+  pre-partita ma in parte VECCHIE: rumore che indebolisce il blocco, non
+  leakage che lo invalida.
 
 ### La predizione falsificabile sull'half-life NON e' testabile cosi'
 
@@ -1373,6 +1382,35 @@ formulazione dopo il risultato. Su dati nuovi lo e' a pieno titolo.
 **Predizione che la falsifica**: su dati nuovi la differenza deve restare
 negativa e dello stesso ordine (fra -0.0002 e -0.0003). Se cambia segno o si
 dimezza, il guadagno del blocco B era rumore di questo test set.
+
+### 3. Blocco B, migliorie (GIOCATORI_V2) — registrata il 23 ottobre 2026
+
+**Specifica congelata** (`experiments/bloccoB_migliorie.py`, set
+`GIOCATORI_V2` in `features/sets.py`), tre varianti di BASE+GIOCATORI, ognuna
+contro BASE+GIOCATORI:
+- `xga`: `quota_xga_assente` (xG+xA da Understat, nomi riconciliati con
+  `riconcilia_nomi`) al posto di `quota_ga_assente`;
+- `lungo`: `quota_minuti_lungo` (lungodegenti pesati con la quota di minuti
+  della stagione precedente, tetto 1/11) al posto di `quota_minuti_assenti`;
+- `entrambe`.
+Stima: media di 5 semi sui log-lambda, confronto annidato, bootstrap a
+cluster sulla giornata.
+
+**Perche' non e' stata decisa in validazione.** Misurata li' (2021/22,
+2022/23) tutte e tre a +-0.00001 dal riferimento, intervalli a cavallo dello
+zero. Ma il CONTROLLO dice che quel risultato non vale niente: il blocco
+GIOCATORI intero contro BASE, nella stessa validazione, fa -0.00001
+[-0.00005, +0.00003], contro -0.00027 sul test. **La validazione e' cieca per
+questo blocco** — le assenze partono proprio dal 2021/22, e il modello non ha
+anni da cui impararle. Un "no" misurato da uno strumento cieco non e' un no.
+
+**Perche' non sul test set.** Il blocco B li' e' gia' stato visto: provarne
+varianti sullo stesso test sarebbe scegliere la specifica a posteriori.
+
+**Dove si testa: la stagione 2026/27**, mai vista da nessun modello, quando
+avra' abbastanza giornate. Ogni variante conta nel proprio m. **Predizione che
+la falsifica**: `xga` deve migliorare GIOCATORI (differenza negativa); se e'
+>= 0 su dati nuovi, il peso per xG non aggiunge niente a gol+assist.
 
 ### 2. Forma per sede (FORMA_VENUE) — NON entrata: nulla in validazione
 

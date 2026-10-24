@@ -6,6 +6,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { useFavorite } from "../../auth/Favorite";
 import type { Fixture, Match, Round, Selection } from "../../api/types";
 import { AsideSelections } from "../../components/AsideSelections";
+import { AiMatchCards } from "../../components/AiMatchCards";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { FixturesList } from "../../components/FixturesList";
 import { Eyebrow } from "../../components/Layout";
@@ -317,6 +318,12 @@ export function Giornata() {
                 fallback={<p className="state">Selezioni non disponibili.</p>}
               >
                 <ModelPicks matchday={selected} />
+              </ErrorBoundary>
+              <ErrorBoundary
+                label="modello AI partita per partita"
+                fallback={<p className="state">Modello AI non disponibile.</p>}
+              >
+                <AiMatchCards matchday={selected} />
               </ErrorBoundary>
             </section>
 

@@ -1036,6 +1036,31 @@ h3 { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; margin: 0 0
 
 .figure__note { font-size: 0.8125rem; color: var(--faint); }
 
+/* --- quante ne indovina, mercato per mercato (home) -----------------------
+   Cinque schede in riga, poi a capo da sole: `auto-fit` invece di un numero
+   fisso di colonne, cosi' su telefono diventano due per riga senza una regola
+   in piu'. */
+.hits {
+  margin-top: var(--s5);
+  display: grid; gap: var(--s3);
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+}
+.hits__card {
+  display: grid; gap: 4px; align-content: start;
+  padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); box-shadow: var(--shadow-1);
+}
+.hits__label {
+  margin: 0; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--faint);
+}
+.hits__value {
+  font-family: var(--display); font-variant-numeric: tabular-nums;
+  font-size: 2rem; font-weight: 700; line-height: 1.1;
+}
+.hits__count { font-size: 0.875rem; font-variant-numeric: tabular-nums; }
+.hits__base { font-size: 0.75rem; color: var(--faint); }
+
 /* --- avvertenza ----------------------------------------------------------- */
 
 .notice {
@@ -1680,6 +1705,25 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .dash-layout { grid-template-columns: 1fr; }
   .dash-bottom { grid-template-columns: 1fr; }
 }
+
+/* --- stagione: marcatori, assist, punti attesi ----------------------------
+   Riusano il guscio della classifica (`.std`): stessa pagina, stessa lingua
+   visiva. Cambiano solo le colonne. */
+.stagione-giocatori { display: grid; gap: var(--s5); }
+.stagione-xpts { margin-top: var(--s6); }
+
+.players__c-pos { width: 12%; }
+.players__c-player { width: 58%; }
+.players__c-num { width: 15%; }
+.players__who { min-width: 0; }
+.players__team {
+  display: block; color: var(--faint); font-size: 0.75rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.xpts__c-pos { width: 6%; }
+.xpts__c-team { width: 22%; }
+.xpts__c-num { width: 12%; }
 
 /* --- barra di stato ------------------------------------------------------- */
 
@@ -3160,7 +3204,7 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     background: rgba(var(--surface-rgb), 0.96);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
-  .dash-nav ul { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .dash-nav ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .dash-nav__link {
     flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 0;
     font-size: 0.6875rem;
@@ -3260,4 +3304,264 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .profilo__conta, .strength__text {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* --- modello AI: confronto, spiegazione, partita per partita --------------
+   Colori delle due serie del grafico: arancio e blu categoriali, validati con
+   lo script della skill dataviz sul fondo delle schede (#181b1f): fascia di
+   luminosita', saturazione minima, separazione per daltonismo (dE 26.8) e
+   contrasto passano tutti. NON il verde, che nel resto dell'app vuol dire
+   "esito uscito". Solo qui: il resto dell'interfaccia non li usa. */
+.aitr-layout {
+  margin-top: var(--s6);
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--s6);
+  align-items: start;
+}
+.aitr, .aiex {
+  padding: var(--s5); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface);
+}
+.aitr__title { margin: 0 0 var(--s4); font-family: var(--display); font-size: 1.125rem; }
+.aitr__stats {
+  margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3);
+}
+.aitr__stats > div {
+  padding: var(--s3); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.aitr__stats dt { color: var(--faint); font-size: 0.75rem; }
+.aitr__stats dd { margin: 4px 0 0; font-family: var(--mono); font-size: 1.0625rem; font-weight: 500; }
+.aitr__ci { display: block; margin-top: 2px; color: var(--faint); font-family: var(--mono); font-size: 0.75rem; }
+.aitr__verdict { margin: var(--s4) 0; color: var(--muted); font-size: 0.9375rem; line-height: 1.55; max-width: none; }
+.aitr__verdict.is-early { padding-left: var(--s3); border-left: 2px solid var(--warn); }
+
+.aitr__chart { position: relative; }
+.aitr__legend { list-style: none; margin: 0 0 var(--s2); padding: 0; display: flex; gap: var(--s4); font-size: 0.8125rem; color: var(--muted); }
+.aitr__legend li { display: inline-flex; align-items: center; gap: 6px; }
+.aitr__swatch { display: inline-block; width: 12px; height: 3px; border-radius: 2px; }
+.aitr__swatch.aitr__classic { background: #d95926; }
+.aitr__swatch.aitr__ai { background: #3987e5; }
+.aitr__line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.aitr__line.aitr__classic { stroke: #d95926; }
+.aitr__line.aitr__ai { stroke: #3987e5; }
+/* L'anello del colore della superficie separa i punti quando si toccano. */
+.aitr__dot { stroke: var(--surface); stroke-width: 2; }
+.aitr__dot.aitr__classic { fill: #d95926; }
+.aitr__dot.aitr__ai { fill: #3987e5; }
+.aitr__label { fill: var(--fg); font-size: 13px; font-family: var(--text); }
+.aitr__cross { stroke: var(--line-strong); stroke-width: 1; }
+.aitr__hit { fill: transparent; cursor: crosshair; outline: none; }
+.aitr__hit:focus-visible { stroke: var(--mint); stroke-width: 1.5; }
+.aitr__tooltip {
+  position: absolute; top: 28px; right: 0;
+  display: grid; gap: 2px; padding: var(--s2) var(--s3);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-2);
+  font-size: 0.8125rem; font-family: var(--mono); box-shadow: var(--shadow-2); pointer-events: none;
+}
+.aitr__tooltip strong { font-family: var(--text); }
+.aitr__tooltip span { display: inline-flex; align-items: center; gap: 6px; }
+.aitr__data { margin-top: var(--s4); }
+.aitr__data summary { cursor: pointer; color: var(--muted); font-size: 0.875rem; min-height: 32px; }
+.aitr__data .std { margin-top: var(--s3); }
+
+.aiex__grid { display: grid; gap: var(--s4); }
+.aiex__item h3 { margin: 0 0 4px; font-size: 0.9375rem; }
+.aiex__item p { margin: 0; color: var(--muted); font-size: 0.875rem; line-height: 1.6; max-width: none; }
+.aiex__item strong { color: var(--fg); }
+
+.aimc__won { color: var(--ok); }
+.aimc__lost { color: var(--ko); }
+
+@media (max-width: 1100px) {
+  .aitr-layout { grid-template-columns: minmax(0, 1fr); }
+  .aitr__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+
+/* --- modello AI partita per partita: finestra richiudibile ---------------- */
+.aimc-panel {
+  margin-top: var(--s6);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.aimc-panel__head { margin: 0; font-size: inherit; }
+.aimc-panel__toggle {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--s4);
+  width: 100%; min-height: 56px; padding: var(--s3) var(--s5);
+  border: 0; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+  border-radius: var(--radius);
+}
+.aimc-panel__toggle:hover { background: var(--surface-2); }
+.aimc-panel__toggle:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; }
+.aimc-panel__title { font-family: var(--display); font-weight: 600; font-size: 1.0625rem; }
+.aimc-panel__sum { color: var(--muted); font-size: 0.875rem; min-width: 0; }
+.aimc-panel__action {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 0.875rem; font-weight: 500;
+}
+.aimc-panel__action svg { transition: transform 160ms ease; }
+.aimc-panel__toggle[aria-expanded="true"] .aimc-panel__action svg { transform: rotate(180deg); }
+.aimc-panel__body { padding: 0 var(--s5) var(--s5); border-top: 1px solid var(--line); }
+.aimc-panel__hint { margin: var(--s4) 0 var(--s3); color: var(--faint); font-size: 0.8125rem; max-width: none; }
+.aimc-panel__more { margin-top: var(--s2); }
+
+.aimc { border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); margin-bottom: 6px; }
+.aimc[open] { border-color: var(--line-strong); }
+.aimc__summary {
+  display: grid; grid-template-columns: minmax(10rem, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
+  align-items: center; gap: var(--s4);
+  min-height: 56px; padding: var(--s3) var(--s4); cursor: pointer; list-style: none;
+}
+.aimc__summary::-webkit-details-marker { display: none; }
+.aimc__summary:hover { background: var(--surface); }
+.aimc__summary:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; border-radius: var(--radius-sm); }
+.aimc__teams { font-weight: 600; min-width: 0; }
+.aimc__when { display: block; margin-top: 2px; color: var(--faint); font-weight: 400; font-size: 0.75rem; }
+.aimc__cell { display: grid; gap: 2px; min-width: 0; }
+.aimc__key { color: var(--faint); font-size: 0.75rem; }
+.aimc__val { font-size: 0.9375rem; }
+.aimc__num { font-family: var(--mono); font-size: 0.875rem; color: var(--muted); }
+.aimc__verdetto { display: inline-flex; align-items: center; gap: 4px; font-size: 0.875rem; font-weight: 500; }
+.aimc__verdetto.is-ok { color: var(--ok); }
+.aimc__verdetto.is-ko { color: var(--ko); }
+.aimc__chevron { color: var(--faint); transition: transform 160ms ease; }
+.aimc[open] .aimc__chevron { transform: rotate(180deg); }
+
+.aimc__body { padding: 0 var(--s4) var(--s4); }
+.aimc__lambda { margin: 0 0 var(--s3); color: var(--muted); font-size: 0.875rem; max-width: none; }
+.aimc__lambda strong { color: var(--fg); font-weight: 600; }
+.aimc__table td.right { font-family: var(--mono); }
+.aimc__group th {
+  text-align: left; color: var(--faint); font-size: 0.6875rem; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; padding-top: var(--s3);
+}
+.aimc__table tr.is-pick td { color: var(--fg); font-weight: 600; }
+.aimc__tag {
+  margin-left: var(--s2); padding: 0 6px; border: 1px solid var(--line-strong); border-radius: 4px;
+  color: var(--muted); font-size: 0.6875rem; font-weight: 500;
+}
+.aimc__big { color: var(--fg); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .aimc__summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .aimc__cell { grid-column: 1 / 2; }
+  .aimc__chevron { grid-row: 1; grid-column: 2; }
+  .aimc-panel__toggle { grid-template-columns: minmax(0, 1fr) auto; }
+  .aimc-panel__sum { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* --- i miei pronostici: una scheda per partita, che si apre --------------- */
+.pron-card {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.pron-card.is-open { border-color: var(--line-strong); }
+.pron-card.is-fav { box-shadow: inset 3px 0 0 var(--mint); }
+.pron-card__head { margin: 0; font-size: inherit; font-weight: inherit; }
+.pron-card__toggle {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: var(--s4);
+  width: 100%; min-height: 64px; padding: var(--s3) var(--s5);
+  border: 0; border-radius: var(--radius); background: none;
+  color: var(--fg); font: inherit; text-align: left; cursor: pointer;
+}
+.pron-card__toggle:hover { background: var(--surface-2); }
+.pron-card__toggle:focus-visible { outline: 2px solid var(--mint); outline-offset: -2px; }
+.pron-card__teams { display: grid; gap: 4px; min-width: 0; }
+.pron-card__name { font-family: var(--display); font-weight: 600; font-size: 1.0625rem; }
+.pron-card__meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2);
+  color: var(--faint); font-size: 0.8125rem;
+}
+.pron-card__saved {
+  display: grid; gap: 2px; justify-items: end; text-align: right;
+  padding: 6px var(--s3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-2);
+}
+.pron-card__saved-key { color: var(--faint); font-size: 0.6875rem; letter-spacing: 0.04em; }
+.pron-card__saved-val { display: inline-flex; align-items: baseline; gap: var(--s2); font-weight: 600; font-size: 0.9375rem; }
+.pron-card__saved-p { font-family: var(--mono); font-weight: 500; font-size: 0.8125rem; color: var(--muted); }
+.pron-card__dirty {
+  padding: 2px var(--s2); border-radius: 999px; background: var(--warn-wash); color: var(--warn);
+  font-size: 0.75rem; font-weight: 600; white-space: nowrap;
+}
+.pron-card__chevron { color: var(--faint); display: inline-grid; transition: transform 160ms ease; }
+.pron-card.is-open .pron-card__chevron { transform: rotate(180deg); }
+.pron-card__body { padding: 0 var(--s5) var(--s5); border-top: 1px solid var(--line); }
+.pron-card__hint { margin: var(--s4) 0; color: var(--faint); font-size: 0.8125rem; max-width: none; }
+
+/* La barra di salvataggio: ferma in fondo allo schermo mentre si scorre le
+   schede, cosi' "Salva" e' sempre a portata. Sopra le schede in basso del
+   telefono, che stanno a 88px. */
+.pron-savebar {
+  position: sticky; bottom: var(--s4); z-index: 40;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s3);
+  margin-top: var(--s5); padding: var(--s3) var(--s4);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-2);
+  box-shadow: var(--shadow-3);
+}
+.pron-savebar__text { margin-right: auto; font-weight: 600; }
+.pron-savebar__ok {
+  display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600;
+}
+.pron-savebar__ok:empty { display: none; }
+@media (max-width: 1023px) {
+  .pron-savebar { bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 720px) {
+  .pron-card__toggle { grid-template-columns: minmax(0, 1fr) auto; padding-inline: var(--s4); }
+  .pron-card__saved { grid-column: 1 / 2; justify-items: start; text-align: left; }
+  .pron-card__dirty { grid-column: 1 / 2; justify-self: start; }
+  .pron-card__chevron { grid-row: 1; grid-column: 2; }
+  .pron-card__body { padding-inline: var(--s4); }
+}
+
+/* --- pronostici: tu contro il modello, e l'archivio ------------------------ */
+.pron-vs {
+  grid-column: 1 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center;
+  gap: var(--s5); padding: var(--s5);
+  border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface);
+}
+.pron-vs__side { display: grid; gap: 2px; }
+.pron-vs__side:last-child { text-align: right; }
+.pron-vs__value { font-family: var(--mono); font-size: 2.25rem; font-weight: 500; line-height: 1.1; }
+.pron-vs__sep {
+  color: var(--faint); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+}
+.pron-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pron-section__lead { margin: calc(var(--s2) * -1) 0 var(--s4); color: var(--muted); font-size: 0.875rem; max-width: none; }
+
+.pron-arch__toggle { grid-template-columns: minmax(0, 1fr) auto auto; }
+.pron-arch__score {
+  display: grid; gap: 2px; justify-items: end; text-align: right;
+  font-family: var(--mono); font-size: 0.875rem;
+}
+.pron-arch__who { font-family: var(--text); color: var(--faint); font-size: 0.75rem; margin-right: 4px; }
+.pron-arch__result { font-family: var(--mono); color: var(--muted); font-size: 0.8125rem; }
+.pron-arch__p { font-family: var(--mono); color: var(--faint); font-size: 0.8125rem; }
+.pron-esito { display: inline-flex; align-items: center; gap: 4px; font-size: 0.8125rem; font-weight: 500; }
+.pron-esito.is-ok { color: var(--ok); }
+.pron-esito.is-ko { color: var(--ko); }
+
+@media (max-width: 720px) {
+  .pron-vs { grid-template-columns: minmax(0, 1fr); text-align: left; }
+  .pron-vs__side:last-child { text-align: left; }
+  .pron-vs__sep { justify-self: start; }
+  .pron-stats { grid-template-columns: minmax(0, 1fr); }
+  .pron-arch__toggle { grid-template-columns: minmax(0, 1fr) auto; }
+  .pron-arch__score { grid-column: 1 / 2; justify-items: start; text-align: left; }
+}
+
+/* L'elenco delle partite dentro una giornata dell'archivio: le stesse schede
+   di "Da giocare", ferme (non si aprono), una sotto l'altra. */
+.pron-arch__list { list-style: none; margin: var(--s4) 0 0; padding: 0; display: grid; gap: 6px; }
+.pron-arch__item {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, auto) minmax(10rem, auto);
+  align-items: center; gap: var(--s4);
+  min-height: 64px; padding: var(--s3) var(--s4);
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2);
+}
+.pron-arch__item .pron-card__saved { min-width: 0; }
+.pron-arch__model { background: transparent; border-style: dashed; }
+@media (max-width: 720px) {
+  .pron-arch__item { grid-template-columns: minmax(0, 1fr); }
+  .pron-arch__item .pron-card__saved { justify-items: start; text-align: left; }
 }

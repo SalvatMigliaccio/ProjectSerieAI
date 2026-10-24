@@ -159,7 +159,12 @@ def test_unplayed_match_is_null_not_zero() -> None:
 
         log_path = track / "predictions_log.csv"
         log = pd.read_csv(log_path)
-        future = log.iloc[-1].copy()
+        # UNA RIGA DEL MODELLO DI PRODUZIONE, non l'ultima del file. Da quando
+        # predict_round scrive anche il modello in parallelo (rho=-0.16) dopo
+        # ogni riga principale, l'ultima riga e' quella parallela: l'API la
+        # filtra, e la partita finta spariva. Il test si e' rotto il giorno in
+        # cui il registro ha avuto la prima giornata scritta dopo l'aggiunta.
+        future = log[log["model_version"] == store.PRODUCTION_MODEL].iloc[-1].copy()
         # SQUADRE INVENTATE, non una coppia vera. Il test usava Monza-Sassuolo
         # contando che non fosse giocata: da quando l'API cerca il risultato
         # nella catena delle fonti lo trovava — la partita si e' giocata davvero
@@ -295,6 +300,88 @@ def test_standings_404_when_nothing_was_played() -> None:
     response = client.get("/api/standings/1999-00")
     assert response.status_code == 404
     assert "1999-00" in response.json()["detail"]
+
+
+def test_players_teams_are_the_tables_teams() -> None:
+    """
+    Understat writes "AC Milan" and "Parma Calcio 1913". A team name that the
+    map misses would not raise: the player would just never be highlighted for
+    his club, and a later join on the name would drop him.
+    """
+    teams = {row["team"] for row in client.get(f"/api/standings/{SEASON}").json()["table"]}
+    payload = client.get(f"/api/players/{SEASON}?limit=50").json()
+    for row in payload["scorers"] + payload["assists"]:
+        assert row["team"] in teams, f"{row['player']}: unmapped team {row['team']!r}"
+
+
+def test_players_are_ranked_and_count_no_own_goals() -> None:
+    payload = client.get(f"/api/players/{SEASON}?limit=50").json()
+    goals = [row["goals"] for row in payload["scorers"]]
+    assert goals == sorted(goals, reverse=True)
+    for row in payload["scorers"]:
+        assert 0 <= row["penalties"] <= row["goals"] <= row["shots"], row["player"]
+        assert row["position"] == 1 + sum(g > row["goals"] for g in goals)
+
+    # Goals scored in the table include own goals; the scorers' tally must not
+    # exceed it. Equality would mean own goals are being credited to players.
+    table = client.get(f"/api/standings/{SEASON}").json()["table"]
+    shots = pd.read_parquet(store.default_sources().understat_shots,
+                            columns=["league", "season", "result"])
+    shots = shots[(shots["season"] == store.season_in(SEASON))
+                  & shots["league"].isin(config.LEAGUES_PRODUZIONE)]
+    assert (shots["result"] == "Goal").sum() <= sum(r["goals_for"] for r in table)
+
+
+def test_expected_points_arithmetic_holds() -> None:
+    """3*p(win) + p(draw) per match: never above 3 a game, never below 0."""
+    payload = client.get(f"/api/expected-points/{SEASON}").json()
+    standings = {r["team"]: r for r in client.get(f"/api/standings/{SEASON}").json()["table"]}
+    assert payload["total_games"] == 38
+    assert len(payload["table"]) == len(standings)
+    for row in payload["table"]:
+        assert row["points"] == standings[row["team"]]["points"]
+        assert row["predicted_matches"] <= row["played"]
+        if row["expected_points_per_game"] is not None:
+            assert 0 <= row["expected_points_per_game"] <= 3
+            assert row["points_in_predicted"] <= row["points"]
+            assert row["projected_points"] >= row["points"]
+
+
+def test_expected_points_never_use_unplayed_matches() -> None:
+    """
+    Summed per team, the upcoming round's probabilities would leak what
+    `picks:read` gates. Only played matches may enter.
+    """
+    played: dict[str, int] = {}
+    for match in client.get(f"/api/matches/{SEASON}").json():
+        if match["goals_home"] is not None and match["p_home"] is not None:
+            for team in (match["home_team"], match["away_team"]):
+                played[team] = played.get(team, 0) + 1
+    for row in client.get(f"/api/expected-points/{SEASON}").json()["table"]:
+        assert row["predicted_matches"] == played.get(row["team"], 0), row["team"]
+
+
+def test_market_hits_1x2_is_the_official_count() -> None:
+    """
+    The 1X2 row must be the headline hit count, on the same matches. If it
+    were not, the home page would show two different "1X2 indovinati".
+    """
+    summary = client.get(f"/api/season/{SEASON}").json()
+    payload = client.get(f"/api/market-hits/{SEASON}").json()
+    first = payload["markets"][0]
+    assert first["key"] == "1x2"
+    assert (first["hits"], first["resolved"]) == (summary["hits"], summary["hits_denominator"])
+    for market in payload["markets"]:
+        assert market["resolved"] == payload["matches"], market["key"]
+        assert 0 <= market["hits"] <= market["resolved"], market["key"]
+        if market["outcomes"] == 2:
+            assert market["base_rate"] is not None and 0 <= market["base_rate"] <= 1
+
+    # The per-round tallies are the same predictions, regrouped.
+    assert sum(r["hits"] for r in payload["by_round"]) == sum(
+        m["hits"] for m in payload["markets"])
+    assert sum(r["resolved"] for r in payload["by_round"]) == (
+        payload["matches"] * len(payload["markets"]))
 
 
 def test_picks_use_the_threshold_the_project_declared() -> None:
@@ -901,3 +988,22 @@ def test_fixtures_are_the_calendar_not_the_track_record() -> None:
         "the calendar carries no model output"
     whole = client.get(f"/api/fixtures/{SEASON}").json()
     assert len(whole) == 380
+
+
+def test_ml_track_record_scores_m1_like_the_track_record() -> None:
+    """
+    The classic model's RPS here must BE the archived one, round by round.
+
+    If it is not, the comparison with the AI is not on the same scale and
+    the page would be comparing two different things under one name.
+    """
+    tr = client.get(f"/api/ml-track-record/{SEASON}").json()
+    archived = {r["matchday"]: r["rps"] for r in client.get(f"/api/rounds/{SEASON}").json()
+                if r["closed"] and r["rps"] is not None}
+    for rnd in tr["rounds"]:
+        if rnd["matchday"] in archived and rnd["matches"] == 10:
+            assert abs(rnd["rps_classic"] - archived[rnd["matchday"]]) < 1e-6, rnd["matchday"]
+    assert tr["matches"] == len(tr["per_match"])
+    assert tr["ai_better"] + tr["classic_better"] <= tr["matches"]
+    if tr["n_rounds"] > 1:
+        assert tr["ci_low"] <= tr["difference"] <= tr["ci_high"]

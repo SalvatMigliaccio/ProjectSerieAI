@@ -126,6 +126,12 @@ services:
       # il "Modello AI" della dashboard risulta vuoto su OGNI giornata, senza un
       # errore: per l'API "nessun file" e' uno stato legittimo.
       - ./experiments/output:/srv/experiments/output:ro
+      # Lo stato degli script pianificati (`last_run.json`), che /api/status
+      # legge. Senza questo montaggio la dashboard degli amministratori diceva
+      # "Nessuna esecuzione registrata di predict_round" mentre gli script
+      # giravano regolarmente: l'API non vedeva il file, non l'assenza di
+      # esecuzioni. Sola lettura: lo scrivono gli script, sulla macchina.
+      - ./logs:/srv/logs:ro
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:

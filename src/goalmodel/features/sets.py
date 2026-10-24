@@ -124,6 +124,15 @@ _FORMA_VENUE_COLONNE = tuple(
 if len(_FORMA_VENUE_COLONNE) != 48:
     raise ValueError(f"FORMA_VENUE ha {len(_FORMA_VENUE_COLONNE)} colonne, non 48")
 
+# Le due migliorie del blocco B che CLAUDE.md elencava: il peso per xG+xA al
+# posto di gol+assist, e i lungodegenti pesati con la stagione precedente.
+# Colonne NUOVE e non una modifica di GIOCATORI: quel set e' la specifica
+# congelata dell'ipotesi pre-registrata n.1, e cambiarlo la invaliderebbe.
+_GIOCATORI_V2_COLONNE = (
+    "home_quota_xga_assente", "away_quota_xga_assente", "diff_quota_xga_assente",
+    "home_quota_minuti_lungo", "away_quota_minuti_lungo", "diff_quota_minuti_lungo",
+)
+
 SETS: dict[str, FeatureSet] = {
     "BASE": FeatureSet(
         "BASE", CONGELATO, _BASE_COLONNE,
@@ -147,6 +156,21 @@ SETS: dict[str, FeatureSet] = {
         "quanto la completa, quindi l'asimmetria 20:1 era una "
         "rappresentazione. Non promuove: le verifiche possono solo "
         "declassare. Contro il mercato resta indistinguibile.",
+    ),
+    "GIOCATORI_V2": FeatureSet(
+        "GIOCATORI_V2", DA_MISURARE, _GIOCATORI_V2_COLONNE,
+        "Le migliorie del blocco B (23 ott 2026). quota_xga_assente: la quota "
+        "di xG+xA della rosa indisponibile, da Understat, al posto di "
+        "gol+assist — un attaccante che non ha ancora segnato non pesa piu' "
+        "zero. quota_minuti_lungo: la quota di minuti assenti piu' i "
+        "lungodegenti, pesati con la quota di minuti della stagione "
+        "PRECEDENTE (informazione chiusa, lecita). Costruite in memoria da "
+        "experiments/bloccoB_migliorie.py, nessun parquet. Validazione (23 ott "
+        "2026): +-0.00001 per tutte e tre le varianti, ma la validazione e' "
+        "CIECA per il blocco (GIOCATORI contro BASE li' fa -0.00001, contro "
+        "-0.00027 sul test): nessuna conclusione. Ipotesi pre-registrata n.3 "
+        "in CLAUDE.md, da testare sulla stagione 2026/27. Resta fuori dal "
+        "modello finche' non e' misurata.",
     ),
     "FORMA_VENUE": FeatureSet(
         "FORMA_VENUE", SCARTATO, _FORMA_VENUE_COLONNE,

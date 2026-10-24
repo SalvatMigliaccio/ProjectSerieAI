@@ -334,6 +334,138 @@
         }
       }
     },
+    "/api/players/{season}": {
+      "get": {
+        "summary": "Top scorers and assist men",
+        "description": "Goals and assists from Understat's shots — facts, not a forecast.",
+        "operationId": "get_players_api_players__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 10,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Players"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/expected-points/{season}": {
+      "get": {
+        "summary": "Expected points per team, on played matches",
+        "description": "3*p(win) + p(draw) from the production model, against the points taken.\nPlayed matches only: summed per team, the upcoming round would leak.",
+        "operationId": "get_expected_points_api_expected_points__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpectedPoints"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/market-hits/{season}": {
+      "get": {
+        "summary": "Hit rate per market, on the closed rounds",
+        "description": "1X2, over/under 2.5, goal/no goal, each team to score: how often the side\nabove 50% came out. Closed rounds only, so it is history and public.",
+        "operationId": "get_market_hits_api_market_hits__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketHits"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/picks/{season}": {
       "get": {
         "summary": "The canonical M1 selections — no threshold to move",
@@ -574,6 +706,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MLRound"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ml-track-record/{season}": {
+      "get": {
+        "summary": "The AI model (M5) against the classic one (M1), played matches only",
+        "description": "How the second opinion is doing, scored like the first.\n\nPublic like the rest of the history: it is built only from played matches,\nand the price of a match that has not kicked off is not in it.",
+        "operationId": "get_ml_track_record_api_ml_track_record__season__get",
+        "parameters": [
+          {
+            "name": "season",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Season"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MLTrackRecord"
                 }
               }
             }
@@ -1375,6 +1547,50 @@
         }
       }
     },
+    "/api/me/predictions/save": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Save Predictions",
+        "description": "Save the picks of a round in one go: one per match, replaced or withdrawn.\n\nALL OR NOTHING. Every choice is checked BEFORE any row changes — the\nmarket exists, the match is open and in the next round — and one bad\nchoice refuses the whole save with 409, naming the match. Half a save\nwould leave the page showing picks that the server does not have.\n\nThe kickoff is read here, now, from the calendar, as in `add_prediction`:\nthe request carries no time. A match that has already started cannot be\nchanged, so its saved pick stays as it was.",
+        "operationId": "save_predictions_api_me_predictions_save_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SavePicks"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Save Predictions Api Me Predictions Save Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/predictions/{pick_id}/delete": {
       "post": {
         "tags": [
@@ -1469,6 +1685,46 @@
         ],
         "title": "ActivityRow",
         "description": "One entry of the account's own audit trail, as its owner sees it.\n\nNO `details`. That column holds context for whoever investigates — the id\nof the admin who granted a role, the reason of a refusal — and none of it\nis the user's to read. What is left is what a person can act on: what\nhappened, whether it worked, when, from where."
+      },
+      "AssistMan": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "player": {
+            "type": "string",
+            "title": "Player"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "assists": {
+            "type": "integer",
+            "title": "Assists"
+          },
+          "key_passes": {
+            "type": "integer",
+            "title": "Key Passes",
+            "description": "Passes that led to a shot"
+          },
+          "xa": {
+            "type": "number",
+            "title": "Xa",
+            "description": "xG of the shots the player set up"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "player",
+          "team",
+          "assists",
+          "key_passes",
+          "xa"
+        ],
+        "title": "AssistMan"
       },
       "CalibrationBin": {
         "properties": {
@@ -1598,6 +1854,130 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "ExpectedPoints": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "total_games": {
+            "type": "integer",
+            "title": "Total Games"
+          },
+          "model_version": {
+            "type": "string",
+            "title": "Model Version"
+          },
+          "table": {
+            "items": {
+              "$ref": "#/components/schemas/ExpectedPointsRow"
+            },
+            "type": "array",
+            "title": "Table",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "total_games",
+          "model_version"
+        ],
+        "title": "ExpectedPoints",
+        "description": "Expected points per team from the production model, on played matches\nonly: the upcoming round's probabilities stay behind `picks:read`."
+      },
+      "ExpectedPointsRow": {
+        "properties": {
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "played": {
+            "type": "integer",
+            "title": "Played"
+          },
+          "points": {
+            "type": "integer",
+            "title": "Points"
+          },
+          "points_per_game": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points Per Game"
+          },
+          "predicted_matches": {
+            "type": "integer",
+            "title": "Predicted Matches",
+            "description": "Played matches with a prediction in the log",
+            "default": 0
+          },
+          "expected_points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Points",
+            "description": "Sum of 3*p(win) + p(draw) over those matches"
+          },
+          "points_in_predicted": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Points In Predicted",
+            "description": "Points actually taken in the same matches"
+          },
+          "expected_points_per_game": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Points Per Game"
+          },
+          "projected_points": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Projected Points",
+            "description": "Points so far + expected per game x games left. An extrapolation: remaining opponents are ignored"
+          }
+        },
+        "type": "object",
+        "required": [
+          "team",
+          "position",
+          "played",
+          "points"
+        ],
+        "title": "ExpectedPointsRow"
       },
       "Fixture": {
         "properties": {
@@ -2036,6 +2416,63 @@
         ],
         "title": "MLMatch"
       },
+      "MLMatchScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "home_team": {
+            "type": "string",
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "title": "Away Team"
+          },
+          "goals_home": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Home"
+          },
+          "goals_away": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Goals Away"
+          },
+          "rps_classic": {
+            "type": "number",
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "type": "number",
+            "title": "Rps Ai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "home_team",
+          "away_team",
+          "goals_home",
+          "goals_away",
+          "rps_classic",
+          "rps_ai"
+        ],
+        "title": "MLMatchScore"
+      },
       "MLRound": {
         "properties": {
           "season": {
@@ -2079,6 +2516,226 @@
         ],
         "title": "MLRound",
         "description": "M5 on a matchday. DIAGNOSTICS, not the production model.\n\nOn the test set M5 is indistinguishable from the market, so the track\nrecord stays on M1. Nothing here feeds a metric."
+      },
+      "MLRoundScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "rps_classic": {
+            "type": "number",
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "type": "number",
+            "title": "Rps Ai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "matches",
+          "rps_classic",
+          "rps_ai"
+        ],
+        "title": "MLRoundScore"
+      },
+      "MLTrackRecord": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "n_rounds": {
+            "type": "integer",
+            "title": "N Rounds"
+          },
+          "rps_classic": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Classic"
+          },
+          "rps_ai": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rps Ai"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference"
+          },
+          "ci_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci Low"
+          },
+          "ci_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ci High"
+          },
+          "ai_better": {
+            "type": "integer",
+            "title": "Ai Better"
+          },
+          "classic_better": {
+            "type": "integer",
+            "title": "Classic Better"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/MLRoundScore"
+            },
+            "type": "array",
+            "title": "Rounds"
+          },
+          "per_match": {
+            "items": {
+              "$ref": "#/components/schemas/MLMatchScore"
+            },
+            "type": "array",
+            "title": "Per Match"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches",
+          "n_rounds",
+          "rps_classic",
+          "rps_ai",
+          "difference",
+          "ci_low",
+          "ci_high",
+          "ai_better",
+          "classic_better",
+          "rounds",
+          "per_match"
+        ],
+        "title": "MLTrackRecord",
+        "description": "The AI model (M5) against the classic one (M1), on the same played matches.\n\nDiagnostics, not the track record: the production model stays M1.\n`difference` is AI minus classic, and RPS is minimised, so NEGATIVE means\nthe AI did better. `ci_low`/`ci_high` are the paired bootstrap interval\nclustered on the matchday; null with fewer than two rounds."
+      },
+      "MarketHit": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "outcomes": {
+            "type": "integer",
+            "title": "Outcomes",
+            "description": "How many outcomes the market has: 3 for 1X2"
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "base_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Base Rate",
+            "description": "How often the 'yes' side happened on the same matches. The yardstick: 'home team scores' happens 3 times in 4 anyway"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "outcomes",
+          "hits",
+          "resolved"
+        ],
+        "title": "MarketHit"
+      },
+      "MarketHits": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "markets": {
+            "items": {
+              "$ref": "#/components/schemas/MarketHit"
+            },
+            "type": "array",
+            "title": "Markets",
+            "default": []
+          },
+          "by_round": {
+            "items": {
+              "$ref": "#/components/schemas/RoundHits"
+            },
+            "type": "array",
+            "title": "By Round",
+            "description": "Per closed round, hits summed over every market",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches"
+        ],
+        "title": "MarketHits",
+        "description": "How often the most likely side of each market came out, on the closed\nrounds — the same matches as the official 1X2 count."
       },
       "MarketOption": {
         "properties": {
@@ -2562,6 +3219,14 @@
             },
             "type": "array",
             "title": "Picks"
+          },
+          "rounds": {
+            "items": {
+              "$ref": "#/components/schemas/RoundScore"
+            },
+            "type": "array",
+            "title": "Rounds",
+            "default": []
           }
         },
         "type": "object",
@@ -2875,6 +3540,28 @@
               }
             ],
             "title": "Won"
+          },
+          "model_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Label"
+          },
+          "model_won": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Won"
           }
         },
         "type": "object",
@@ -2896,6 +3583,39 @@
           "won"
         ],
         "title": "Pick"
+      },
+      "PickChoice": {
+        "properties": {
+          "home_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Home Team"
+          },
+          "away_team": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Away Team"
+          },
+          "market": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market"
+          }
+        },
+        "type": "object",
+        "required": [
+          "home_team",
+          "away_team"
+        ],
+        "title": "PickChoice",
+        "description": "The pick for one match; `market` null withdraws it."
       },
       "Picks": {
         "properties": {
@@ -2968,6 +3688,46 @@
         ],
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
+      },
+      "Players": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "title": "Season"
+          },
+          "matches": {
+            "type": "integer",
+            "title": "Matches"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "scorers": {
+            "items": {
+              "$ref": "#/components/schemas/Scorer"
+            },
+            "type": "array",
+            "title": "Scorers",
+            "default": []
+          },
+          "assists": {
+            "items": {
+              "$ref": "#/components/schemas/AssistMan"
+            },
+            "type": "array",
+            "title": "Assists",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "matches",
+          "source"
+        ],
+        "title": "Players",
+        "description": "Top scorers and assist men: facts, like the table. From Understat's shots,\nown goals excluded; an assist is the last pass before a goal."
       },
       "Preferences": {
         "properties": {
@@ -3157,6 +3917,30 @@
         "title": "Round",
         "description": "A matchday and where it stands.\n\n`status` is translated from the project's single state machine\n(`rounds.stato_giornate`), never recomputed here: future, open, predicted,\npartially_predicted, played, closed."
       },
+      "RoundHits": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "hits": {
+            "type": "integer",
+            "title": "Hits"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved",
+            "description": "Matches x markets in the round"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "hits",
+          "resolved"
+        ],
+        "title": "RoundHits"
+      },
       "RoundPoint": {
         "properties": {
           "matchday": {
@@ -3250,6 +4034,113 @@
         },
         "type": "object",
         "title": "RoundPoint"
+      },
+      "RoundScore": {
+        "properties": {
+          "matchday": {
+            "type": "integer",
+            "title": "Matchday"
+          },
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved"
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matchday",
+          "picks",
+          "resolved",
+          "won",
+          "model_resolved",
+          "model_won"
+        ],
+        "title": "RoundScore",
+        "description": "One matchday of the archive: the user and the model on the same matches."
+      },
+      "SavePicks": {
+        "properties": {
+          "season": {
+            "type": "string",
+            "maxLength": 9,
+            "title": "Season"
+          },
+          "picks": {
+            "items": {
+              "$ref": "#/components/schemas/PickChoice"
+            },
+            "type": "array",
+            "maxItems": 50,
+            "title": "Picks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "season",
+          "picks"
+        ],
+        "title": "SavePicks"
+      },
+      "Scorer": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "player": {
+            "type": "string",
+            "title": "Player"
+          },
+          "team": {
+            "type": "string",
+            "title": "Team"
+          },
+          "goals": {
+            "type": "integer",
+            "title": "Goals"
+          },
+          "penalties": {
+            "type": "integer",
+            "title": "Penalties",
+            "description": "Of which from the spot"
+          },
+          "shots": {
+            "type": "integer",
+            "title": "Shots"
+          },
+          "xg": {
+            "type": "number",
+            "title": "Xg",
+            "description": "xG of every shot, scored or not"
+          }
+        },
+        "type": "object",
+        "required": [
+          "position",
+          "player",
+          "team",
+          "goals",
+          "penalties",
+          "shots",
+          "xg"
+        ],
+        "title": "Scorer"
       },
       "SeasonSummary": {
         "properties": {
@@ -3932,6 +4823,27 @@
               }
             ],
             "title": "Mean Model Probability"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved",
+            "default": 0
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won",
+            "default": 0
+          },
+          "model_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Hit Rate"
           }
         },
         "type": "object",

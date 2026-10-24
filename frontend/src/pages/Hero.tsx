@@ -2,9 +2,10 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import type { Match, MatchPoint, Round, StandingRow } from "../api/types";
+import type { Match, Round, RoundHits, Scorer, StandingRow } from "../api/types";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { HowItWorks } from "../components/HowItWorks";
+import { MarketHitsPanel } from "../components/MarketHitsPanel";
 import { Colophon, Eyebrow, Masthead } from "../components/Layout";
 import { StandingsPanel } from "../components/StandingsPanel";
 import { ErrorState, Skeleton } from "../components/States";
@@ -67,106 +68,84 @@ function OddsRow({ match, compact = false }: { match: Match; compact?: boolean }
 }
 
 /**
- * RPS cumulativo in piccolo, con la tratteggiata del backtest.
+ * Quante volte, su cento, l'esito 1X2 piu' probabile secondo il modello e'
+ * uscito davvero nelle 1140 partite di prova (2023/24-2025/26, walk-forward).
+ * Riportato in CLAUDE.md ("esito piu' probabile: 53.9%").
  *
- * LA TRATTEGGIATA E' IL MOTIVO PER CUI IL GRAFICO SERVE. Una curva dell'errore
- * senza riferimento non dice niente: sale, scende, ma rispetto a cosa? Con la
- * linea del mercato sul test set (0.1881) si vede subito se il track record ci
- * sta sopra o sotto. La scala include il riferimento, altrimenti a volte
- * finirebbe fuori dal riquadro proprio quando e' piu' utile.
+ * PERCHE' SERVE IN PAGINA. "52% indovinate" da solo sembra un lancio di
+ * moneta, e lo sembra a chiunque non sappia che nel calcio il pareggio esiste
+ * e il favorito perde spesso. Accanto al valore dei test si legge per quello
+ * che e': in linea, sopra o sotto quanto ci si aspetta. E' un numero storico e
+ * congelato, non una regola viva: per questo sta qui e non in un endpoint.
  */
-function Spark({ points, reference }: { points: MatchPoint[]; reference: number }) {
-  const values = points
-    .map((point) => point.cumulative_rps)
-    .filter((value): value is number => value !== null);
-  if (values.length < 2) return null;
-
-  const lo = Math.min(...values, reference);
-  const hi = Math.max(...values, reference);
-  const span = hi - lo || 1;
-  const x = (i: number) => (i * 170) / (values.length - 1);
-  const y = (v: number) => 44 - ((v - lo) / span) * 36 - 4;
-
-  const line = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const area = `0,44 ${line} 170,44`;
-  const ultimo = values[values.length - 1] ?? 0;
-
-  return (
-    <svg
-      className="floater__spark"
-      viewBox="0 0 170 48"
-      role="img"
-      aria-label={`RPS cumulativo ${ultimo.toFixed(4)} contro il riferimento del backtest ${reference.toFixed(4)}`}
-    >
-      <polygon className="chart__area" points={area} />
-      <line className="chart__ref" x1={0} x2={170} y1={y(reference)} y2={y(reference)} />
-      <polyline className="chart__line" points={line} />
-      <circle className="chart__last" cx={x(values.length - 1)} cy={y(ultimo)} r={2.6} />
-    </svg>
-  );
-}
+const INDOVINATE_TEST = 0.539;
 
 const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
 const PAROLA: Record<string, string> = { W: "vittoria", D: "pareggio", L: "sconfitta" };
 
+/**
+ * Le schede accanto al tablet.
+ *
+ * NUMERI CHE SI LEGGONO SENZA SPIEGAZIONE. C'era la curva dell'RPS cumulativo:
+ * giusta, ma per capirla bisognava sapere cos'e' l'RPS e da che parte e'
+ * meglio. Qui: quante ne indovina giornata per giornata, chi segna e chi sta
+ * andando forte. L'RPS resta nella dashboard, sezione Modello, dove c'e' lo
+ * spazio per spiegarlo.
+ */
 function Floaters({
-  points,
+  rounds,
   table,
-  reference,
+  scorers,
 }: {
-  points: MatchPoint[];
+  rounds: RoundHits[];
   table: StandingRow[];
-  reference: number;
+  scorers: Scorer[];
 }) {
-  const top = table.slice(0, 3);
-  const most = Math.max(1, ...top.map((row) => row.goals_for));
-  const ultimo = [...points].reverse().find((p) => p.cumulative_rps !== null)?.cumulative_rps ?? null;
+  // Le ultime giornate chiuse, con i pronostici di TUTTI i mercati: con il
+  // solo 1X2 la scheda diceva "2 su 6" e raccontava il mercato piu' difficile
+  // come se fosse il modello intero.
+  const giornate = rounds.filter((r) => r.resolved > 0).slice(-5);
+  const bomber = scorers.slice(0, 3);
+  const most = Math.max(1, ...bomber.map((s) => s.goals));
+  const top = table.slice(0, 2);
 
   return (
     <div className="floaters">
-      {/* Si chiamava "Analisi avanzata": un titolo che non diceva di che
-          grafico si trattasse, su una curva senza numero e senza
-          riferimento. Ora ha il nome della metrica, il valore attuale, il
-          verso di lettura e la linea contro cui leggerla. */}
-      <div className="floater">
-        <div className="floater__head">
-          <p className="floater__title">RPS cumulativo</p>
-          {ultimo !== null && <span className="floater__value">{ultimo.toFixed(4)}</span>}
-        </div>
-        <span className="floater__sub">più basso è meglio · tratteggio: backtest {reference.toFixed(4)}</span>
-        <Spark points={points} reference={reference} />
-      </div>
-
-      {/* IL NUMERO ACCANTO ALLA BARRA E' GOL FATTI, E ORA LO DICE. Con il
-          titolo generico "Statistiche squadre" sembrava la classifica, e
-          l'Inter con 13 accanto contraddiceva i 12 punti che si leggono due
-          schermate piu' giu'. Una barra senza unita' di misura non e' un
-          grafico, e' un indovinello. */}
-      <div className="floater">
-        <p className="floater__title">Gol fatti</p>
-        <span className="floater__sub">prime tre in classifica</span>
-        <div className="floater__row">
-          <span className="floater__glyph" aria-hidden="true">
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 20V10M12 20V4M18 20v-7" strokeLinecap="round" />
-            </svg>
-          </span>
-          <div className="floater__bars" style={{ flex: 1 }}>
-            {top.map((row) => (
-              <div className="floater__bar" key={row.team}>
-                <span>{row.team.slice(0, 8)}</span>
+      {giornate.length > 0 && (
+        <div className="floater">
+          <p className="floater__title">Pronostici indovinati</p>
+          <span className="floater__sub">tutti i mercati, ultime giornate</span>
+          <div className="floater__bars">
+            {giornate.map((g) => (
+              <div className="floater__bar" key={g.matchday}>
+                <span>Giorn. {g.matchday}</span>
                 <span className="floater__track">
-                  <i
-                    className="floater__fill"
-                    style={{ width: `${(row.goals_for / most) * 100}%` }}
-                  />
+                  <i className="floater__fill" style={{ width: `${(g.hits / g.resolved) * 100}%` }} />
                 </span>
-                <span>{row.goals_for}</span>
+                <span>{g.hits} su {g.resolved}</span>
               </div>
             ))}
           </div>
         </div>
-      </div>
+      )}
+
+      {bomber.length > 0 && (
+        <div className="floater">
+          <p className="floater__title">Capocannonieri</p>
+          <span className="floater__sub">gol in campionato</span>
+          <div className="floater__bars">
+            {bomber.map((s) => (
+              <div className="floater__bar" key={`${s.player}-${s.team}`}>
+                <span title={`${s.player} (${s.team})`}>{s.player.split(" ").at(-1)}</span>
+                <span className="floater__track">
+                  <i className="floater__fill" style={{ width: `${(s.goals / most) * 100}%` }} />
+                </span>
+                <span>{s.goals}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Trend e forma: la SEQUENZA dei risultati, non i totali della
           classifica. Quattro vittorie non dicono se la squadra sta salendo.
@@ -176,9 +155,9 @@ function Floaters({
           processo piu' vecchio del frontend. Senza la guardia, un campo assente
           fa esplodere il componente e con lui tutta la pagina. */}
       <div className="floater">
-        <p className="floater__title">Forma recente</p>
-        <span className="floater__sub">ultime partite, dalla più vecchia</span>
-        {top.slice(0, 2).map((row) => (
+        <p className="floater__title">Chi va più forte</p>
+        <span className="floater__sub">le prime due, ultime partite</span>
+        {top.map((row) => (
           <div className="floater__form" key={row.team}>
             <span className="floater__team">{row.team}</span>
             {/* La lettera dentro il pallino: con il solo colore, verde e
@@ -211,7 +190,12 @@ export function Hero() {
   const season = useApi(() => api.season(), []);
   const rounds = useApi(() => api.rounds(), []);
   const standings = useApi(() => api.standings(), []);
-  const track = useApi(() => api.trackRecord(), []);
+  const players = useApi(() => api.players(3), []);
+  const hits = useApi(() => api.marketHits(), []);
+  const indovinati = (hits.data?.markets ?? []).reduce(
+    (acc, m) => ({ presi: acc.presi + m.hits, su: acc.su + m.resolved }),
+    { presi: 0, su: 0 },
+  );
 
   // Durante la verifica della sessione si parte come anonimi: i dati pubblici
   // compaiono subito, e se l'accesso c'e' la vetrina passa alla prossima
@@ -279,9 +263,14 @@ export function Hero() {
               </span>
             </Link>
 
+            {/* TRE NUMERI CHE CHIUNQUE LEGGE. Prima c'erano "RPS di produzione"
+                e "riferimento backtest": esatti, ma muti per chi non sa cosa
+                misurano. Ora: quante partite, quante indovinate, quante
+                selezioni vinte — sempre "x su y", perche' una percentuale da
+                sola nasconde quanto e' piccolo il campione. */}
             <div className="figures" style={{ marginTop: "var(--s7)" }}>
               <div className="figure">
-                <span className="figure__label">previsioni registrate</span>
+                <span className="figure__label">partite previste</span>
                 <span className="figure__value">
                   {season.loading ? <Skeleton width="3rem" /> : season.data?.matches_predicted}
                 </span>
@@ -290,22 +279,47 @@ export function Hero() {
                 </span>
               </div>
               <div className="figure">
-                <span className="figure__label">rps di produzione</span>
+                {/* Il totale sui cinque mercati, non il solo 1X2: con tre
+                    esiti e' il mercato piu' difficile, e da solo faceva
+                    sembrare il modello un lancio di moneta. Il dettaglio, con
+                    la frequenza di base accanto a ogni mercato, e' due
+                    schermate piu' giu' e il rimando porta li'. */}
+                <span className="figure__label">pronostici indovinati</span>
                 <span className="figure__value">
-                  {season.loading ? <Skeleton width="4rem" /> : num(season.data?.rps_production, 4)}
-                </span>
-                <span className="figure__note">più basso è meglio</span>
-              </div>
-              <div className="figure">
-                <span className="figure__label">riferimento backtest</span>
-                <span className="figure__value">
-                  {season.loading ? (
+                  {hits.loading ? (
                     <Skeleton width="4rem" />
+                  ) : indovinati.su > 0 ? (
+                    prob(indovinati.presi / indovinati.su)
                   ) : (
-                    num(season.data?.rps_backtest_reference, 4)
+                    "–"
                   )}
                 </span>
-                <span className="figure__note">il mercato su 1140 partite</span>
+                <span className="figure__note">
+                  {indovinati.su > 0 ? (
+                    <a className="link-mint" href="#indovinati">
+                      {indovinati.presi} su {indovinati.su} · {hits.data?.markets.length} mercati
+                    </a>
+                  ) : (
+                    ""
+                  )}
+                </span>
+              </div>
+              <div className="figure">
+                <span className="figure__label">selezioni vinte</span>
+                <span className="figure__value">
+                  {picks.loading ? (
+                    <Skeleton width="4rem" />
+                  ) : picks.data && picks.data.with_min_odds_resolved > 0 ? (
+                    prob(picks.data.with_min_odds_won / picks.data.with_min_odds_resolved)
+                  ) : (
+                    "–"
+                  )}
+                </span>
+                <span className="figure__note">
+                  {picks.data && picks.data.with_min_odds_resolved > 0
+                    ? `${picks.data.with_min_odds_won} su ${picks.data.with_min_odds_resolved} · quota da ${num(picks.data.min_odds, 2)}`
+                    : ""}
+                </span>
               </div>
             </div>
           </div>
@@ -424,11 +438,11 @@ export function Hero() {
                 pagina: se il loro dato manca, spariscono senza portarsi via
                 il titolo e la chiamata all'azione. */}
             <ErrorBoundary label="schede laterali">
-              {track.data && standings.data && (
+              {standings.data && (
                 <Floaters
-                  points={track.data.by_match}
+                  rounds={hits.data?.by_round ?? []}
                   table={standings.data.table}
-                  reference={track.data.rps_backtest_reference}
+                  scorers={players.data?.scorers ?? []}
                 />
               )}
             </ErrorBoundary>
@@ -544,6 +558,23 @@ export function Hero() {
             valore atteso a chi scommette mentirebbe sui propri numeri: su
             1140 partite fuori campione le giocate a valore positivo contro
             B365 sono zero su 3420. */}
+        {hits.data && hits.data.matches > 0 && (
+          <section className="section" id="indovinati" style={{ paddingTop: 0 }}>
+            <Eyebrow>quante ne indovina</Eyebrow>
+            <h2>Mercato per mercato.</h2>
+            <p className="lead" style={{ maxWidth: "640px" }}>
+              Su {hits.data.matches} partite delle giornate chiuse, quante volte è
+              uscito l'esito che il modello dava più probabile. Sotto ogni numero
+              c'è quanto spesso quell'esito capita comunque: è il metro per
+              leggerlo. Nelle 1140 partite di prova l'1X2 è stato indovinato il{" "}
+              {prob(INDOVINATE_TEST)} delle volte.
+            </p>
+            <ErrorBoundary label="mercati indovinati">
+              <MarketHitsPanel data={hits.data} />
+            </ErrorBoundary>
+          </section>
+        )}
+
         <section className="section" id="per-chi" style={{ paddingTop: 0 }}>
           <Eyebrow>per chi e'</Eyebrow>
           <h2>Due modi di leggerlo.</h2>
@@ -596,15 +627,22 @@ export function Hero() {
                 No, e non lo nasconde. Il modello parte dalle loro quote: su 1140
                 partite fuori campione zero giocate su 3420 hanno valore atteso
                 positivo. Serve a leggere le probabilità, non a battere il banco.
+                Le selezioni vincono spesso perché sono le più probabili, e
+                quindi pagano poco: vincere spesso non vuol dire guadagnare.
               </p>
             </div>
             <div className="faq__item">
-              <h3>Cos'è l'RPS?</h3>
+              <h3>Quante partite indovina?</h3>
               <p>
-                Quanto la previsione era lontana da ciò che è successo, tenendo
-                conto che gli esiti sono ordinati. Più basso è meglio: {" "}
-                {num(season.data?.rps_backtest_reference, 4)} è il valore che il
-                mercato ottiene sul test set.
+                Dipende dal mercato: i numeri sono nella sezione «quante ne
+                indovina», qui sopra. Sull'1X2 circa una su due, ed è normale:
+                nel calcio il favorito perde o pareggia spesso. Nelle 1140 partite di prova il risultato più
+                probabile è uscito il {prob(INDOVINATE_TEST)} delle volte
+                {season.data && season.data.hits_denominator > 0
+                  ? `; in questa stagione ${season.data.hits} su ${season.data.hits_denominator}.`
+                  : "."}{" "}
+                Conta di più che le probabilità siano giuste: se dice 70%, deve
+                uscire circa sette volte su dieci.
               </p>
             </div>
             <div className="faq__item">

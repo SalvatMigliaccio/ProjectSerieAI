@@ -291,6 +291,98 @@ class Standings(Base):
     table: list[StandingRow] = []
 
 
+class Scorer(Base):
+    position: int
+    player: str
+    team: str
+    goals: int
+    penalties: int = Field(description="Of which from the spot")
+    shots: int
+    xg: float = Field(description="xG of every shot, scored or not")
+
+
+class AssistMan(Base):
+    position: int
+    player: str
+    team: str
+    assists: int
+    key_passes: int = Field(description="Passes that led to a shot")
+    xa: float = Field(description="xG of the shots the player set up")
+
+
+class Players(Base):
+    """
+    Top scorers and assist men: facts, like the table. From Understat's shots,
+    own goals excluded; an assist is the last pass before a goal.
+    """
+
+    season: str
+    matches: int
+    source: str
+    scorers: list[Scorer] = []
+    assists: list[AssistMan] = []
+
+
+class ExpectedPointsRow(Base):
+    team: str
+    position: int
+    played: int
+    points: int
+    points_per_game: float | None = None
+    predicted_matches: int = Field(
+        0, description="Played matches with a prediction in the log")
+    expected_points: float | None = Field(
+        None, description="Sum of 3*p(win) + p(draw) over those matches")
+    points_in_predicted: int | None = Field(
+        None, description="Points actually taken in the same matches")
+    expected_points_per_game: float | None = None
+    projected_points: float | None = Field(
+        None, description="Points so far + expected per game x games left. "
+                          "An extrapolation: remaining opponents are ignored")
+
+
+class ExpectedPoints(Base):
+    """
+    Expected points per team from the production model, on played matches
+    only: the upcoming round's probabilities stay behind `picks:read`.
+    """
+
+    season: str
+    total_games: int
+    model_version: str
+    table: list[ExpectedPointsRow] = []
+
+
+class MarketHit(Base):
+    key: str
+    label: str
+    outcomes: int = Field(description="How many outcomes the market has: 3 for 1X2")
+    hits: int
+    resolved: int
+    base_rate: float | None = Field(
+        None, description="How often the 'yes' side happened on the same matches. "
+                          "The yardstick: 'home team scores' happens 3 times in 4 anyway")
+
+
+class RoundHits(Base):
+    matchday: int
+    hits: int
+    resolved: int = Field(description="Matches x markets in the round")
+
+
+class MarketHits(Base):
+    """
+    How often the most likely side of each market came out, on the closed
+    rounds — the same matches as the official 1X2 count.
+    """
+
+    season: str
+    matches: int
+    markets: list[MarketHit] = []
+    by_round: list[RoundHits] = Field(
+        [], description="Per closed round, hits summed over every market")
+
+
 class Picks(Base):
     """
     The canonical selections. No threshold field to move, by design.
@@ -476,3 +568,44 @@ class Fixture(Base):
     predicted: bool
     goals_home: int | None = None
     goals_away: int | None = None
+
+
+class MLRoundScore(Base):
+    matchday: int
+    matches: int
+    rps_classic: float
+    rps_ai: float
+
+
+class MLMatchScore(Base):
+    matchday: int
+    home_team: str
+    away_team: str
+    goals_home: int | None
+    goals_away: int | None
+    rps_classic: float
+    rps_ai: float
+
+
+class MLTrackRecord(Base):
+    """
+    The AI model (M5) against the classic one (M1), on the same played matches.
+
+    Diagnostics, not the track record: the production model stays M1.
+    `difference` is AI minus classic, and RPS is minimised, so NEGATIVE means
+    the AI did better. `ci_low`/`ci_high` are the paired bootstrap interval
+    clustered on the matchday; null with fewer than two rounds.
+    """
+
+    season: str
+    matches: int
+    n_rounds: int
+    rps_classic: float | None
+    rps_ai: float | None
+    difference: float | None
+    ci_low: float | None
+    ci_high: float | None
+    ai_better: int
+    classic_better: int
+    rounds: list[MLRoundScore]
+    per_match: list[MLMatchScore]

@@ -10,12 +10,16 @@
  */
 
 import type {
+  ExpectedPoints,
   Fixture,
   Health,
+  MarketHits,
   Match,
   MLMatch,
   MLRound,
+  MLTrackRecord,
   Picks,
+  Players,
   Round,
   SeasonSummary,
   Selections,
@@ -302,6 +306,14 @@ export const api = {
     getOrNull<Match[]>(`/api/rounds/${code}/${matchday}`),
   trackRecord: (code = season()) => get<TrackRecord>(`/api/track-record/${code}`),
   standings: (code = season()) => get<Standings>(`/api/standings/${code}`),
+  /** Marcatori e assistman: fatti, non previsioni. */
+  players: (limit = 10, code = season()) => get<Players>(`/api/players/${code}?limit=${limit}`),
+  /** Quante ne indovina, mercato per mercato, sulle giornate chiuse. */
+  marketHits: (code = season()) => get<MarketHits>(`/api/market-hits/${code}`),
+  /** Punti attesi dal modello, sulle sole partite giocate. */
+  expectedPoints: (code = season()) => get<ExpectedPoints>(`/api/expected-points/${code}`),
+  /** Il modello AI contro il classico, sulle partite giocate. */
+  mlTrackRecord: (code = season()) => get<MLTrackRecord>(`/api/ml-track-record/${code}`),
   /** Il calendario di una giornata: le partite prima ancora delle quote. */
   fixtures: (matchday: number, code = season()) =>
     get<Fixture[]>(`/api/fixtures/${code}?matchday=${matchday}`),

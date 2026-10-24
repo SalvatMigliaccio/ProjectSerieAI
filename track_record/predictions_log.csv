@@ -46,3 +46,23 @@ timestamp_prediction,model_version,league,season,matchday,match_date,home_team,a
 2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-18,Juventus,Lazio,1.742,0.878,0.57815,0.2347,0.18715,0.48657,0.482,1.67,3.8,5.25,B365-fixtures
 2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-19,Monza,Cagliari,1.3049,1.1675,0.39735,0.27103,0.33162,0.44908,0.50203,2.38,3.1,3.1,B365-fixtures
 2026-10-16T14:44:18Z,M1 market-only (lambda),ITA-Serie A,2627,7,2026-10-19,Parma,Torino,1.0217,1.2319,0.30518,0.28509,0.40973,0.39161,0.45329,3.1,3.1,2.45,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-23,Torino,Monza,1.5718,1.2166,0.45582,0.2489,0.29529,0.52778,0.55762,2.1,3.4,3.5,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-24,Cagliari,Bologna,1.0548,1.336,0.29502,0.27382,0.43116,0.42787,0.48039,3.2,3.0,2.45,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-24,Como,Sassuolo,2.3146,1.1122,0.64252,0.18812,0.16936,0.66539,0.60485,1.5,4.75,5.5,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-24,Napoli,Roma,1.2469,1.4272,0.32914,0.2584,0.41246,0.5,0.54159,2.88,3.1,2.6,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-24,Lazio,Parma,2.0871,0.6418,0.71101,0.18678,0.1022,0.51343,0.41491,1.36,4.75,9.0,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-25,Inter,Fiorentina,2.4927,0.9341,0.71365,0.16541,0.12094,0.66538,0.55687,1.36,5.25,8.0,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-25,Atalanta,Frosinone,2.1259,1.4361,0.53381,0.20846,0.25773,0.69047,0.67121,1.8,4.2,3.8,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-25,Genoa,Venezia,1.5177,1.1564,0.45582,0.2547,0.28948,0.5,0.53513,2.1,3.4,3.5,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-25,Lecce,Juventus,0.6763,2.0809,0.10917,0.18959,0.70124,0.52026,0.43014,8.0,4.2,1.44,B365-fixtures
+2026-10-23T15:30:27Z,M1 market-only (lambda),ITA-Serie A,2627,8,2026-10-25,Udinese,Milan,0.8579,1.871,0.167,0.22045,0.61255,0.51343,0.48727,5.5,3.7,1.67,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-23,Torino,Monza,1.5718,1.2166,0.43699,0.28654,0.27647,0.52778,0.57644,2.1,3.4,3.5,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-24,Cagliari,Bologna,1.0548,1.336,0.27437,0.31511,0.41052,0.42787,0.50103,3.2,3.0,2.45,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-24,Como,Sassuolo,2.3146,1.1122,0.62914,0.21488,0.15598,0.66539,0.61824,1.5,4.75,5.5,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-24,Napoli,Roma,1.2469,1.4272,0.3095,0.29767,0.39282,0.5,0.56123,2.88,3.1,2.6,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-24,Lazio,Parma,2.0871,0.6418,0.69702,0.21477,0.08821,0.51343,0.4289,1.36,4.75,9.0,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Inter,Fiorentina,2.4927,0.9341,0.70154,0.18962,0.10883,0.66538,0.56898,1.36,5.25,8.0,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Atalanta,Frosinone,2.1259,1.4361,0.51995,0.23619,0.24387,0.69047,0.68507,1.8,4.2,3.8,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Genoa,Venezia,1.5177,1.1564,0.43645,0.29344,0.27012,0.5,0.55449,2.1,3.4,3.5,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Lecce,Juventus,0.6763,2.0809,0.09488,0.21817,0.68695,0.52026,0.44443,8.0,4.2,1.44,B365-fixtures
+2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Udinese,Milan,0.8579,1.871,0.15023,0.25398,0.59578,0.51343,0.50404,5.5,3.7,1.67,B365-fixtures
