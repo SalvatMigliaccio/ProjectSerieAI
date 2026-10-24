@@ -4,7 +4,7 @@
     "api": {
       "root": ".",
       "framework": "fastapi",
-      "entrypoint": "backend.api:app"
+      "entrypoint": "backend/vercel_app.py"
     },
     "frontend": {
       "root": "frontend",
