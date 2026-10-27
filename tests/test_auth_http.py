@@ -107,6 +107,9 @@ def test_health_stays_public(client) -> None:
 @pytest.mark.parametrize("path", [
     "/api/track-record/2026-27",
     "/api/standings/2026-27",
+    "/api/players/2026-27",
+    "/api/expected-points/2026-27",
+    "/api/market-hits/2026-27",
     "/api/picks/2026-27",
     "/api/selections/2026-27",
     "/api/rounds/2026-27",

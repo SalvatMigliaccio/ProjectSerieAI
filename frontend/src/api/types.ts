@@ -217,6 +217,94 @@ export interface Standings {
   table: StandingRow[];
 }
 
+export interface Scorer {
+  position: number;
+  player: string;
+  team: string;
+  goals: number;
+  /** Di cui su rigore. */
+  penalties: number;
+  shots: number;
+  /** xG di tutti i tiri, segnati o no. */
+  xg: number;
+}
+
+export interface AssistMan {
+  position: number;
+  player: string;
+  team: string;
+  assists: number;
+  /** Passaggi che hanno portato a un tiro. */
+  key_passes: number;
+  /** xG dei tiri che il giocatore ha servito. */
+  xa: number;
+}
+
+/** Marcatori e assistman: fatti, come la classifica. Da Understat, autogol
+ *  esclusi; l'assist e' l'ultimo passaggio prima del gol. */
+export interface Players {
+  season: string;
+  matches: number;
+  source: string;
+  scorers: Scorer[];
+  assists: AssistMan[];
+}
+
+export interface ExpectedPointsRow {
+  team: string;
+  position: number;
+  played: number;
+  points: number;
+  points_per_game: number | null;
+  /** Partite giocate con una previsione nel registro. */
+  predicted_matches: number;
+  /** Somma di 3·p(vittoria) + p(pareggio) su quelle partite. */
+  expected_points: number | null;
+  /** I punti fatti davvero nelle stesse partite. */
+  points_in_predicted: number | null;
+  expected_points_per_game: number | null;
+  /** Punti fatti + attesi a partita × partite rimaste. Un'estrapolazione:
+   *  gli avversari che restano non contano. */
+  projected_points: number | null;
+}
+
+/** Punti attesi dal modello di produzione, solo sulle partite giocate. */
+export interface ExpectedPoints {
+  season: string;
+  total_games: number;
+  model_version: string;
+  table: ExpectedPointsRow[];
+}
+
+export interface MarketHit {
+  key: string;
+  label: string;
+  /** Quanti esiti ha il mercato: 3 per l'1X2, 2 per gli altri. */
+  outcomes: number;
+  hits: number;
+  resolved: number;
+  /** Quanto spesso l'esito "si'" e' capitato sulle stesse partite: il metro.
+   *  "Segna la squadra di casa" esce tre volte su quattro comunque. */
+  base_rate: number | null;
+}
+
+/** Quante volte il lato piu' probabile di ogni mercato e' uscito, sulle
+ *  giornate chiuse: le stesse partite del conto 1X2 ufficiale. */
+export interface RoundHits {
+  matchday: number;
+  hits: number;
+  /** Partite x mercati della giornata. */
+  resolved: number;
+}
+
+export interface MarketHits {
+  season: string;
+  matches: number;
+  markets: MarketHit[];
+  /** Per giornata chiusa, i pronostici indovinati su tutti i mercati. */
+  by_round: RoundHits[];
+}
+
 export interface Picks {
   season: string;
   matchday: number | null;
@@ -336,4 +424,45 @@ export interface MLRound {
   model: string;
   written_at: string | null;
   matches: MLMatch[];
+}
+
+/** Una partita del calendario, prevista o no. Niente probabilita': e' il
+ *  calendario, non il track record. */
+export interface Fixture {
+  season: string;
+  matchday: number;
+  home_team: string;
+  away_team: string;
+  kickoff_utc: string | null;
+  /** Il modello l'ha gia' prezzata (escono le quote del venerdi'). */
+  predicted: boolean;
+  goals_home: number | null;
+  goals_away: number | null;
+}
+
+/** Il modello AI (M5) contro il classico (M1) sulle stesse partite giocate.
+ *  Diagnostica: il track record resta di M1. `difference` e' AI meno
+ *  classico, e l'RPS si minimizza: NEGATIVO vuol dire che l'AI ha fatto
+ *  meglio. L'intervallo e' nullo con meno di due giornate. */
+export interface MLTrackRecord {
+  season: string;
+  matches: number;
+  n_rounds: number;
+  rps_classic: number | null;
+  rps_ai: number | null;
+  difference: number | null;
+  ci_low: number | null;
+  ci_high: number | null;
+  ai_better: number;
+  classic_better: number;
+  rounds: { matchday: number; matches: number; rps_classic: number; rps_ai: number }[];
+  per_match: {
+    matchday: number;
+    home_team: string;
+    away_team: string;
+    goals_home: number | null;
+    goals_away: number | null;
+    rps_classic: number;
+    rps_ai: number;
+  }[];
 }

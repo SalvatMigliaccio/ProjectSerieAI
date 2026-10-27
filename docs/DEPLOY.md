@@ -129,7 +129,7 @@ services in one project:
 
 | service | what | public on |
 |---|---|---|
-| `api` | FastAPI, `backend.api:app` | `/api/*`, `/openapi.json` |
+| `api` | FastAPI, `backend.api:app` via `backend/vercel_app.py` (Vercel wants a file, not `module:attr`) | `/api/*`, `/openapi.json` |
 | `frontend` | the Vite build of `frontend/` | everything else |
 
 No bindings: the frontend is static and the browser calls `/api` on the same

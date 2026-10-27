@@ -13,13 +13,27 @@
  *
  * Le probabilita' arrivano dall'API, calcolate dagli stessi gol attesi che la
  * dashboard mostra: qui non si rifa' nessun conto.
+ *
+ * SI GIOCA DALLA CHIUSURA DELLA GIORNATA PRIMA, non dalle quote. Fino al
+ * venerdi' una partita e' aperta senza numeri ("quote in arrivo"); quando il
+ * modello la prezza, la probabilita' compare anche accanto alle giocate gia'
+ * fatte.
+ *
+ * UNA GIOCATA PER PARTITA, SCELTA E POI SALVATA. Ogni partita e' una scheda
+ * chiusa: si apre con la freccia e mostra le giocate possibili. Scegliere
+ * cambia solo la BOZZA, in questa pagina; e' il pulsante "Salva" in fondo che
+ * le manda al server, tutte insieme (`/api/me/predictions/save`, tutto o
+ * niente). Sulla scheda chiusa compare solo il pronostico SALVATO: una bozza
+ * non salvata non si mostra come se lo fosse, e si riconosce solo dalla barra
+ * "modifiche da salvare". Lasciare la pagina con bozze aperte le perde, e il
+ * browser avvisa prima.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { ApiError } from "../../api/client";
-import { me, type MyPredictions, type OpenMatch, type Pick } from "../../api/me";
+import { me, type MyPredictions, type OpenMatch, type Pick, type RoundScore } from "../../api/me";
 import { FormAlert, serverError } from "../../components/Form";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { localTime, odds as fmtOdds, prob, score } from "../../lib/format";
@@ -46,29 +60,52 @@ function tra(iso: string): string {
   return `tra ${Math.round(ore / 24)} giorni`;
 }
 
-const chiave = (home: string, away: string, market: string) => `${home}|${away}|${market}`;
+const partita = (home: string, away: string) => `${home}|${away}`;
 
 // ---------------------------------------------------------------------------
 
+function percento(won: number, total: number): string {
+  return total ? `${Math.round((won / total) * 100)}%` : "–";
+}
+
+/**
+ * Tu contro il modello, sulle STESSE partite giocate.
+ *
+ * La percentuale del modello e' quella della sua selezione dichiarata su ogni
+ * partita che hai giocato tu: stesse partite, stesso momento. Confrontarla con
+ * il modello su tutta la stagione sarebbe piu' facile o piu' difficile per
+ * caso. Sotto, l'altro confronto onesto: quanto il modello si aspettava che
+ * uscissero proprio le tue giocate.
+ */
 function Riepilogo({ dati }: { dati: MyPredictions }) {
   const s = dati.summary;
   const meglio =
     s.hit_rate !== null && s.mean_model_probability !== null
       ? s.hit_rate - s.mean_model_probability
       : null;
+  const scarto = s.hit_rate !== null && s.model_hit_rate !== null ? s.hit_rate - s.model_hit_rate : null;
+
   return (
     <section className="pron-stats" aria-label="Riepilogo">
+      <div className="pron-vs">
+        <div className="pron-vs__side">
+          <span className="pron-stat__label">Tu</span>
+          <strong className="pron-vs__value">{s.hit_rate === null ? "–" : prob(s.hit_rate)}</strong>
+          <span className="pron-stat__note">{s.resolved ? `${s.won} uscite su ${s.resolved}` : "nessuna ancora giocata"}</span>
+        </div>
+        <span className="pron-vs__sep" aria-hidden="true">contro</span>
+        <div className="pron-vs__side">
+          <span className="pron-stat__label">Il modello, sulle stesse partite</span>
+          <strong className="pron-vs__value">{s.model_hit_rate === null ? "–" : prob(s.model_hit_rate)}</strong>
+          <span className="pron-stat__note">
+            {s.model_resolved ? `${s.model_won} uscite su ${s.model_resolved}` : "nessun confronto ancora"}
+          </span>
+        </div>
+      </div>
       <div className="pron-stat">
         <span className="pron-stat__label">Giocate</span>
         <strong className="pron-stat__value">{s.picks}</strong>
         <span className="pron-stat__note">{s.pending} in attesa</span>
-      </div>
-      <div className="pron-stat">
-        <span className="pron-stat__label">Uscite</span>
-        <strong className="pron-stat__value">
-          {s.resolved ? `${s.won}/${s.resolved}` : "–"}
-        </strong>
-        <span className="pron-stat__note">{s.hit_rate === null ? "nessuna ancora giocata" : prob(s.hit_rate)}</span>
       </div>
       <div className="pron-stat">
         <span className="pron-stat__label">Il modello si aspettava</span>
@@ -76,13 +113,17 @@ function Riepilogo({ dati }: { dati: MyPredictions }) {
         <span className="pron-stat__note">probabilità media delle tue giocate</span>
       </div>
       <p className="pron-stats__verdict">
-        {meglio === null
+        {scarto === null
           ? "Il confronto compare quando le prime giocate avranno un risultato."
-          : Math.abs(meglio) < 0.02
-            ? "Le tue giocate sono uscite quanto il modello si aspettava."
-            : meglio > 0
-              ? `Le tue giocate sono uscite più spesso di quanto il modello si aspettasse (+${Math.round(meglio * 100)} punti).`
-              : `Le tue giocate sono uscite meno spesso di quanto il modello si aspettasse (${Math.round(meglio * 100)} punti).`}
+          : Math.abs(scarto) < 0.02
+            ? "Sulle stesse partite tu e il modello siete alla pari."
+            : scarto > 0
+              ? `Sulle stesse partite hai fatto meglio del modello di ${Math.round(scarto * 100)} punti.`
+              : `Sulle stesse partite il modello ha fatto meglio di te di ${Math.round(-scarto * 100)} punti.`}
+        {meglio !== null && Math.abs(meglio) >= 0.02 &&
+          (meglio > 0
+            ? " Le tue giocate sono uscite più spesso di quanto il modello si aspettasse."
+            : " Le tue giocate sono uscite meno spesso di quanto il modello si aspettasse.")}
         {s.resolved > 0 && s.resolved < 30 && " Con meno di 30 giocate concluse, la differenza è soprattutto caso."}
       </p>
     </section>
@@ -91,51 +132,90 @@ function Riepilogo({ dati }: { dati: MyPredictions }) {
 
 function PartitaAperta({
   partita,
-  ids,
-  inCorso,
-  onToggle,
+  salvata,
+  bozza,
+  onScegli,
   preferita,
 }: {
   partita: OpenMatch;
-  ids: Map<string, string>;
-  inCorso: string | null;
-  onToggle: (partita: OpenMatch, market: string) => void;
+  /** Il pronostico salvato sul server, se c'e'. */
+  salvata: Pick | undefined;
+  /** La scelta in questa pagina: undefined = nessuna modifica, null = tolta. */
+  bozza: string | null | undefined;
+  onScegli: (market: string | null) => void;
   preferita: boolean;
 }) {
+  const [aperta, setAperta] = useState(false);
+  const corpo = useId();
   const gruppi = new Map<string, OpenMatch["markets"]>();
   for (const m of partita.markets) gruppi.set(m.group, [...(gruppi.get(m.group) ?? []), m]);
-  const scelte = partita.markets.filter((m) => m.picked).length;
+
+  // Cosa e' selezionato ADESSO nella scheda: la bozza se c'e', altrimenti il salvato.
+  const scelta = bozza !== undefined ? bozza : (salvata?.market ?? null);
+  const modificata = bozza !== undefined && bozza !== (salvata?.market ?? null);
+  const pSalvata = salvata
+    ? partita.markets.find((m) => m.market === salvata.market)?.probability ?? salvata.model_probability
+    : null;
 
   return (
-    <article className={`pron-match${preferita ? " is-fav" : ""}`}
-      aria-labelledby={`pm-${partita.home_team}-${partita.away_team}`}>
-      <header className="pron-match__head">
-        <h3 id={`pm-${partita.home_team}-${partita.away_team}`}>
-          {partita.home_team} <span className="faint">–</span> {partita.away_team}
-        </h3>
-        <p className="pron-match__meta">
-          Giornata {partita.matchday} · {localTime(partita.kickoff_utc)} ·{" "}
-          <time dateTime={partita.kickoff_utc}>{tra(partita.kickoff_utc)}</time>
-          {scelte > 0 && <span className="pron-match__count">{scelte} {scelte === 1 ? "giocata" : "giocate"}</span>}
+    <article className={`pron-card${preferita ? " is-fav" : ""}${aperta ? " is-open" : ""}`}>
+      <h3 className="pron-card__head">
+        <button
+          type="button"
+          className="pron-card__toggle"
+          aria-expanded={aperta}
+          aria-controls={corpo}
+          onClick={() => setAperta((v) => !v)}
+        >
+          <span className="pron-card__teams">
+            <span className="pron-card__name">
+              {partita.home_team} <span className="faint">–</span> {partita.away_team}
+            </span>
+            <span className="pron-card__meta">
+              Giornata {partita.matchday} · {localTime(partita.kickoff_utc)} ·{" "}
+              <time dateTime={partita.kickoff_utc}>{tra(partita.kickoff_utc)}</time>
+              {!partita.priced && <span className="pron-match__pending">quote in arrivo</span>}
+            </span>
+          </span>
+
+          {/* L'ANTEPRIMA E' SOLO DEL SALVATO. Senza un pronostico salvato non
+              compare niente; una bozza si vede solo a scheda aperta. */}
+          {salvata && (
+            <span className="pron-card__saved">
+              <span className="pron-card__saved-key">Il tuo pronostico</span>
+              <span className="pron-card__saved-val">
+                {etichetta(salvata.market, partita.home_team, partita.away_team)}
+                {pSalvata !== null && <span className="pron-card__saved-p">{prob(pSalvata)}</span>}
+              </span>
+            </span>
+          )}
+          {modificata && <span className="pron-card__dirty">da salvare</span>}
+
+          <span className="pron-card__chevron" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </button>
+      </h3>
+
+      <div id={corpo} className="pron-card__body" hidden={!aperta}>
+        <p className="pron-card__hint">
+          Una giocata per partita: sceglierne un'altra sostituisce la precedente, toccare di
+          nuovo quella scelta la toglie. Poi salva in fondo alla pagina.
         </p>
-      </header>
-      <div className="pron-groups">
-        {[...gruppi.entries()].map(([gruppo, opzioni]) => (
-          <div className="pron-group" key={gruppo} role="group" aria-label={gruppo}>
-            <span className="pron-group__title">{gruppo}</span>
-            <div className="pron-chips">
-              {opzioni.map((m) => {
-                const k = chiave(partita.home_team, partita.away_team, m.market);
-                const occupato = inCorso === k;
-                return (
+        <div className="pron-groups">
+          {[...gruppi.entries()].map(([gruppo, opzioni]) => (
+            <div className="pron-group" key={gruppo} role="group" aria-label={gruppo}>
+              <span className="pron-group__title">{gruppo}</span>
+              <div className="pron-chips">
+                {opzioni.map((m) => (
                   <button
                     key={m.market}
                     type="button"
                     className="pron-chip"
-                    aria-pressed={m.picked}
-                    disabled={occupato || (m.picked && !ids.has(k))}
-                    aria-busy={occupato || undefined}
-                    onClick={() => onToggle(partita, m.market)}
+                    aria-pressed={scelta === m.market}
+                    onClick={() => onScegli(scelta === m.market ? null : m.market)}
                   >
                     <span className="pron-chip__label">
                       {etichetta(m.market, partita.home_team, partita.away_team)}
@@ -145,90 +225,181 @@ function PartitaAperta({
                       <span className="faint" title="quota equa, 1/p">{fmtOdds(m.fair_odds)}</span>
                     </span>
                   </button>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </article>
   );
 }
 
-function Storico({
-  picks,
+function Esito({ won }: { won: boolean | null }) {
+  if (won === null) return <span className="faint">–</span>;
+  return (
+    <span className={`pron-esito ${won ? "is-ok" : "is-ko"}`}>
+      <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6">
+        {won ? <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+          : <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />}
+      </svg>
+      {won ? "uscita" : "non uscita"}
+    </span>
+  );
+}
+
+/**
+ * Una partita dell'archivio, con l'aspetto delle schede di "Da giocare":
+ * squadre e orario (o il risultato), il tuo pronostico in anteprima e, sulla
+ * stessa partita, la selezione del modello. Ognuno con il suo esito, in
+ * parole e icona, non solo colore.
+ */
+function ArchivioPartita({
+  p,
   inCorso,
   onRitira,
 }: {
-  picks: Pick[];
+  p: Pick;
+  inCorso: string | null;
+  onRitira: (pick: Pick) => void;
+}) {
+  const giocata = p.goals_home !== null && p.goals_away !== null;
+  return (
+    <li className="pron-arch__item">
+      <span className="pron-card__teams">
+        <span className="pron-card__name">
+          {p.home_team} <span className="faint">–</span> {p.away_team}
+        </span>
+        <span className="pron-card__meta">
+          {giocata ? (
+            <>Finita <span className="pron-arch__result">{score(p.goals_home, p.goals_away)}</span></>
+          ) : (
+            <>{localTime(p.kickoff_utc)}{p.locked ? " · in corso" : ""}</>
+          )}
+        </span>
+      </span>
+
+      <span className="pron-card__saved">
+        <span className="pron-card__saved-key">Il tuo pronostico</span>
+        <span className="pron-card__saved-val">
+          {etichetta(p.market, p.home_team, p.away_team)}
+          {p.model_probability !== null && (
+            <span className="pron-card__saved-p">{prob(p.model_probability)}</span>
+          )}
+        </span>
+        {p.won !== null ? (
+          <Esito won={p.won} />
+        ) : !p.locked ? (
+          <button type="button" className="link-button pron-ritira"
+            onClick={() => onRitira(p)} disabled={inCorso === p.id}
+            aria-label={`Ritira la giocata su ${p.home_team} – ${p.away_team}`}>
+            Ritira
+          </button>
+        ) : null}
+      </span>
+
+      <span className="pron-card__saved pron-arch__model">
+        <span className="pron-card__saved-key">Il modello</span>
+        <span className="pron-card__saved-val">{p.model_label ?? <span className="faint">–</span>}</span>
+        {p.model_won !== null && <Esito won={p.model_won} />}
+      </span>
+    </li>
+  );
+}
+
+/**
+ * L'archivio: una scheda per giornata, chiusa, con tu contro il modello
+ * nell'intestazione. Dentro, partita per partita, la tua giocata e la
+ * selezione del modello affiancate, ognuna con il suo esito.
+ */
+function GiornataArchivio({
+  giornata,
+  punteggio,
+  righe,
+  inCorso,
+  onRitira,
+  apertaAllInizio = false,
+}: {
+  giornata: number;
+  punteggio: RoundScore | undefined;
+  righe: Pick[];
+  inCorso: string | null;
+  onRitira: (pick: Pick) => void;
+  apertaAllInizio?: boolean;
+}) {
+  const [aperta, setAperta] = useState(apertaAllInizio);
+  const corpo = useId();
+  const attesa = righe.filter((p) => p.won === null).length;
+
+  return (
+    <article className={`pron-card${aperta ? " is-open" : ""}`}>
+      <h3 className="pron-card__head">
+        <button type="button" className="pron-card__toggle pron-arch__toggle"
+          aria-expanded={aperta} aria-controls={corpo} onClick={() => setAperta((v) => !v)}>
+          <span className="pron-card__teams">
+            <span className="pron-card__name">Giornata {giornata}</span>
+            <span className="pron-card__meta">
+              {righe.length} {righe.length === 1 ? "giocata" : "giocate"}
+              {attesa > 0 && ` · ${attesa} in attesa`}
+            </span>
+          </span>
+          {punteggio && punteggio.resolved > 0 ? (
+            <span className="pron-arch__score">
+              <span><span className="pron-arch__who">Tu</span> {percento(punteggio.won, punteggio.resolved)}
+                <span className="faint"> ({punteggio.won}/{punteggio.resolved})</span></span>
+              <span><span className="pron-arch__who">Modello</span> {percento(punteggio.model_won, punteggio.model_resolved)}
+                <span className="faint"> ({punteggio.model_won}/{punteggio.model_resolved})</span></span>
+            </span>
+          ) : (
+            <span className="pron-arch__score faint">da giocare</span>
+          )}
+          <span className="pron-card__chevron" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </button>
+      </h3>
+
+      <div id={corpo} className="pron-card__body" hidden={!aperta}>
+        <ul className="pron-arch__list">
+          {[...righe]
+            .sort((x, y) => (x.kickoff_utc ?? "").localeCompare(y.kickoff_utc ?? ""))
+            .map((p) => (
+              <ArchivioPartita key={p.id} p={p} inCorso={inCorso} onRitira={onRitira} />
+            ))}
+        </ul>
+      </div>
+    </article>
+  );
+}
+
+function Archivio({
+  dati,
+  inCorso,
+  onRitira,
+}: {
+  dati: MyPredictions;
   inCorso: string | null;
   onRitira: (pick: Pick) => void;
 }) {
   const giornate = useMemo(() => {
     const g = new Map<number, Pick[]>();
-    for (const p of picks) g.set(p.matchday, [...(g.get(p.matchday) ?? []), p]);
+    for (const p of dati.picks) g.set(p.matchday, [...(g.get(p.matchday) ?? []), p]);
     return [...g.entries()].sort((a, b) => b[0] - a[0]);
-  }, [picks]);
+  }, [dati]);
+  const punteggi = new Map(dati.rounds.map((r) => [r.matchday, r]));
 
-  if (picks.length === 0) {
-    return <p className="profilo__hint">Nessuna giocata ancora. Scegli dalle partite qui sopra.</p>;
+  if (giornate.length === 0) {
+    return <p className="profilo__hint">Nessuna giocata ancora. Scegli dalle partite qui sopra e salva.</p>;
   }
-
   return (
-    <>
-      {giornate.map(([giornata, righe]) => (
-        <div key={giornata} className="pron-storico">
-          <h3 className="day-head">Giornata {giornata}</h3>
-          <div className="std">
-            <table className="std__table pron-table">
-              <thead>
-                <tr>
-                  <th>Partita</th>
-                  <th>Giocata</th>
-                  <th className="right" title="probabilità che le dava il modello">Modello</th>
-                  <th className="right hide-narrow" title="1/p">Quota equa</th>
-                  <th className="right">Esito</th>
-                </tr>
-              </thead>
-              <tbody>
-                {righe.map((p) => (
-                  <tr key={p.id}>
-                    <td className="picks__match">
-                      {p.home_team} <span className="faint">–</span> {p.away_team}
-                    </td>
-                    <td>{etichetta(p.market, p.home_team, p.away_team)}</td>
-                    <td className="right num">{prob(p.model_probability)}</td>
-                    <td className="right num hide-narrow">{fmtOdds(p.fair_odds)}</td>
-                    <td className="right">
-                      {p.won === null ? (
-                        p.locked ? (
-                          <span className="faint">in corso</span>
-                        ) : (
-                          <button
-                            type="button"
-                            className="link-button pron-ritira"
-                            onClick={() => onRitira(p)}
-                            disabled={inCorso === p.id}
-                            aria-label={`Ritira la giocata ${etichetta(p.market, p.home_team, p.away_team)} su ${p.home_team} – ${p.away_team}`}
-                          >
-                            Ritira
-                          </button>
-                        )
-                      ) : (
-                        <span className={`score-chip score-chip--${p.won ? "ok" : "ko"}`}>
-                          <span className="visually-hidden">{p.won ? "Uscita: " : "Non uscita: "}</span>
-                          {score(p.goals_home, p.goals_away)}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+    <div className="pron-list">
+      {giornate.map(([giornata, righe], i) => (
+        <GiornataArchivio key={giornata} giornata={giornata} punteggio={punteggi.get(giornata)}
+          righe={righe} inCorso={inCorso} onRitira={onRitira} apertaAllInizio={i === 0} />
       ))}
-    </>
+    </div>
   );
 }
 
@@ -241,6 +412,10 @@ export function Pronostici() {
   const [errore, setErrore] = useState<string | null>(null);
   const [senzaPermesso, setSenzaPermesso] = useState(false);
   const [inCorso, setInCorso] = useState<string | null>(null);
+  // Le scelte non ancora salvate, per partita. Assente = nessuna modifica.
+  const [bozze, setBozze] = useState<Map<string, string | null>>(new Map());
+  const [salvando, setSalvando] = useState(false);
+  const [conferma, setConferma] = useState<string | null>(null);
 
   const carica = useCallback(async () => {
     try {
@@ -264,27 +439,60 @@ export function Pronostici() {
     void carica();
   }, [carica]);
 
-  // L'id di ogni giocata, per poterla ritirare cliccando di nuovo la stessa.
-  const ids = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of dati?.picks ?? []) m.set(chiave(p.home_team, p.away_team, p.market), p.id);
+  // Il pronostico salvato di ogni partita: una sola giocata per partita.
+  const salvate = useMemo(() => {
+    const m = new Map<string, Pick>();
+    for (const p of dati?.picks ?? []) m.set(partita(p.home_team, p.away_team), p);
     return m;
   }, [dati]);
 
-  async function onToggle(partita: OpenMatch, market: string) {
-    const k = chiave(partita.home_team, partita.away_team, market);
-    setInCorso(k);
+  // Le bozze che cambiano davvero qualcosa rispetto al salvato.
+  const modifiche = [...bozze.entries()].filter(
+    ([k, v]) => v !== (salvate.get(k)?.market ?? null),
+  );
+
+  // Lasciare la pagina con modifiche aperte le perderebbe in silenzio.
+  useEffect(() => {
+    if (modifiche.length === 0) return;
+    const avvisa = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", avvisa);
+    return () => window.removeEventListener("beforeunload", avvisa);
+  }, [modifiche.length]);
+
+  // La conferma "salvato" sparisce da sola dopo qualche secondo.
+  useEffect(() => {
+    if (!conferma) return;
+    const t = window.setTimeout(() => setConferma(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [conferma]);
+
+  function scegli(home: string, away: string, market: string | null) {
+    setConferma(null);
+    setBozze((prev) => new Map(prev).set(partita(home, away), market));
+  }
+
+  async function salva() {
+    setSalvando(true);
     setErrore(null);
     try {
-      const esistente = ids.get(k);
-      if (esistente) await me.deletePick(esistente);
-      else await me.addPick(partita.home_team, partita.away_team, market);
+      const picks = modifiche.map(([k, market]) => {
+        const [home_team, away_team] = k.split("|") as [string, string];
+        return { home_team, away_team, market };
+      });
+      await me.savePicks(picks);
+      setBozze(new Map());
       await carica();
+      setConferma(
+        modifiche.length === 1 ? "Pronostico salvato." : `${modifiche.length} pronostici salvati.`,
+      );
     } catch (e) {
-      setErrore(serverError(e, "Non riesco a salvare la giocata. Riprova."));
-      await carica();
+      // Tutto o niente: se il server rifiuta, niente e' cambiato e le bozze
+      // restano, cosi' si corregge e si riprova senza ricominciare.
+      setErrore(serverError(e, "Non riesco a salvare i pronostici. Riprova."));
     } finally {
-      setInCorso(null);
+      setSalvando(false);
     }
   }
 
@@ -334,9 +542,9 @@ export function Pronostici() {
               </p>
             ) : ordinate.length === 0 ? (
               <p className="profilo__hint">
-                Nessuna partita aperta in questo momento. Le partite compaiono quando
-                escono le quote della giornata: il venerdì per il weekend, il martedì
-                per i turni infrasettimanali.
+                Nessuna partita aperta in questo momento. Le partite della prossima
+                giornata si aprono appena si chiude quella in corso; le probabilità
+                del modello arrivano con le quote, di solito il venerdì.
               </p>
             ) : (
               <div className="pron-list">
@@ -344,9 +552,9 @@ export function Pronostici() {
                   <PartitaAperta
                     key={`${p.home_team}-${p.away_team}`}
                     partita={p}
-                    ids={ids}
-                    inCorso={inCorso}
-                    onToggle={(partita, market) => void onToggle(partita, market)}
+                    salvata={salvate.get(partita(p.home_team, p.away_team))}
+                    bozza={bozze.get(partita(p.home_team, p.away_team))}
+                    onScegli={(market) => scegli(p.home_team, p.away_team, market)}
                     preferita={!!preferita && (p.home_team === preferita || p.away_team === preferita)}
                   />
                 ))}
@@ -354,12 +562,51 @@ export function Pronostici() {
             )}
           </section>
 
+          {/* LA BARRA DI SALVATAGGIO, in fondo e sempre raggiungibile: compare
+              solo quando c'e' qualcosa da salvare. La conferma e' una regione
+              di stato: lo screen reader la annuncia senza spostare il fuoco. */}
+          {(modifiche.length > 0 || conferma) && (
+            <div className="pron-savebar" role="region" aria-label="Salvataggio dei pronostici">
+              {modifiche.length > 0 ? (
+                <>
+                  <span className="pron-savebar__text">
+                    {modifiche.length === 1
+                      ? "1 pronostico da salvare"
+                      : `${modifiche.length} pronostici da salvare`}
+                  </span>
+                  <button type="button" className="btn btn--ghost" onClick={() => setBozze(new Map())}
+                    disabled={salvando}>
+                    Annulla
+                  </button>
+                  <button type="button" className="btn" onClick={() => void salva()}
+                    disabled={salvando} aria-busy={salvando || undefined}>
+                    {salvando && <span className="spinner" aria-hidden="true" />}
+                    {salvando ? "Salvo…" : "Salva i pronostici"}
+                  </button>
+                </>
+              ) : null}
+              <span className="pron-savebar__ok" role="status">
+                {conferma && (
+                  <>
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                      <path d="M5 12.5l4.5 4.5L19 7.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {conferma}
+                  </>
+                )}
+              </span>
+            </div>
+          )}
+
           <section className="pron-section" aria-labelledby="storico-titolo">
-            <h2 id="storico-titolo">Le tue giocate</h2>
+            <h2 id="storico-titolo">Archivio delle giornate</h2>
+            <p className="pron-section__lead">
+              Ogni giornata con le tue giocate e, sulle stesse partite, la selezione del modello.
+            </p>
             {dati === null ? (
-              !errore && <p className="state">Carico lo storico…</p>
+              !errore && <p className="state">Carico l'archivio…</p>
             ) : (
-              <Storico picks={dati.picks} inCorso={inCorso} onRitira={(p) => void onRitira(p)} />
+              <Archivio dati={dati} inCorso={inCorso} onRitira={(p) => void onRitira(p)} />
             )}
           </section>
     </div>

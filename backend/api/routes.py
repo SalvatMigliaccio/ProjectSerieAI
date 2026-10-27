@@ -29,6 +29,12 @@ from . import (
     ml as ml_mod,
 )
 from . import (
+    expected_points as xpts_mod,
+)
+from . import (
+    players as players_mod,
+)
+from . import (
     schemas,
     store,
 )
@@ -256,6 +262,47 @@ def get_standings(season: str) -> dict:
     return table
 
 
+@public.get("/players/{season}", response_model=schemas.Players,
+            summary="Top scorers and assist men")
+def get_players(season: str, limit: int = Query(10, ge=1, le=50)) -> dict:
+    """Goals and assists from Understat's shots — facts, not a forecast."""
+    payload = players_mod.leaders(season, limit=limit)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no shot data for season '{season}': run "
+                   f"'goalmodel ingest --stage shots'",
+        )
+    return payload
+
+
+@public.get("/expected-points/{season}", response_model=schemas.ExpectedPoints,
+            summary="Expected points per team, on played matches")
+def get_expected_points(season: str) -> dict:
+    """
+    3*p(win) + p(draw) from the production model, against the points taken.
+    Played matches only: summed per team, the upcoming round would leak.
+    """
+    payload = xpts_mod.expected_points(season)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no played match for season '{season}'",
+        )
+    return payload
+
+
+@public.get("/market-hits/{season}", response_model=schemas.MarketHits,
+            summary="Hit rate per market, on the closed rounds")
+def get_market_hits(season: str) -> dict:
+    """
+    1X2, over/under 2.5, goal/no goal, each team to score: how often the side
+    above 50% came out. Closed rounds only, so it is history and public.
+    """
+    _known_season(season)
+    return selections_mod.market_hits(season)
+
+
 @public.get("/picks/{season}", response_model=schemas.Picks,
             summary="The canonical M1 selections — no threshold to move")
 def get_picks(season: str, matchday: int | None = Query(None, ge=1, le=38),
@@ -343,6 +390,34 @@ def get_ml_round(season: str, matchday: int, user: Viewer = None) -> dict:
         )
     payload["matches"] = only_played(payload["matches"], user)
     return payload
+
+
+@public.get("/ml-track-record/{season}", response_model=schemas.MLTrackRecord,
+            summary="The AI model (M5) against the classic one (M1), played matches only")
+def get_ml_track_record(season: str) -> dict:
+    """
+    How the second opinion is doing, scored like the first.
+
+    Public like the rest of the history: it is built only from played matches,
+    and the price of a match that has not kicked off is not in it.
+    """
+    _known_season(season)
+    return ml_mod.track_record(season)
+
+
+@public.get("/fixtures/{season}", response_model=list[schemas.Fixture],
+            summary="The calendar: every match of a season or round, predicted or not")
+def get_fixtures(season: str, matchday: int | None = Query(None, ge=1, le=38)) -> list[dict]:
+    """
+    Who plays whom and when, before the model has priced anything.
+
+    PUBLIC, AND IT CAN BE: the calendar is published by the league months in
+    advance and carries no probability. It is what the dashboard shows of a
+    round between the close of the previous one and Friday's odds, and what
+    the users' own picks are made on.
+    """
+    _known_season(season)
+    return store.fixtures(season, matchday)
 
 
 @public.get("/ml-team/{season}", response_model=list[schemas.MLMatch],

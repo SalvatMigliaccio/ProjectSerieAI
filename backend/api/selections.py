@@ -242,6 +242,98 @@ def picks(season: str, matchday: int | None = None,
     }
 
 
+# Le domande a due esiti, con il nome del lato "si'" in `all_markets`. Il lato
+# scelto e' quello sopra il 50%: e' cio' che il modello ha detto, non una
+# selezione filtrata per quota.
+MARKET_QUESTIONS = (
+    ("ou25", "Over/Under 2.5", "over 2.5", "Over 2.5", "Under 2.5"),
+    ("gg", "Goal/No Goal", "gol-gol", "Goal", "No Goal"),
+    ("home_scores", "Segna la squadra di casa", "casa segna", "Sì", "No"),
+    ("away_scores", "Segna la squadra ospite", "fuori segna", "Sì", "No"),
+)
+
+
+def market_hits(season: str, src: store.Sources | None = None) -> dict:
+    """
+    Quante volte il lato piu' probabile di ogni mercato e' uscito.
+
+    L'1X2 DA SOLO RACCONTA MALE IL MODELLO. Ha tre esiti, uno dei quali — il
+    pareggio — non e' quasi mai il piu' probabile e capita una volta su
+    quattro: indovinarlo una volta su due e' gia' il valore atteso. Over/under,
+    gol-gol e "segna la squadra" hanno due esiti, e il conto si legge accanto.
+
+    STESSE PARTITE DEL CONTO 1X2 UFFICIALE: giornate chiuse, previsioni scritte
+    prima del fischio. Cosi' la riga 1X2 coincide con `season_summary.hits`, e
+    le altre righe hanno lo stesso denominatore — un mercato contato su piu'
+    partite di un altro non sarebbe confrontabile.
+
+    PIU' ALTO NON VUOL DIRE PIU' BRAVO. "Segna la squadra di casa" esce tre
+    volte su quattro comunque: un tasso alto su quel mercato dice soprattutto
+    com'e' fatto il calcio. `base_rate` e' la frequenza dell'esito "si'" sulle
+    stesse partite, ed e' il metro contro cui leggerlo.
+
+    I mercati vengono dai lambda del registro con `all_markets`, la stessa
+    chiamata di `report.selezioni`: nessuna seconda definizione di mercato.
+    """
+    from goalmodel.models.baseline import all_markets
+
+    records = [r for r in store.matches(season, src=src)
+               if r["status"] == store.STATUS_RESOLVED
+               and r["lambda_home"] is not None and r["lambda_away"] is not None]
+
+    out = {
+        "season": store.season_out(store.season_in(season)),
+        "matches": len(records),
+        "markets": [],
+        "by_round": [],
+    }
+    # Per giornata, la somma su TUTTI i mercati: una partita vale tanti
+    # pronostici quanti sono i mercati, e il conto "x su y" lo dice.
+    per_round: dict[int, list[int]] = {}
+
+    def conta(record: dict, hit: bool) -> None:
+        tally = per_round.setdefault(record["matchday"], [0, 0])
+        tally[0] += hit
+        tally[1] += 1
+
+    hits_1x2 = 0
+    for record in records:
+        hit = record["predicted_outcome"] == record["actual_outcome"]
+        hits_1x2 += hit
+        conta(record, hit)
+    out["markets"].append({
+        "key": "1x2", "label": "Risultato 1X2", "outcomes": 3,
+        "hits": hits_1x2, "resolved": len(records), "base_rate": None,
+    })
+    if not records:
+        for key, label, *_ in MARKET_QUESTIONS:
+            out["markets"].append({"key": key, "label": label, "outcomes": 2,
+                                   "hits": 0, "resolved": 0, "base_rate": None})
+        return out
+
+    probs = all_markets(
+        pd.Series([r["lambda_home"] for r in records]).to_numpy(float),
+        pd.Series([r["lambda_away"] for r in records]).to_numpy(float),
+    )
+    for key, label, yes, _, _ in MARKET_QUESTIONS:
+        hits = happened = 0
+        for i, record in enumerate(records):
+            said_yes = float(probs[yes].iloc[i]) >= 0.5
+            was_yes = resolve(yes, record["goals_home"], record["goals_away"],
+                              record["actual_outcome"])
+            hits += said_yes == was_yes
+            happened += was_yes
+            conta(record, said_yes == was_yes)
+        out["markets"].append({
+            "key": key, "label": label, "outcomes": 2,
+            "hits": hits, "resolved": len(records),
+            "base_rate": happened / len(records),
+        })
+    out["by_round"] = [{"matchday": md, "hits": h, "resolved": n}
+                       for md, (h, n) in sorted(per_round.items())]
+    return out
+
+
 def selections(
     season: str,
     max_odds: float,

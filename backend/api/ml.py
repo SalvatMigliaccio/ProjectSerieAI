@@ -180,3 +180,91 @@ def lambdas(season: str, src: store.Sources | None = None) -> dict:
             out[(matchday, row["home_team"], row["away_team"])] = (
                 float(row["lam casa M5"]), float(row["lam fuori M5"]))
     return out
+
+
+def track_record(season: str, src: store.Sources | None = None) -> dict:
+    """
+    M5 against M1 on the same played matches: RPS per match, per round, overall.
+
+    THE SAME METRIC AND THE SAME METHOD AS THE PROJECT'S. RPS from
+    `evaluation.evaluate.rps`, and the paired difference with
+    `cluster_bootstrap` on the matchday — the comparison CLAUDE.md prescribes,
+    because two models scored on the SAME matches share their difficulty and
+    the row-by-row difference removes it. Two separate averages would not.
+
+    ONLY MATCHES BOTH MODELS PRICED, both before kick-off. A row M1 wrote after
+    the start (status `invalid`) is out of the track record, and therefore out
+    of this comparison as well.
+
+    An honest denominator: with a handful of rounds the interval is wide and
+    the payload says how many rounds it rests on, so the page can say "too
+    early" instead of announcing a winner.
+    """
+    import numpy as np
+    from goalmodel.evaluation.evaluate import cluster_bootstrap, outcome_index, rps
+
+    src = src or store.default_sources()
+    records = {(r["home_team"], r["away_team"]): r for r in store.matches(season, src=src)}
+
+    rows: list[dict] = []
+    for matchday in available(season, src):
+        payload = round_ml(season, matchday, src)
+        if payload is None:
+            continue
+        for m in payload["matches"]:
+            rec = records.get((m["home_team"], m["away_team"]))
+            if (rec is None or rec["status"] not in (store.STATUS_PLAYED, store.STATUS_RESOLVED)
+                    or rec["actual_outcome"] is None
+                    or None in (rec["p_home"], rec["p_draw"], rec["p_away"])):
+                continue
+            p5 = {mk["market"]: mk["p_ml"] for mk in m["markets"]}
+            rows.append({
+                "matchday": matchday, "home_team": m["home_team"], "away_team": m["away_team"],
+                "goals_home": rec["goals_home"], "goals_away": rec["goals_away"],
+                "outcome": rec["actual_outcome"],
+                "p1": [rec["p_home"], rec["p_draw"], rec["p_away"]],
+                "p5": [p5["1"], p5["X"], p5["2"]],
+            })
+
+    if not rows:
+        return {"season": store.season_out(store.season_in(season)), "matches": 0,
+                "rounds": [], "per_match": [], "rps_classic": None, "rps_ai": None,
+                "difference": None, "ci_low": None, "ci_high": None, "ai_better": 0,
+                "classic_better": 0, "n_rounds": 0}
+
+    y = outcome_index([r["outcome"] for r in rows])
+    r1 = rps(np.array([r["p1"] for r in rows], dtype=float), y)
+    r5 = rps(np.array([r["p5"] for r in rows], dtype=float), y)
+    days = np.array([r["matchday"] for r in rows])
+    diff = r5 - r1
+
+    rounds = []
+    for d in sorted(set(days.tolist())):
+        mask = days == d
+        rounds.append({"matchday": int(d), "matches": int(mask.sum()),
+                       "rps_classic": float(r1[mask].mean()), "rps_ai": float(r5[mask].mean())})
+
+    # The bootstrap needs more than one cluster to mean anything.
+    ci = cluster_bootstrap(diff, days.astype(str)) if len(rounds) > 1 else None
+
+    return {
+        "season": store.season_out(store.season_in(season)),
+        "matches": len(rows),
+        "n_rounds": len(rounds),
+        "rps_classic": float(r1.mean()),
+        "rps_ai": float(r5.mean()),
+        # Positive = the AI did WORSE: RPS is minimised.
+        "difference": float(diff.mean()),
+        "ci_low": ci["ic_basso"] if ci else None,
+        "ci_high": ci["ic_alto"] if ci else None,
+        # A tie within a ten-thousandth is a tie, not a win for anyone.
+        "ai_better": int((diff < -1e-4).sum()),
+        "classic_better": int((diff > 1e-4).sum()),
+        "rounds": rounds,
+        "per_match": [
+            {"matchday": r["matchday"], "home_team": r["home_team"], "away_team": r["away_team"],
+             "goals_home": r["goals_home"], "goals_away": r["goals_away"],
+             "rps_classic": float(a), "rps_ai": float(b)}
+            for r, a, b in zip(rows, r1, r5, strict=True)
+        ],
+    }

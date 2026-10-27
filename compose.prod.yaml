@@ -89,6 +89,9 @@ services:
       # `backend/api/ml.py` next to `data/`. Missing, the AI picks come back
       # empty on every matchday with no error at all.
       - ${ML_DIR:-./experiments/output}:/srv/experiments/output:ro
+      # The scheduler state (`last_run.json`) /api/status reads. Missing, the
+      # admin dashboard reports "no run recorded" while the tasks run fine.
+      - ${LOGS_DIR:-./logs}:/srv/logs:ro
     depends_on:
       db:
         condition: service_healthy

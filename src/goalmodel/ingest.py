@@ -398,7 +398,8 @@ def ingest_understat() -> pd.DataFrame:
     return team_stats
 
 
-def ingest_understat_shots(seasons: list[str] | None = None) -> pd.DataFrame:
+def ingest_understat_shots(seasons: list[str] | None = None,
+                           leagues: list[str] | None = None) -> pd.DataFrame:
     """
     Eventi tiro con coordinate e xG per singolo tiro.
 
@@ -415,30 +416,40 @@ def ingest_understat_shots(seasons: list[str] | None = None) -> pd.DataFrame:
     difetto che `ingest_cups` aveva sulle coppe — la Conference League non
     scaricata per anni — e che `ingest_player_stats` gia' evita.
 
-    Riprendibile: al rilancio salta le stagioni gia' nel file.
+    Riprendibile: al rilancio salta le coppie (lega, stagione) gia' nel file.
+
+    LA COPPIA, NON LA SOLA STAGIONE. Prima si saltava una stagione se c'era nel
+    file per una lega qualsiasi: scaricare la sola Serie A 2021/22 e poi
+    lanciare i Big 5 avrebbe lasciato le altre quattro leghe senza quella
+    stagione per sempre, senza un errore. `leagues` serve proprio a scaricare
+    una lega sola (il blocco giocatori e' della Serie A) senza quel rischio.
     """
     seasons = seasons or SEASONS
+    leagues = leagues or LEAGUE
     dst = RAW / "understat_shots.parquet"
     pezzi = [pd.read_parquet(dst)] if dst.exists() else []
-    fatte = set(pezzi[0]["season"].astype(str)) if pezzi else set()
+    fatte = (set(zip(pezzi[0]["league"].astype(str), pezzi[0]["season"].astype(str), strict=True))
+             if pezzi else set())
     if fatte:
-        log.info("stagioni gia' scaricate: %s", sorted(fatte))
+        log.info("gia' scaricate: %s", sorted(fatte))
 
-    for stagione in barra(seasons, "stagioni"):
-        if str(stagione) in fatte:
-            continue
-        try:
-            us = sd.Understat(leagues=LEAGUE, seasons=[stagione])
-            df = us.read_shot_events().reset_index()
-            for c in df.columns:
-                if df[c].dtype == object:
-                    df[c] = df[c].astype("string")
-            pezzi.append(df)
-            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
-            log.info("%s: %d tiri", stagione, len(df))
-        except Exception as exc:
-            log.warning("%s: %s — proseguo con la prossima stagione",
-                        stagione, type(exc).__name__)
+    for lega in leagues:
+        for stagione in barra(seasons, f"stagioni {lega}"):
+            if (lega, str(stagione)) in fatte:
+                continue
+            try:
+                us = sd.Understat(leagues=[lega], seasons=[stagione])
+                df = us.read_shot_events().reset_index()
+                for c in df.columns:
+                    if df[c].dtype == object:
+                        df[c] = df[c].astype("string")
+                df["league"] = lega
+                df["season"] = str(stagione)
+                pezzi.append(df)
+                pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+                log.info("%s %s: %d tiri", lega, stagione, len(df))
+            except Exception as exc:
+                log.warning("%s %s: %s — proseguo", lega, stagione, type(exc).__name__)
 
     out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
     log.info("%-22s %6d righe -> %s", "understat_shots", len(out), dst)

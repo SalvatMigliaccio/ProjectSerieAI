@@ -46,10 +46,12 @@ log = logging.getLogger("auth.me")
 
 router = APIRouter(prefix="/api/me", tags=["me"])
 
-# A ceiling per match. Ten covers every sensible combination (an outcome, a
-# double chance, a goals line, both teams to score...); past that it is not
-# an opinion any more, it is the whole catalogue.
-MAX_PICKS_PER_MATCH = 10
+# ONE PICK PER MATCH (23 October 2026, it was ten). A pick is an opinion on
+# how the match goes, and the comparison with the model is honest only if
+# there is one: with ten, a user could cover "over 2.5" and "under 2.5" on the
+# same match and always be half right. Changing one's mind before kick-off
+# REPLACES the pick (`save_predictions`), it does not add a second.
+MAX_PICKS_PER_MATCH = 1
 
 # The markets left out of the catalogue the page offers, as the dashboard
 # leaves them out: lines nobody plays (over 0.5, under 4.5) and the two
@@ -110,10 +112,61 @@ def _season_code(season: str) -> str:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown season '{season}'") from exc
 
 
+def _outcome(gh: int | None, ga: int | None) -> str | None:
+    if gh is None or ga is None:
+        return None
+    return "H" if gh > ga else "A" if ga > gh else "D"
+
+
 def _records(code: str) -> dict[tuple[str, str], dict]:
-    """Every match of the season in the track record, by (home, away)."""
+    """
+    Every match of the season, by (home, away): the calendar, and over it what
+    the track record knows.
+
+    THE CALENDAR FIRST, so a round exists as soon as the league has published
+    it — not only once Friday's odds are in and the model has priced it. A
+    match the model has not priced yet has no goal expectations (`lambda_*`
+    null): it can be picked, and its probabilities appear the day the model
+    writes them, recomputed for the picks already made.
+    """
     from backend.api import store
-    return {(r["home_team"], r["away_team"]): r for r in store.matches(code)}
+
+    out: dict[tuple[str, str], dict] = {}
+    for f in store.fixtures(code):
+        out[(f["home_team"], f["away_team"])] = {
+            **f, "lambda_home": None, "lambda_away": None,
+            "actual_outcome": _outcome(f["goals_home"], f["goals_away"]),
+        }
+    for r in store.matches(code):
+        key = (r["home_team"], r["away_team"])
+        out[key] = {**out.get(key, {}), **r}
+    return out
+
+
+def _pickable(records: dict[tuple[str, str], dict], at: dt.datetime) -> set[tuple[str, str]]:
+    """
+    The matches a user may pick now: not started, and in the NEXT ROUND.
+
+    The next round is the lowest matchday that still has most of its matches
+    ahead: a single postponed match of an old round must not make that round
+    "next" and hide the real one. Matches the model has already priced stay
+    pickable whatever their round — a postponed match with odds is a match
+    like any other.
+
+    Not the whole season ahead: a pick made in October on a match in May would
+    be a guess about a team that does not exist yet, and the comparison with
+    the model — priced the week of the match — would be meaningless.
+    """
+    upcoming = [r for r in records.values() if _is_open(r, at)]
+    if not upcoming:
+        return set()
+    per_round: dict[int, int] = {}
+    for r in upcoming:
+        per_round[r["matchday"]] = per_round.get(r["matchday"], 0) + 1
+    full = [d for d, n in per_round.items() if n >= 5]
+    next_round = min(full) if full else min(per_round)
+    return {(r["home_team"], r["away_team"]) for r in upcoming
+            if r["matchday"] == next_round or r.get("lambda_home") is not None}
 
 
 def _is_open(record: dict, at: dt.datetime) -> bool:
@@ -158,7 +211,10 @@ def set_preferences(payload: Preferences, request: Request, user: CurrentUser) -
 
         from goalmodel import config
 
-        teams = {name for r in store.matches(config.CURRENT_SEASON)
+        # The calendar, not the track record: all twenty teams are in it from
+        # the first matchday, predicted or not.
+        teams = {name for r in [*store.fixtures(config.CURRENT_SEASON),
+                                *store.matches(config.CURRENT_SEASON)]
                  for name in (r["home_team"], r["away_team"])}
         if team not in teams:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -173,21 +229,27 @@ class MarketOption(BaseModel):
     market: str
     label: str
     group: str
-    probability: float
+    # Null until the model has priced the match (Friday's odds).
+    probability: float | None
     fair_odds: float | None
     picked: bool
 
 
 class OpenMatch(BaseModel):
-    """A match that can still be picked, with the model's price on every market."""
+    """
+    A match that can still be picked, with the model's price on every market
+    once the model has one. `priced` is false between the close of the
+    previous round and Friday's odds: the match is open, its numbers are not.
+    """
 
     season: str
     matchday: int
     home_team: str
     away_team: str
     kickoff_utc: str
-    lambda_home: float
-    lambda_away: float
+    priced: bool
+    lambda_home: float | None
+    lambda_away: float | None
     markets: list[MarketOption]
 
 
@@ -207,6 +269,22 @@ class Pick(BaseModel):
     goals_home: int | None
     goals_away: int | None
     won: bool | None
+    # The model's own selection on the same match (the declared line: the most
+    # likely market paying at least QUOTA_MINIMA_SELEZIONE), for the side by
+    # side. Null when the model has not priced the match.
+    model_label: str | None = None
+    model_won: bool | None = None
+
+
+class RoundScore(BaseModel):
+    """One matchday of the archive: the user and the model on the same matches."""
+
+    matchday: int
+    picks: int
+    resolved: int
+    won: int
+    model_resolved: int
+    model_won: int
 
 
 class Summary(BaseModel):
@@ -225,11 +303,19 @@ class Summary(BaseModel):
     won: int
     hit_rate: float | None
     mean_model_probability: float | None
+    # THE MODEL ON THE SAME MATCHES. Its own selection on every match the user
+    # picked and that has been played: same matches, same moment, so the two
+    # percentages compare like for like — not the user's matches against the
+    # model's whole season, which would be easier or harder by chance.
+    model_resolved: int = 0
+    model_won: int = 0
+    model_hit_rate: float | None = None
 
 
 class MyPredictions(BaseModel):
     summary: Summary
     picks: list[Pick]
+    rounds: list[RoundScore] = []
 
 
 class NewPick(BaseModel):
@@ -237,6 +323,20 @@ class NewPick(BaseModel):
     home_team: str = Field(max_length=64)
     away_team: str = Field(max_length=64)
     market: str = Field(max_length=16)
+
+
+class PickChoice(BaseModel):
+    """The pick for one match; `market` null withdraws it."""
+
+    home_team: str = Field(max_length=64)
+    away_team: str = Field(max_length=64)
+    market: str | None = Field(default=None, max_length=16)
+
+
+class SavePicks(BaseModel):
+    season: str = Field(max_length=9)
+    # A round is ten matches; fifty is room for a postponed one, not a dump.
+    picks: list[PickChoice] = Field(max_length=50)
 
 
 def _fair(p: float | None) -> float | None:
@@ -255,7 +355,8 @@ def _group(market: str) -> str:
             dependencies=[Depends(require_permission("picks:read"))])
 def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
     """
-    Matches not kicked off yet, with the model's price on every market.
+    Matches not kicked off yet in the next round, with the model's price on
+    every market where it exists.
 
     Behind `picks:read`, like the unplayed rounds on the dashboard: the price
     of a match that has not started is the product, here as there.
@@ -265,17 +366,18 @@ def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
     mine = {(p.home_team, p.away_team, p.market) for p in db.scalars(
         select(UserPrediction).where(UserPrediction.user_id == user.id,
                                      UserPrediction.season == code))}
+    records = _records(code)
     out = []
-    for (home, away), r in _records(code).items():
-        if not _is_open(r, at) or r["lambda_home"] is None or r["lambda_away"] is None:
-            continue
-        probs = _probabilities(r["lambda_home"], r["lambda_away"])
+    for home, away in _pickable(records, at):
+        r = records[(home, away)]
+        priced = r.get("lambda_home") is not None and r.get("lambda_away") is not None
+        probs = _probabilities(r["lambda_home"], r["lambda_away"]) if priced else {}
         out.append(OpenMatch(
             season=r["season"], matchday=r["matchday"], home_team=home, away_team=away,
-            kickoff_utc=r["kickoff_utc"], lambda_home=r["lambda_home"],
-            lambda_away=r["lambda_away"],
+            kickoff_utc=r["kickoff_utc"], priced=priced,
+            lambda_home=r.get("lambda_home"), lambda_away=r.get("lambda_away"),
             markets=[MarketOption(market=m, label=_label(m), group=_group(m),
-                                  probability=probs[m], fair_odds=_fair(probs[m]),
+                                  probability=probs.get(m), fair_odds=_fair(probs.get(m)),
                                   picked=(home, away, m) in mine)
                      for m in markets()],
         ))
@@ -286,10 +388,15 @@ def open_matches(season: str, user: CurrentUser, db: Db) -> list[OpenMatch]:
 @router.get("/predictions/{season}")
 def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
     """Every pick of the season, newest match first, resolved against the result."""
+    from backend.api import selections as selections_mod
     from backend.api.selections import resolve
 
     code = _season_code(season)
     records = _records(code)
+    # The model's declared selection per match, the same list the dashboard
+    # shows under "Selezioni del modello".
+    modello = {(r["home_team"], r["away_team"]): r
+               for r in selections_mod.picks(code)["with_min_odds"]}
     at = now()
     rows = db.scalars(select(UserPrediction).where(
         UserPrediction.user_id == user.id, UserPrediction.season == code)).all()
@@ -298,6 +405,8 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
     for p in rows:
         r = records.get((p.home_team, p.away_team), {})
         lam_h, lam_a = r.get("lambda_home"), r.get("lambda_away")
+        # Recomputed every time: a pick made before Friday gets the model's
+        # probability as soon as the model writes one.
         prob = (_probabilities(lam_h, lam_a)[p.market]
                 if lam_h is not None and lam_a is not None else None)
         gh, ga = r.get("goals_home"), r.get("goals_away")
@@ -311,11 +420,14 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
             locked=not _is_open(r, at) if r else True,
             goals_home=gh, goals_away=ga,
             won=resolve(p.market, gh, ga, r.get("actual_outcome")) if played else None,
+            model_label=(modello.get((p.home_team, p.away_team)) or {}).get("market_label"),
+            model_won=(modello.get((p.home_team, p.away_team)) or {}).get("won"),
         ))
     picks.sort(key=lambda k: (k.kickoff_utc or "", k.home_team, k.market), reverse=True)
 
     resolved = [k for k in picks if k.won is not None]
     probs = [k.model_probability for k in resolved if k.model_probability is not None]
+    confronto = [k for k in resolved if k.model_won is not None]
     summary = Summary(
         picks=len(picks),
         pending=len(picks) - len(resolved),
@@ -323,8 +435,22 @@ def my_predictions(season: str, user: CurrentUser, db: Db) -> MyPredictions:
         won=sum(1 for k in resolved if k.won),
         hit_rate=(sum(1 for k in resolved if k.won) / len(resolved)) if resolved else None,
         mean_model_probability=(sum(probs) / len(probs)) if probs else None,
+        model_resolved=len(confronto),
+        model_won=sum(1 for k in confronto if k.model_won),
+        model_hit_rate=(sum(1 for k in confronto if k.model_won) / len(confronto))
+        if confronto else None,
     )
-    return MyPredictions(summary=summary, picks=picks)
+
+    rounds: list[RoundScore] = []
+    for day in sorted({k.matchday for k in picks}, reverse=True):
+        mine = [k for k in picks if k.matchday == day]
+        done = [k for k in mine if k.won is not None]
+        model = [k for k in done if k.model_won is not None]
+        rounds.append(RoundScore(
+            matchday=day, picks=len(mine), resolved=len(done),
+            won=sum(1 for k in done if k.won),
+            model_resolved=len(model), model_won=sum(1 for k in model if k.model_won)))
+    return MyPredictions(summary=summary, picks=picks, rounds=rounds)
 
 
 @router.post("/predictions", status_code=status.HTTP_201_CREATED)
@@ -332,21 +458,28 @@ def add_prediction(payload: NewPick, request: Request, user: CurrentUser, db: Db
     """
     Record one pick. 409 once the match has started, or if it is already there.
 
-    The kickoff is read from the match files, here, now. The request carries no
+    The kickoff is read from the calendar, here, now. The request carries no
     time at all, so there is nothing a client can send to make a late pick
-    look early.
+    look early. The model need not have priced the match yet: picks open with
+    the round, not with the odds.
     """
     _limit(request, user.id)
     code = _season_code(payload.season)
     if payload.market not in markets():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             f"unknown market '{payload.market}'")
-    record = _records(code).get((payload.home_team, payload.away_team))
-    if record is None or record["lambda_home"] is None:
+    records = _records(code)
+    key = (payload.home_team, payload.away_team)
+    record = records.get(key)
+    if record is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "match not found")
-    if not _is_open(record, now()):
+    at = now()
+    if not _is_open(record, at):
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "the match has started: picks are closed")
+    if key not in _pickable(records, at):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "picks open with the round: this match is not in the next one")
 
     count = len(db.scalars(select(UserPrediction.id).where(
         UserPrediction.user_id == user.id, UserPrediction.season == code,
@@ -366,6 +499,64 @@ def add_prediction(payload: NewPick, request: Request, user: CurrentUser, db: Db
     except IntegrityError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, "pick already recorded") from exc
     return {"id": str(row.id)}
+
+
+@router.post("/predictions/save")
+def save_predictions(payload: SavePicks, request: Request, user: CurrentUser, db: Db) -> dict:
+    """
+    Save the picks of a round in one go: one per match, replaced or withdrawn.
+
+    ALL OR NOTHING. Every choice is checked BEFORE any row changes — the
+    market exists, the match is open and in the next round — and one bad
+    choice refuses the whole save with 409, naming the match. Half a save
+    would leave the page showing picks that the server does not have.
+
+    The kickoff is read here, now, from the calendar, as in `add_prediction`:
+    the request carries no time. A match that has already started cannot be
+    changed, so its saved pick stays as it was.
+    """
+    _limit(request, user.id)
+    code = _season_code(payload.season)
+    records = _records(code)
+    at = now()
+    pickable = _pickable(records, at)
+
+    seen: set[tuple[str, str]] = set()
+    for c in payload.picks:
+        key = (c.home_team, c.away_team)
+        if key in seen:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"{c.home_team} - {c.away_team} appears twice")
+        seen.add(key)
+        if c.market is not None and c.market not in markets():
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                                f"unknown market '{c.market}'")
+        if key not in records:
+            raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                f"match not found: {c.home_team} - {c.away_team}")
+        if key not in pickable:
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                f"{c.home_team} - {c.away_team} is closed: picks stay as they were")
+
+    saved = removed = 0
+    for c in payload.picks:
+        old = db.scalars(select(UserPrediction).where(
+            UserPrediction.user_id == user.id, UserPrediction.season == code,
+            UserPrediction.home_team == c.home_team,
+            UserPrediction.away_team == c.away_team)).all()
+        if c.market is not None and len(old) == 1 and old[0].market == c.market:
+            continue  # unchanged: the original time of the pick is kept
+        for row in old:
+            db.delete(row)
+            removed += 1
+        if c.market is not None:
+            db.add(UserPrediction(
+                user_id=user.id, season=code,
+                matchday=records[(c.home_team, c.away_team)]["matchday"],
+                home_team=c.home_team, away_team=c.away_team, market=c.market))
+            saved += 1
+    db.flush()
+    return {"saved": saved, "removed": removed}
 
 
 @router.post("/predictions/{pick_id}/delete")

@@ -53,3 +53,32 @@ Il pacchetto `backend/auth` legge il track record tramite `backend.api.store`
 (in sola lettura), come gia' facevano le selezioni. La tabella
 `user_predictions` e la colonna `users.favorite_team` arrivano con la
 migrazione `7c1e5a2d9b40`.
+
+## Aggiornamento, 23 ottobre 2026 — si gioca dalla chiusura della giornata prima
+
+I pronostici non aspettano piu' le quote. Chiusa una giornata, quella dopo si
+apre subito dal **calendario** (`store.fixtures`, nuova rotta pubblica
+`GET /api/fixtures/{season}`): partite e orari, nessuna probabilita'. Le
+probabilita' del modello compaiono quando `predict_round` registra la
+giornata, e valgono anche per le giocate gia' fatte, perche' si ricalcolano.
+
+Restano invariate le due regole che contano: il calcio d'inizio lo decide il
+server (ora dal calendario, anche per le partite non ancora prezzate), e una
+giocata non si ritira dopo il fischio. Si aggiunge un limite: si gioca solo la
+**prossima giornata**, non tutta la stagione — un pronostico fatto ad ottobre
+su una partita di maggio non e' confrontabile con un modello che quella
+partita la prezza la settimana stessa.
+
+## Aggiornamento, 23 ottobre 2026 — una giocata per partita, salvate insieme
+
+Il limite passa da dieci giocate per partita a **una**: con dieci si potevano
+coprire "over 2.5" e "under 2.5" sulla stessa partita ed essere sempre
+mezzi giusti, e il confronto con il modello perdeva senso. Cambiare idea prima
+del fischio **sostituisce** la giocata.
+
+Nuova rotta `POST /api/me/predictions/save`: le scelte di una giornata in una
+volta, **tutto o niente**. Ogni scelta si controlla prima che qualsiasi riga
+cambi — mercato esistente, partita aperta e nella prossima giornata — e una
+sola scelta non valida rifiuta l'intero salvataggio con 409, nominando la
+partita. Una giocata invariata non si riscrive, cosi' conserva l'orario in cui
+era stata fatta.
