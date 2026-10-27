@@ -88,7 +88,12 @@ il suo stato. Entrambi finiscono con due righe, `FATTO` e `IN SOSPESO`.
 ```
 
 `goalmodel predict-round` accetta anche `--no-open`, per non aprire il
-report nel browser.
+report nel browser. Entrambi accettano `--senza-m5`, che salta il passo M5.
+
+**Un comando per fase aggiorna tutto quello che la dashboard mostra** (dal 27
+ottobre 2026): registro, report, marcatori e M5. Resta fuori solo il deploy
+(`vercel deploy --prod`, vedi `DEPLOY.md`): senza, il sito pubblico continua a
+mostrare la fotografia precedente.
 
 ### `predict_round` — da aperta a predetta
 
@@ -96,12 +101,19 @@ report nel browser.
 goalmodel predict-round
 ```
 
-1. `ingest`: `matches`, `understat`, `schedule`, `fixtures` (non fatali)
+1. `ingest`: `matches`, `understat`, `shots`, `schedule`, `fixtures` (non
+   fatali). `shots` solo per la Serie A e la stagione in corso: sono i
+   marcatori della dashboard
 2. `normalize --build`, `features.form`, `features.market` (fatali)
 3. trova la prima giornata con partite **predicibili adesso**: con le quote,
    non gia' in registro, e con il calcio d'inizio ancora davanti
 4. riaddestra il modello su tutto lo storico e predice tutte le sue partite
-5. scrive nel registro saltando le gia' presenti, genera il report e lo apre
+5. scrive nel registro saltando le gia' presenti e genera il report
+6. **M5** sulla stessa giornata (`predici_gbm --matchday N`), in un processo
+   separato e mai fatale: se il GBM non si addestra il registro e' gia'
+   scritto, e il riepilogo lo dice. E' il passo lento (cinque semi). Non gira
+   in `--dry-run`, perche' scrive `experiments/output/previsioni_m5_*.csv`
+7. apre il report
 
 **Giornata coperta a meta'.** Lo snapshot quote e' una finestra sul turno
 imminente: puo' contenerne sei su dieci. Si registrano le sei e si dice quali
@@ -120,7 +132,9 @@ e il comando lo dira'.
 goalmodel close-round
 ```
 
-1. `ingest`: `matches`, `understat` (non fatali)
+1. `ingest`: `matches`, `understat`, `shots` (non fatali). Girano prima di
+   tutto il resto, quindi i marcatori si aggiornano anche quando non c'e'
+   nessuna giornata da chiudere
 2. `normalize --build` e feature (fatali — senza, i risultati appena scaricati
    non arrivano a `matches_master` e l'aggancio non trova niente)
 3. trova la prima giornata predetta e **interamente** giocata
@@ -128,6 +142,14 @@ goalmodel close-round
    `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione, risultato
    ed errore per singola partita
 5. rifa' `track_record/rounds/riepilogo.csv` e rigenera il report
+6. stampa M5 contro M1 sulla giornata chiusa (`predici_gbm --verifica`), solo
+   lettura, non fatale. La dashboard ricalcola comunque da sola le statistiche
+   di M5: questo serve a chi legge il log
+
+**I tiri della stagione in corso si riscaricano sempre.** Fino al 27 ottobre
+2026 lo stage `shots` saltava ogni coppia (lega, stagione) gia' nel file, anche
+quella in corso: i marcatori restavano fermi al primo download, e rilanciarlo
+non cambiava niente senza dirlo. Le stagioni concluse restano saltate.
 
 **Una giornata incompleta non si chiude**, nemmeno con `--round` esplicito: se
 manca un solo risultato resta aperta e si riprova al lancio dopo. Archiviare un
@@ -649,7 +671,7 @@ Per un deploy stabile, in ordine di parti mobili:
 ## 7quater. Scheduler di Windows
 
 ```bash
-scripts\predict_round.cmd     # venerdi' — M1 nel registro, poi M5 in coda
+scripts\predict_round.cmd     # venerdi' — M1 nel registro, M5 e marcatori
 scripts\close_round.cmd       # martedi'
 scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
 scripts\aggiorna_risultati.cmd  # ogni giorno 17:45 e 23:30 — risultati provvisori
@@ -673,15 +695,17 @@ con `status: played`, cioe' provvisori, con la stessa catena di fonti di
 restano calcolati solo dall'archivio. Per questo il task non compare in
 `last_run.json`, come M5.
 
-**`predict_round.cmd` fa due cose, in quest'ordine**: scrive le previsioni di
-M1 nel registro, poi lancia M5 che salva la sua opinione sulla stessa giornata
-in `experiments/output/`. Concatenati e non due task separati per due motivi:
-M5 non fa ingestion propria e deve leggere il dataset che `predict_round` ha
-appena ricostruito; e ogni trigger che fa partire l'uno — compresi i recuperi
-che Windows esegue in ritardo al risveglio — copre anche l'altro, senza una
-seconda serie di orari da tenere allineata.
+**M5 lo lancia `predict_round` stesso, non piu' lo script** (dal 27 ottobre
+2026). Prima era `predict_round.cmd` a concatenarli, e quindi un
+`goalmodel predict-round` lanciato a mano, o su Linux, non aggiornava M5. Le
+ragioni per tenerli insieme restano: M5 non fa ingestion propria e deve leggere
+il dataset appena ricostruito, e ogni trigger che fa partire l'uno — compresi i
+recuperi che Windows esegue in ritardo al risveglio — copre anche l'altro.
+Gira in un processo separato perche' `predici_gbm` installa
+`proteggi_produzione()`, che dentro `predict_round` resterebbe accesa sul
+registro.
 
-**L'uscita di M5 viene scartata di proposito.** E' diagnostica: se il GBM non
+**L'uscita di M5 non cambia quella del comando, di proposito.** E' diagnostica: se il GBM non
 si addestra, il registro e' stato scritto lo stesso, e il task non deve
 riportare una giornata fallita per qualcosa che il registro non lo tocca
 nemmeno. Per lo stesso motivo M5 non compare in `last_run.json`: `/api/status`

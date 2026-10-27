@@ -36,6 +36,8 @@ from __future__ import annotations
 
 import argparse
 import logging
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -159,6 +161,11 @@ def aggiorna_dati(stage: tuple[str, ...], skip_ingest: bool) -> list[str]:
     disponibili = {
         "matches": ("risultati football-data", ingest.ingest_matches),
         "understat": ("xG e PPDA Understat", ingest.ingest_understat),
+        # Solo la stagione in corso e solo la lega di produzione: i marcatori
+        # della dashboard sono quelli, e le stagioni concluse non cambiano.
+        "shots": ("tiri e marcatori Understat", lambda: ingest.ingest_understat_shots(
+            seasons=[ingest.season_from_date(pd.Timestamp.now())],
+            leagues=list(config.LEAGUES_PRODUZIONE))),
         "schedule": ("calendario FBref", ingest.ingest_schedule),
         "fixtures": ("quote del turno imminente", ingest.ingest_fixtures),
     }
@@ -168,6 +175,39 @@ def aggiorna_dati(stage: tuple[str, ...], skip_ingest: bool) -> list[str]:
         if not passo(f"1{chr(96 + i)}", etichetta, fn, fatale=False):
             falliti.append(etichetta)
     return falliti
+
+
+# Il modulo di M5, per NOME e non importato. Vedi `lancia_m5`.
+MODULO_M5 = "goalmodel.experiments.predici_gbm"
+
+
+def lancia_m5(argomenti: list[str]) -> int:
+    """
+    M5, la seconda opinione del GBM, in un PROCESSO SEPARATO.
+
+    PERCHE' NON UN IMPORT. Due ragioni, e la seconda e' quella che morde.
+    La regola dei livelli: `experiments` importa tutto e non e' importato da
+    nessuno, e un import qui dentro la romperebbe. E `predici_gbm` chiama
+    `experiments.proteggi_produzione()`, che sostituisce `to_csv` e
+    `to_parquet` di pandas per TUTTO il processo: dentro `predict_round` quella
+    guardia resterebbe accesa sul registro e sul report. In un processo suo
+    nasce e muore con l'esperimento.
+
+    NON FATALE, MAI. M5 e' diagnostica: se il GBM non si addestra il registro e'
+    gia' scritto, e il comando non deve dichiarare fallita una giornata per
+    qualcosa che non lo tocca. Si restituisce il codice di uscita perche' il
+    riepilogo lo dica; nessuno lo propaga.
+
+    Forma a lista con `sys.executable`, regola di sicurezza 4.
+    """
+    comando = [sys.executable, "-m", MODULO_M5, *argomenti]
+    log.info("--- [M5] %s", " ".join(["predici_gbm", *argomenti]))
+    try:
+        # Lista fissa: sys.executable, un modulo costante, argomenti nostri.
+        return subprocess.run(comando, check=False).returncode  # noqa: S603
+    except OSError as exc:
+        log.warning("M5 non avviato: %s", exc)
+        return -1
 
 
 def ricostruisci() -> None:

@@ -66,3 +66,23 @@ timestamp_prediction,model_version,league,season,matchday,match_date,home_team,a
 2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Genoa,Venezia,1.5177,1.1564,0.43645,0.29344,0.27012,0.5,0.55449,2.1,3.4,3.5,B365-fixtures
 2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Lecce,Juventus,0.6763,2.0809,0.09488,0.21817,0.68695,0.52026,0.44443,8.0,4.2,1.44,B365-fixtures
 2026-10-23T15:30:27Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,8,2026-10-25,Udinese,Milan,0.8579,1.871,0.15023,0.25398,0.59578,0.51343,0.50404,5.5,3.7,1.67,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-27,Sassuolo,Lazio,1.1936,1.693,0.26943,0.23992,0.49065,0.55092,0.56867,3.5,3.6,2.05,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-27,Roma,Cagliari,2.3634,0.7017,0.74478,0.16266,0.09257,0.59124,0.45682,1.3,5.5,9.5,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-27,Torino,Como,0.9953,1.8913,0.19494,0.22178,0.58328,0.55092,0.53527,4.75,3.7,1.75,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-28,Milan,Bologna,1.8471,0.91,0.59427,0.22432,0.18142,0.52027,0.50327,1.62,3.75,5.75,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-28,Parma,Udinese,1.1212,1.2696,0.32582,0.27629,0.39788,0.42787,0.48471,2.9,3.2,2.5,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-28,Venezia,Inter,0.9412,2.7401,0.10316,0.14622,0.75063,0.71136,0.57048,8.5,5.0,1.36,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-28,Genoa,Juventus,0.7652,1.7071,0.16485,0.2363,0.59885,0.44908,0.43777,5.5,3.6,1.67,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-28,Monza,Napoli,1.0642,1.915,0.20711,0.22081,0.57207,0.57213,0.55848,4.5,3.9,1.75,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-29,Frosinone,Lecce,2.1747,1.2521,0.58392,0.20288,0.21321,0.6654,0.63295,1.65,4.0,5.0,B365-fixtures
+2026-10-27T12:42:24Z,M1 market-only (lambda),ITA-Serie A,2627,9,2026-10-29,Fiorentina,Atalanta,1.6566,1.4085,0.43486,0.23809,0.32705,0.59125,0.61136,2.2,3.6,3.1,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-27,Sassuolo,Lazio,1.1936,1.693,0.2514,0.27598,0.47262,0.55092,0.5867,3.5,3.6,2.05,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-27,Roma,Cagliari,2.3634,0.7017,0.7324,0.18741,0.08019,0.59124,0.4692,1.3,5.5,9.5,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-27,Torino,Como,0.9953,1.8913,0.17814,0.25538,0.56648,0.55092,0.55206,4.75,3.7,1.75,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-28,Milan,Bologna,1.8471,0.91,0.57719,0.25846,0.16435,0.52027,0.52034,1.62,3.75,5.75,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-28,Parma,Udinese,1.1212,1.2696,0.30497,0.318,0.37703,0.42787,0.50556,2.9,3.2,2.5,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-28,Venezia,Inter,0.9412,2.7401,0.09276,0.16701,0.74023,0.71136,0.58087,8.5,5.0,1.36,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-28,Genoa,Juventus,0.7652,1.7071,0.14722,0.27158,0.58121,0.44908,0.45541,5.5,3.6,1.67,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-28,Monza,Napoli,1.0642,1.915,0.19054,0.25396,0.5555,0.57213,0.57505,4.5,3.9,1.75,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-29,Frosinone,Lecce,2.1747,1.2521,0.56976,0.23119,0.19905,0.6654,0.64711,1.65,4.0,5.0,B365-fixtures
+2026-10-27T12:42:24Z,"M1 market-only (lambda, rho=-0.16)",ITA-Serie A,2627,9,2026-10-29,Fiorentina,Atalanta,1.6566,1.4085,0.41744,0.27292,0.30964,0.59125,0.62878,2.2,3.6,3.1,B365-fixtures

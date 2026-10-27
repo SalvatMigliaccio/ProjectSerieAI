@@ -1613,6 +1613,15 @@ che non distinguerebbe "tutto a posto" da "non ho trovato i dati".
 **Finiscono con due righe**, `FATTO` e `IN SOSPESO`, leggibili senza scorrere
 il log.
 
+**Aggiornano tutto cio' che la dashboard mostra, M5 compreso (27 ottobre
+2026).** Lo stage `shots` (marcatori) e' in entrambi; `predict_round` lancia
+M5 in coda, `close_round` ne stampa la verifica. M5 parte **in un processo
+separato**, per nome e mai importato: la regola dei livelli lo vieta, e
+`predici_gbm` installa `proteggi_produzione()`, che dentro `predict_round`
+resterebbe accesa sul registro. Non e' mai fatale. Prima M5 lo concatenava
+solo lo script dello scheduler Windows, quindi a mano o su Linux non partiva.
+Fuori resta solo il deploy su Vercel, che e' una pubblicazione e si decide.
+
 **Se le quote cambiano, la riga vecchia non si aggiorna.** Falsificherebbe il
 track record a posteriori con informazione che al momento della previsione non
 c'era. Per una seconda opinione si cambia `model_version`: la chiave di

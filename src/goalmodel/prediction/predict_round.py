@@ -2,12 +2,16 @@
 Fa avanzare una giornata da APERTA a PREDETTA.
 
 COSA FA, NELL'ORDINE
-  1. aggiorna risultati, calendario e quote del turno imminente;
+  1. aggiorna risultati, tiri della stagione, calendario e quote del turno
+     imminente;
   2. ricostruisce `matches_master` e le feature;
   3. individua da solo la prima giornata con partite ancora predicibili;
   4. riaddestra il modello su tutto lo storico e predice TUTTE le sue partite;
   5. scrive nel registro, saltando quelle gia' presenti;
-  6. genera il report HTML e lo apre.
+  6. genera il report HTML;
+  7. lancia M5, la seconda opinione del GBM, sulla stessa giornata (in un
+     processo suo, non fatale: `rounds.lancia_m5`; `--senza-m5` lo salta);
+  8. apre il report.
 
 NON CHIEDE CHE GIORNATA E NON SA CHE GIORNO E'
 La giornata la deduce da `src/rounds.py`, che guarda quote, registro e
@@ -57,7 +61,7 @@ log = logging.getLogger("predict_round")
 # fonte della giornata e dell'orario di calcio d'inizio: senza aggiornarlo, un
 # rinvio deciso durante la settimana non si vedrebbe e la giornata verrebbe
 # dedotta su un calendario vecchio.
-STAGE = ("matches", "understat", "schedule", "fixtures")
+STAGE = ("matches", "understat", "shots", "schedule", "fixtures")
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +179,7 @@ def stampa_scoperte(esito: predict_mod.Esito) -> None:
 
 def run(matchday: int | None = None, dry_run: bool = False,
         skip_ingest: bool = False, verbose: bool = False,
-        apri: bool = True) -> int:
+        apri: bool = True, m5: bool = True) -> int:
     """Porta una giornata da aperta a predetta. Restituisce il codice di uscita."""
     rounds.silenzia(verbose)
     adesso = pd.Timestamp.now(tz="UTC")
@@ -244,6 +248,16 @@ def run(matchday: int | None = None, dry_run: bool = False,
         log.error("le previsioni sono comunque nel registro. "
                   "Rigeneralo con 'goalmodel report'.")
 
+    # M5 sulla stessa giornata, DOPO il registro e il report: e' diagnostica, e
+    # niente di quello che fa puo' ritardare o compromettere la previsione
+    # principale. Legge il dataset appena ricostruito qui sopra, ed e' per
+    # questo che sta in coda a questo comando e non in uno suo. Non in dry-run:
+    # scriverebbe `experiments/output/previsioni_m5_*.csv`.
+    if m5 and not dry_run:
+        codice = rounds.lancia_m5(["--matchday", str(matchday)])
+        paralleli.append("M5 GBM: salvato in experiments/output" if codice == 0
+                         else f"M5 GBM: NON salvato (uscita {codice}, vedi il log sopra)")
+
     _riepilogo(esito, matchday, n_partite, gia_in_registro, falliti,
                dry_run, percorso, paralleli)
 
@@ -310,13 +324,15 @@ def main() -> None:
                     help="non aprire il report nel browser")
     ap.add_argument("--verbose", action="store_true",
                     help="mostra tutti i log dei moduli chiamati")
+    ap.add_argument("--senza-m5", action="store_true",
+                    help="non lanciare il GBM (M5) dopo la previsione: e' il passo lento")
     args = ap.parse_args()
 
     pd.set_option("display.width", 220)
     pd.set_option("display.max_columns", 40)
     sys.exit(run(matchday=args.matchday, dry_run=args.dry_run,
                  skip_ingest=args.skip_ingest, verbose=args.verbose,
-                 apri=not args.no_open))
+                 apri=not args.no_open, m5=not args.senza_m5))
 
 
 if __name__ == "__main__":

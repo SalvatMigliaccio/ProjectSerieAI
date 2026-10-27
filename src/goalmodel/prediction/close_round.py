@@ -2,14 +2,17 @@
 Fa avanzare una giornata da GIOCATA a CHIUSA.
 
 COSA FA, NELL'ORDINE
-  1. aggiorna i risultati (`matches`, `understat`) e ricostruisce il dataset;
+  1. aggiorna i risultati (`matches`, `understat`) e i tiri della stagione
+     (`shots`, per i marcatori della dashboard), e ricostruisce il dataset;
   2. individua da solo la prima giornata predetta, interamente giocata e non
      ancora archiviata;
   3. aggancia i risultati veri alle previsioni registrate;
   4. salva la giornata in `track_record/rounds/round_<stagione>_<NN>.csv`, con
      previsione, risultato ed errore di ogni singola partita;
   5. rifa' il riepilogo cumulativo di produzione;
-  6. rigenera il report con il track record aggiornato.
+  6. rigenera il report con il track record aggiornato;
+  7. stampa M5 contro M1 sulla giornata chiusa (`predici_gbm --verifica`, in
+     un processo suo, non fatale; `--senza-m5` lo salta).
 
 UNA GIORNATA INCOMPLETA NON SI CHIUDE
 Se anche una sola partita non ha ancora il risultato — un posticipo, un rinvio
@@ -56,7 +59,7 @@ log = logging.getLogger("close_round")
 
 KEYS = rounds.KEYS
 PROB = ["p_home", "p_draw", "p_away"]
-STAGE = ("matches", "understat")
+STAGE = ("matches", "understat", "shots")
 
 # Le colonne del file di giornata. Ordine pensato per essere letto da un umano
 # in un foglio di calcolo: prima cosa era stato previsto, poi cosa e'
@@ -189,7 +192,7 @@ def stampa_giornata(d: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 
 def run(matchday: int | None = None, dry_run: bool = False,
-        skip_ingest: bool = False, verbose: bool = False) -> int:
+        skip_ingest: bool = False, verbose: bool = False, m5: bool = True) -> int:
     """Porta una giornata da giocata a chiusa. Restituisce il codice di uscita."""
     rounds.silenzia(verbose)
     adesso = pd.Timestamp.now(tz="UTC")
@@ -311,6 +314,12 @@ def run(matchday: int | None = None, dry_run: bool = False,
     except Exception as exc:
         log.error("report non rigenerato: %s", exc)
 
+    # Il confronto M5 contro M1 sulla giornata appena chiusa, nel log. Solo
+    # lettura: la dashboard lo ricalcola comunque da sola, questo serve a chi
+    # legge il log del martedi'. Non fatale, come tutto cio' che riguarda M5.
+    if m5:
+        rounds.lancia_m5(["--verifica", "--matchday", str(matchday)])
+
     rimaste = tab[(tab["stato"] == rounds.GIOCATA) & (tab["n_predette"] > 0)
                   & (tab["matchday"] != matchday)]
     fatto = (f"giornata {matchday} "
@@ -362,12 +371,15 @@ def main() -> None:
                     help="riusa i dati gia' scaricati, non tocca la rete")
     ap.add_argument("--verbose", action="store_true",
                     help="mostra tutti i log dei moduli chiamati")
+    ap.add_argument("--senza-m5", action="store_true",
+                    help="non stampare il confronto M5 contro M1 sulla giornata chiusa")
     args = ap.parse_args()
 
     pd.set_option("display.width", 220)
     pd.set_option("display.max_columns", 40)
     sys.exit(run(matchday=args.matchday, dry_run=args.dry_run,
-                 skip_ingest=args.skip_ingest, verbose=args.verbose))
+                 skip_ingest=args.skip_ingest, verbose=args.verbose,
+                 m5=not args.senza_m5))
 
 
 if __name__ == "__main__":

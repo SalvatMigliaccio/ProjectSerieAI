@@ -418,6 +418,15 @@ def ingest_understat_shots(seasons: list[str] | None = None,
 
     Riprendibile: al rilancio salta le coppie (lega, stagione) gia' nel file.
 
+    TRANNE LA STAGIONE IN CORSO, che si riscarica sempre. Saltarla perche'
+    "c'e' gia'" congelava i tiri al giorno del primo download: il 27 ottobre
+    2026 il file si fermava al 19 ottobre, i marcatori della dashboard alla
+    giornata 7, e rilanciare lo stage non cambiava niente senza dirlo. Le sue
+    righe vecchie si tolgono SOLO a download riuscito: un errore di rete deve
+    lasciare i tiri che c'erano, non un buco. La stagione si deduce dalla data
+    (`season_from_date`), non da `config.CURRENT_SEASON`, per la stessa ragione
+    scritta li'.
+
     LA COPPIA, NON LA SOLA STAGIONE. Prima si saltava una stagione se c'era nel
     file per una lega qualsiasi: scaricare la sola Serie A 2021/22 e poi
     lanciare i Big 5 avrebbe lasciato le altre quattro leghe senza quella
@@ -428,8 +437,10 @@ def ingest_understat_shots(seasons: list[str] | None = None,
     leagues = leagues or LEAGUE
     dst = RAW / "understat_shots.parquet"
     pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    in_corso = season_from_date(pd.Timestamp.now())
     fatte = (set(zip(pezzi[0]["league"].astype(str), pezzi[0]["season"].astype(str), strict=True))
              if pezzi else set())
+    fatte = {(lega, stagione) for lega, stagione in fatte if stagione != in_corso}
     if fatte:
         log.info("gia' scaricate: %s", sorted(fatte))
 
@@ -445,6 +456,11 @@ def ingest_understat_shots(seasons: list[str] | None = None,
                         df[c] = df[c].astype("string")
                 df["league"] = lega
                 df["season"] = str(stagione)
+                # Le righe gia' presenti di questa coppia escono adesso, a
+                # download riuscito: e' il caso della stagione in corso.
+                pezzi = [p[~((p["league"].astype(str) == lega)
+                             & (p["season"].astype(str) == str(stagione)))]
+                         for p in pezzi]
                 pezzi.append(df)
                 pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
                 log.info("%s %s: %d tiri", lega, stagione, len(df))

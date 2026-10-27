@@ -1,6 +1,7 @@
 # Spec — informativa privacy, cookie policy, diritti dell'interessato
 
-Stato: **bozza approvata nelle scelte, da implementare.** 27 ottobre 2026.
+Stato: **implementata in parte; T1 e T3 sospesi** il 27 ottobre 2026, vedi
+`docs/adr/0005-privacy-cookie.md`.
 
 Questa spec dice **cosa** deve essere vero quando il lavoro e' finito e come lo
 si verifica. Il testo legale definitivo non e' qui: e' un deliverable (vedi T1).
@@ -156,14 +157,15 @@ costo senza ricavo. Va scritto nell'informativa come si chiede.
 
 | # | compito | dipende da | verifica |
 |---|---|---|---|
-| T1 | testo di informativa e cookie policy, in `frontend/src/legal/` | 7.1-7.3 | rilettura |
+| T1 | testo di informativa e cookie policy, in `frontend/src/legal/` | 7.1-7.3 | rilettura — **sospeso** (ADR 0005) |
 | T2 | `dati.ts` con cookie e periodi; test di coerenza con `settings.py` | — | R6 — **fatto** |
-| T3 | rotte `#/privacy`, `#/cookie`, titoli in `TITOLI`, link nel footer e in `SignUp` | T1 | R3 |
+| T3 | rotte `#/privacy`, `#/cookie`, titoli in `TITOLI`, link nel footer e in `SignUp` | T1 | R3 — **sospeso** (ADR 0005) |
 | T4 | test sui `Set-Cookie` e su `index.html` | — | R6 — **fatto** |
 | T5 | `POST /api/me/account/delete` + test (cascate, evento, cookie cancellati, password errata rifiutata) | — | R4 — **fatto** |
 | T6 | blocco "Elimina account" in `Profile.tsx` | T5 | R4 — **fatto** |
 | T7 | `cli purge` + periodi in `settings.py` + test | — | R5 — **fatto** |
 | T8 | voce in `COMANDI.md` per `purge`, rimando a questa spec in `CLAUDE.md` | T7 | — **fatto** |
 
-Restano T1 e T3, che aspettano recapito e fornitori. **Il `purge` va messo nello scheduler**: finche' non gira, i
+T1 e T3 sono sospesi in attesa dei punti aperti della sezione 7: il perche',
+cosa comporta e quando si riprende stanno in `docs/adr/0005-privacy-cookie.md`. **Il `purge` va messo nello scheduler**: finche' non gira, i
 periodi dell'informativa sono una promessa non mantenuta.

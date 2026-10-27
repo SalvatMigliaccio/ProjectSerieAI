@@ -4,23 +4,12 @@ REM --no-open: nobody is in front of the screen, and a browser window opened by
 REM a scheduled task on a locked session is a window nobody closes.
 REM Idempotent: re-running it skips matches already in the log.
 REM
-REM `call` IS NOT OPTIONAL. Without it cmd hands control to run_task.cmd
-REM and never comes back: the lines below never ran, and M5 was silently
-REM skipped on every scheduled Friday (found 23 October 2026, round 8).
+REM M5 (the GBM's second opinion) IS NO LONGER CHAINED HERE. Since 27 October
+REM 2026 `predict_round` runs it itself, as its last step, in a separate
+REM process and never fatally (`rounds.lancia_m5`). Chaining it here as well
+REM would train it twice. The reason it used to be here still holds — M5 reads
+REM the dataset predict_round has just rebuilt — and is now kept by the
+REM command, so a manual `goalmodel predict-round` gets it too, on any OS.
+REM predict_m5.cmd stays for running M5 alone.
 call "%~dp0run_task.cmd" predict_round --no-open
-set "CODE=%ERRORLEVEL%"
-
-REM  Then the GBM's second opinion on the same round, saved for Monday.
-REM
-REM  CHAINED HERE AND NOT SCHEDULED ON ITS OWN, for two reasons. Order: M5 does
-REM  no ingestion, it reads the dataset predict_round has just rebuilt.
-REM  Coverage: every trigger that fires predict_round — including the ones
-REM  Windows runs late, after the machine wakes — covers M5 too, with no second
-REM  set of times to keep aligned.
-REM
-REM  ITS EXIT CODE IS DISCARDED, ON PURPOSE. M5 is diagnostics: if the GBM
-REM  fails to train, the registry has still been written, and the task must not
-REM  report a failed prediction round for something that never touches it.
-call "%~dp0predict_m5.cmd"
-
-exit /b %CODE%
+exit /b %ERRORLEVEL%
