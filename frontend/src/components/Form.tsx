@@ -105,6 +105,9 @@ export function serverError(error: unknown, fallback: string): string {
   if (text.includes("current password")) {
     return "La password attuale non è corretta.";
   }
+  if (text.includes("password is not correct")) {
+    return "La password non è corretta.";
+  }
   if (text.includes("invalid or expired token")) {
     return "Il collegamento non è più valido: è scaduto o è già stato usato. Richiedine uno nuovo.";
   }

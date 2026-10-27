@@ -18,7 +18,7 @@ import datetime as dt
 import logging
 import uuid
 
-from sqlalchemy import and_, select
+from sqlalchemy import and_, delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -513,6 +513,39 @@ def change_password(db: Session, user: User, current: str, new: str, *,
     count = revoke_all(db, user, keep=current_session)
     record_event(db, "change_password", "ok", user_id=user.id,
                  details={"sessions_revoked": count})
+
+
+def delete_account(db: Session, user: User, password: str, *,
+                   ip: str | None = None, user_agent: str | None = None) -> None:
+    """
+    The right to erasure (GDPR art. 17), from the account page.
+
+    THE PASSWORD, EVEN WITH A VALID SESSION. It is the only action here that
+    cannot be undone, and a session is exactly what an unlocked laptop or a
+    stolen cookie hands over.
+
+    A CORE DELETE, AND THE DATABASE DOES THE REST. Sessions, emailed tokens,
+    roles and picks go by `ON DELETE CASCADE`; the audit rows stay with
+    `user_id` set to NULL and leave on their own retention period. Deleting
+    through the ORM would load and walk those relationships in Python, and a
+    relationship added later without the right cascade would quietly keep
+    rows the privacy policy says are gone.
+
+    The audit row of the deletion carries no address and no id: once the
+    account is gone, nothing here should still name it.
+    """
+    if not pwd.verify(user.password_hash, password):
+        record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
+                     user_agent=user_agent, details={"cause": "wrong_password"})
+        keep_on_refusal(db)
+        raise AccessDenied("the password is not correct", "wrong_password")
+
+    record_event(db, "account_deleted", "ok", ip=ip, user_agent=user_agent)
+    db.flush()
+    db.execute(delete(User).where(User.id == user.id))
+    # Every object still in the session describes rows that no longer exist;
+    # letting the commit flush them would try to write them back.
+    db.expunge_all()
 
 
 def _spendable_token(db: Session, token: str, kind: str) -> EmailToken:

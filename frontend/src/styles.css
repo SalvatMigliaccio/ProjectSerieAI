@@ -2634,6 +2634,16 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   font-family: var(--display); font-size: 1.0625rem;
   margin: 0 0 var(--s5);
 }
+/* L'unica azione dell'account che non si annulla: bordo del colore di errore,
+   cosi' si distingue dai blocchi sopra prima ancora di leggerla. */
+.profilo__blocco--pericolo { border-color: color-mix(in srgb, var(--ko) 45%, var(--line)); }
+.profilo__blocco--pericolo h2 { color: var(--ko); }
+.profilo__blocco--pericolo .profilo__hint { margin: 0 0 var(--s4); }
+.btn--danger-ghost { border-color: color-mix(in srgb, var(--ko) 60%, transparent); color: var(--ko); }
+.btn--danger-ghost:hover:not(:disabled) {
+  border-color: var(--ko); color: var(--ko);
+  background: color-mix(in srgb, var(--ko) 10%, transparent);
+}
 .profilo__blocco h2:focus { outline: none; }
 .profilo__blocco h2:focus-visible { outline: 2px solid var(--mint); outline-offset: 4px; border-radius: 4px; }
 .profilo__conta {

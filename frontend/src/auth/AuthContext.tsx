@@ -26,6 +26,7 @@ import {
 import * as authApi from "../api/auth";
 import type { Identity } from "../api/auth";
 import { UNAUTHENTICATED_EVENT, refreshSession } from "../api/client";
+import { me as meApi } from "../api/me";
 
 type Phase = "checking" | "authenticated" | "anonymous";
 
@@ -37,6 +38,9 @@ interface AuthValue {
   user: Identity | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Erase the account (GDPR art. 17). Throws on a wrong password, and then
+   *  the user stays signed in: only a success clears the local state. */
+  deleteAccount: (password: string) => Promise<void>;
   /** Adopt an identity the server already returned, e.g. after verifying. */
   adopt: (user: Identity) => void;
   /** Re-ask the server. Used when a request comes back 401. */
@@ -131,6 +135,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Unlike signOut, NOT optimistic: a refused deletion (wrong password, network
+  // down) leaves the account in place, and an interface that showed the user
+  // signed out would make them believe it was gone.
+  const deleteAccount = useCallback(async (password: string) => {
+    await meApi.deleteAccount(password);
+    setUser(null);
+    setPhase("anonymous");
+  }, []);
+
   const adopt = useCallback((identity: Identity) => {
     setUser(identity);
     setPhase("authenticated");
@@ -142,8 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ phase, user, signIn, signOut, adopt, refresh, can }),
-    [phase, user, signIn, signOut, adopt, refresh, can],
+    () => ({ phase, user, signIn, signOut, deleteAccount, adopt, refresh, can }),
+    [phase, user, signIn, signOut, deleteAccount, adopt, refresh, can],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

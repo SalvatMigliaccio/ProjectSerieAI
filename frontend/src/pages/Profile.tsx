@@ -19,7 +19,7 @@
  */
 
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 
 import * as authApi from "../api/auth";
 import type { ActivityRow, SessionRow } from "../api/auth";
@@ -35,6 +35,7 @@ import {
   useValidation,
 } from "../components/Form";
 import { FavoritePicker } from "../components/FavoritePicker";
+import { CONSERVAZIONE_GIORNI } from "../legal/dati";
 import { Colophon, Masthead } from "../components/Layout";
 import { ago, localDateTime } from "../lib/format";
 
@@ -354,6 +355,104 @@ function CambioPassword() {
   );
 }
 
+/** "12 mesi", "30 giorni": un periodo di conservazione detto come lo si dice. */
+function periodo(giorni: number): string {
+  return giorni % 365 === 0 ? `${giorni / 365 * 12} mesi` : `${giorni} giorni`;
+}
+
+/**
+ * Il diritto alla cancellazione (GDPR art. 17), da qui e non per email.
+ *
+ * DUE PASSI, E IL SECONDO CHIEDE LA PASSWORD. Il primo pulsante apre soltanto
+ * la spiegazione: un clic distratto non deve arrivare a niente. La password e'
+ * la stessa conferma che chiede il server, che la verifica comunque.
+ *
+ * DICE COSA RESTA, oltre a cosa sparisce. I log di sicurezza sopravvivono,
+ * senza il collegamento all'account, per il periodo dichiarato
+ * nell'informativa: tacerlo sarebbe promettere una cancellazione piu' completa
+ * di quella che avviene. Il periodo viene da `legal/dati.ts`, lo stesso file
+ * che l'informativa legge e che un test lega al backend.
+ *
+ * In fondo alla sezione Sicurezza e separato dal resto: e' l'unica azione
+ * dell'account che non si annulla, e non deve stare dove si clicca per altro.
+ */
+function EliminaAccount() {
+  const { deleteAccount } = useAuth();
+  const navigate = useNavigate();
+  const [aperto, setAperto] = useState(false);
+  const [password, setPassword] = useState("");
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  const v = useValidation({ password: requiredError(password, "la password") }, { password });
+
+  function annulla() {
+    setAperto(false);
+    setPassword("");
+    setErrore(null);
+    v.reset();
+  }
+
+  async function invia(event: FormEvent) {
+    event.preventDefault();
+    setErrore(null);
+    if (!v.check()) return;
+    setInCorso(true);
+    try {
+      await deleteAccount(password);
+      navigate("/account", { replace: true, state: { eliminato: true } });
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a eliminare l'account. Riprova."));
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <section className="profilo__blocco profilo__blocco--pericolo" aria-labelledby="elimina-titolo">
+      <h2 id="elimina-titolo">Elimina l'account</h2>
+      <p className="profilo__hint">
+        Cancella l'account e tutto ciò che è tuo: email, password, squadra preferita,
+        pronostici e sessioni. Non si può annullare.
+      </p>
+
+      {!aperto ? (
+        <button className="btn btn--ghost btn--danger-ghost" type="button" onClick={() => setAperto(true)}>
+          Elimina l'account…
+        </button>
+      ) : (
+        <form className="profilo__form" onSubmit={invia} noValidate>
+          <p className="profilo__hint">
+            Restano soltanto i registri di sicurezza degli accessi, senza alcun
+            collegamento a te, per al massimo {periodo(CONSERVAZIONE_GIORNI.registroAccessi)}.
+            Lo stesso indirizzo potrà registrarsi di nuovo.
+          </p>
+          <PasswordField
+            id="pw-elimina"
+            label="Password, per confermare"
+            value={password}
+            onChange={setPassword}
+            onBlur={v.blur("password")}
+            error={v.error("password")}
+            inputRef={v.ref("password")}
+            autoFocus
+          />
+          <FormAlert>{errore}</FormAlert>
+          <div className="profilo__azioni">
+            <button className="btn btn--danger" type="submit" disabled={inCorso}
+              aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              {inCorso ? "Elimino…" : "Elimina definitivamente"}
+            </button>
+            <button className="btn btn--ghost" type="button" onClick={annulla} disabled={inCorso}>
+              Annulla
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function SezioneSicurezza() {
   return (
     <>
@@ -367,6 +466,7 @@ function SezioneSicurezza() {
           automatico.
         </p>
       </aside>
+      <EliminaAccount />
     </>
   );
 }
@@ -685,10 +785,37 @@ export function Profile() {
   const { phase, user, signOut } = useAuth();
   const navigate = useNavigate();
   const { sezione: param } = useParams();
+  const location = useLocation();
   const [uscendo, setUscendo] = useState(false);
 
   // Nessun redirect automatico: chi arriva senza sessione vede perche', non
   // un rimbalzo che sembra un errore.
+  // Appena cancellato l'account la sessione non c'e' piu', e senza questo si
+  // vedrebbe "per vedere questa pagina serve entrare": sembrerebbe un errore
+  // proprio nel momento in cui serve sapere che e' andata.
+  const eliminato = (location.state as { eliminato?: boolean } | null)?.eliminato === true;
+  if (eliminato && phase !== "authenticated") {
+    return (
+      <>
+        <Masthead current="hero" />
+        <main id="contenuto" className="account" tabIndex={-1}>
+          <section className="account-card" role="status">
+            <div className="account-card__mark" aria-hidden="true">{ICONA_PROFILO}</div>
+            <h1>Account eliminato</h1>
+            <p className="lead">
+              Il tuo account e i tuoi dati sono stati cancellati. Grazie di aver
+              usato MatchPoint.
+            </p>
+            <Link className="btn btn--block" to="/">
+              Torna alla home
+            </Link>
+          </section>
+        </main>
+        <Colophon modelVersion={null} />
+      </>
+    );
+  }
+
   if (phase !== "authenticated" || !user) {
     return (
       <>

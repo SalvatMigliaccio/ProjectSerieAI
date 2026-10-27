@@ -1015,6 +1015,27 @@ Exits non-zero when the configuration is unfit for production, so it works as a
 deployment gate. It currently refuses on the development defaults, which is
 correct — `COOKIE_SECURE=0` would send the session cookie over plain http.
 
+### Retention purge — schedule it
+
+```bash
+python -m backend.auth.cli purge --dry-run   # count, delete nothing
+python -m backend.auth.cli purge             # delete what is past its period
+```
+
+Applies the periods the privacy policy publishes: sign-in history (`auth_events`)
+and dead sessions after 365 days, expired email tokens and never-confirmed
+accounts after 30. Live sessions and active accounts are never touched. Exits 0
+even when there is nothing to delete, so it can run daily from the same
+scheduler as the pipeline, against the production `AI_NAPLES_DATABASE_URL`.
+Nothing runs it automatically: if nobody schedules it, the policy is false.
+
+The periods are `AI_NAPLES_*_RETENTION_DAYS` / `AI_NAPLES_PENDING_ACCOUNT_DAYS`
+in `backend/auth/settings.py`, and `tests/test_privacy.py` fails if their
+DEFAULTS stop matching `frontend/src/legal/dati.ts`, which is what the privacy
+page shows. **Do not override them in the environment**: the test cannot see a
+production variable, and the page would keep promising the default.
+Spec: `docs/SPEC_PRIVACY_COOKIE.md`.
+
 ### Environment variables
 
 Every one is listed with a comment in `.env.example`. The ones that must change

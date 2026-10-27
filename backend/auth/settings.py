@@ -74,6 +74,26 @@ class Settings(BaseSettings):
     verify_valid_hours: int = Field(default=48, ge=1)
     reset_valid_minutes: int = Field(default=30, ge=5)
 
+    # --- retention (GDPR art. 5.1.e) ----------------------------------------
+    # PUBLISHED, NOT JUST CONFIGURED. The privacy page states these periods to
+    # every user (`frontend/src/legal/dati.ts`), and `tests/test_privacy.py`
+    # fails if the two disagree. Changing a default here means changing what
+    # the policy promises: update both, and the date on the page.
+    # `python -m backend.auth.cli purge` applies them; nothing does it alone.
+    #
+    # 12 months of sign-in history: long enough to reconstruct an attack that
+    # went unnoticed for a season, short enough to defend as legitimate
+    # interest for a service this size.
+    audit_retention_days: int = Field(default=365, ge=30)
+    # Counted from when a session stopped being usable (revoked or expired),
+    # never from when it opened: a live session is never purged.
+    session_retention_days: int = Field(default=365, ge=1)
+    # Counted from expiry. A spent or expired token proves nothing after that.
+    token_retention_days: int = Field(default=30, ge=1)
+    # An address that never confirmed is not yet an account: after this long
+    # it is deleted, and it can sign up again.
+    pending_account_days: int = Field(default=30, ge=3)
+
     # --- mail ---------------------------------------------------------------
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 1025

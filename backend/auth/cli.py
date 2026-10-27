@@ -15,6 +15,7 @@ calls can escalate.
     python -m backend.auth.cli list-users
     python -m backend.auth.cli grant --email x@example.com --role admin
     python -m backend.auth.cli check-config
+    python -m backend.auth.cli purge [--dry-run]
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ import sys
 
 from sqlalchemy import select
 
-from . import service
+from . import retention, service
 from .db import session_scope
 from .models import Role, User, now
 from .password import WeakPassword
@@ -152,6 +153,25 @@ def check_config(args: argparse.Namespace) -> int:
     return 1
 
 
+def purge(args: argparse.Namespace) -> int:
+    """
+    Apply the retention periods the privacy policy publishes.
+
+    Meant for the scheduler, so it prints one line per table and exits 0 even
+    when there was nothing to delete: an empty run is the normal case, not an
+    error. The run itself is audited, with the counts and nothing else.
+    """
+    cfg = settings()
+    with session_scope() as db:
+        counts = retention.purge(db, cfg=cfg, dry_run=args.dry_run)
+        if not args.dry_run:
+            service.record_event(db, "retention_purge", "ok", details=counts)
+    verb = "would delete" if args.dry_run else "deleted"
+    for name, n in counts.items():
+        print(f"{name:<14} {verb} {n}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m backend.auth.cli",
@@ -181,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("check-config", help="refuse an unsafe production setup")
     p.set_defaults(func=check_config)
+
+    p = sub.add_parser("purge", help="delete what is past its retention period")
+    p.add_argument("--dry-run", action="store_true",
+                   help="count what would go, delete nothing")
+    p.set_defaults(func=purge)
 
     args = ap.parse_args(argv)
     return args.func(args)

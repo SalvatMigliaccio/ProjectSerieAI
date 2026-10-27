@@ -33,14 +33,23 @@ import logging
 import uuid
 from functools import lru_cache
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from .deps import CurrentUser, Db, require_permission
+from . import service
+from .deps import (
+    Cfg,
+    CurrentSession,
+    CurrentUser,
+    Db,
+    clear_session_cookie,
+    client_ip,
+    require_permission,
+)
 from .models import UserPrediction, now
-from .ratelimit import prediction_limiter
+from .ratelimit import password_change_limiter, prediction_limiter
 
 log = logging.getLogger("auth.me")
 
@@ -182,6 +191,46 @@ def _limit(request: Request, user_id: uuid.UUID) -> None:
             "too many requests: wait a few minutes before trying again",
             headers={"Retry-After": str(prediction_limiter.retry_after(key))},
         )
+
+
+# --- the account itself --------------------------------------------------------
+
+class DeletePayload(BaseModel):
+    password: str = Field(min_length=1, max_length=1024)
+
+
+@router.post("/account/delete", status_code=status.HTTP_204_NO_CONTENT)
+def delete_account(payload: DeletePayload, row: CurrentSession, request: Request,
+                   db: Db, cfg: Cfg) -> Response:
+    """
+    Erase the account and everything that belongs to it (docs/SPEC_PRIVACY_COOKIE.md, R4).
+
+    POST AND NOT DELETE because CORS admits GET and POST only, and widening it
+    for one route would widen it for all of them.
+
+    `CurrentSession`, not `CurrentUser` alone: the session row is checked in
+    the database, so a token minted before a revocation cannot erase anyone.
+    The limiter is the password-change one, keyed by account, because the
+    risk is the same — someone holding a session and guessing the password.
+
+    The track record is not touched: it is the model's, not the user's.
+    """
+    key = str(row.user_id)
+    if not password_change_limiter.allow(key):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "too many requests: wait a few minutes before trying again",
+            headers={"Retry-After": str(password_change_limiter.retry_after(key))},
+        )
+    try:
+        service.delete_account(db, row.user, payload.password, ip=client_ip(request),
+                               user_agent=request.headers.get("user-agent"))
+    except service.AccessDenied as exc:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
+    # The cookies go on the response that is returned (see `sign_out`).
+    out = Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_session_cookie(out, cfg)
+    return out
 
 
 # --- favourite team -----------------------------------------------------------

@@ -113,4 +113,8 @@ export const me = {
     post<{ deleted: number }>(`/api/me/predictions/${encodeURIComponent(id)}/delete`, undefined, {
       renew: true,
     }),
+  /** Cancella l'account e tutto cio' che e' suo. Irreversibile: serve la password.
+   *  403 se la password e' sbagliata; il server cancella anche i due cookie. */
+  deleteAccount: (password: string) =>
+    post<void>("/api/me/account/delete", { password }, { renew: true }),
 };

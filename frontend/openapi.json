@@ -1352,6 +1352,41 @@
         }
       }
     },
+    "/api/me/account/delete": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Delete Account",
+        "description": "Erase the account and everything that belongs to it (docs/SPEC_PRIVACY_COOKIE.md, R4).\n\nPOST AND NOT DELETE because CORS admits GET and POST only, and widening it\nfor one route would widen it for all of them.\n\n`CurrentSession`, not `CurrentUser` alone: the session row is checked in\nthe database, so a token minted before a revocation cannot erase anyone.\nThe limiter is the password-change one, keyed by account, because the\nrisk is the same — someone holding a session and guessing the password.\n\nThe track record is not touched: it is the model's, not the user's.",
+        "operationId": "delete_account_api_me_account_delete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeletePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/preferences": {
       "get": {
         "tags": [
@@ -1840,6 +1875,21 @@
           "password"
         ],
         "title": "Credentials"
+      },
+      "DeletePayload": {
+        "properties": {
+          "password": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "title": "DeletePayload"
       },
       "EmailOnly": {
         "properties": {
