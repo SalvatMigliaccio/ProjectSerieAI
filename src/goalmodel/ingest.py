@@ -39,11 +39,14 @@ Se non serve subito, si salta: il modello T-24h parte senza.
 """
 
 import argparse
+import json
 import logging
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -381,6 +384,61 @@ def _check_fixture_teams(df: pd.DataFrame) -> None:
 # Stage 2 - xG per squadra/partita (Understat)
 # ---------------------------------------------------------------------------
 
+def scarta_cache_non_json(cartella: Path) -> list[Path]:
+    """
+    Toglie dalla cache di soccerdata i file `.json` che JSON non sono.
+
+    Perche' serve: soccerdata scrive su disco la risposta COSI' COM'E' e solo
+    dopo prova a leggerla. Quando Understat serve la sua pagina d'errore HTML
+    (successo il 6 novembre 2026, con status 200), quella pagina resta nella
+    cache con il nome del JSON. Per la stagione in corso si riscarica comunque;
+    per una stagione conclusa soccerdata si fida della cache e non riscarica
+    piu': lo stage fallirebbe a ogni lancio, per sempre, con un sito ormai
+    tornato su.
+
+    Il criterio e' strutturale: vuoto, o primo carattere non spazio `<`. Un
+    JSON valido comincia con `{` o `[`, mai con `<`.
+    """
+    tolti = []
+    for f in sorted(cartella.glob("*.json")):
+        with f.open("rb") as fh:
+            testa = fh.read(64).lstrip()
+        if not testa or testa.startswith(b"<"):
+            f.unlink()
+            tolti.append(f)
+    return tolti
+
+
+@contextmanager
+def risposta_understat(us: object) -> Iterator[None]:
+    """
+    Traduce una risposta Understat illeggibile in un errore di RETE.
+
+    Un `JSONDecodeError` che esce da una lettura di soccerdata su Understat non
+    puo' essere un bug nostro: il nostro codice non ha ancora toccato niente, e'
+    il sito che ha mandato altro al posto del JSON (pagina d'errore, captcha,
+    risposta vuota). Lasciarlo passare com'e' faceva credere a
+    `rounds.passo` che fosse un errore del programma, e `predict_round` si
+    fermava invece di proseguire con i dati presenti — il 6 novembre 2026, a
+    due ore dal primo fischio della giornata 11.
+
+    Stretto di proposito: cattura SOLO `JSONDecodeError`, e solo attorno alle
+    chiamate a soccerdata. Un errore nel parsing nostro, dopo, resta un bug.
+    """
+    try:
+        yield
+    except json.JSONDecodeError as exc:
+        cartella = Path(us.data_dir)  # type: ignore[attr-defined]
+        tolti = scarta_cache_non_json(cartella)
+        nomi = ", ".join(f.name for f in tolti[:5]) + (", ..." if len(tolti) > 5 else "")
+        raise ConnectionError(
+            f"Understat ha risposto con qualcosa che non e' JSON ({exc}): di "
+            f"solito e' la sua pagina d'errore. Tolti dalla cache "
+            f"{len(tolti)} file non validi [{nomi}]. Riprova piu' tardi con "
+            f"'goalmodel ingest --stage understat'."
+        ) from exc
+
+
 def ingest_understat() -> pd.DataFrame:
     """
     xG e xGA per squadra e per partita. Questa e' la fonte piu' importante
@@ -388,12 +446,16 @@ def ingest_understat() -> pd.DataFrame:
     predice i risultati futuri meglio dei gol passati.
 
     Understat espone JSON, quindi e' veloce (nessun rate limit aggressivo).
+    Una risposta che JSON non e' diventa un `ConnectionError`: vedi
+    `risposta_understat`.
     """
     us = sd.Understat(leagues=LEAGUE, seasons=SEASONS)
-    schedule = us.read_schedule()
+    with risposta_understat(us):
+        schedule = us.read_schedule()
     save(schedule, "understat_schedule")
 
-    team_stats = us.read_team_match_stats()
+    with risposta_understat(us):
+        team_stats = us.read_team_match_stats()
     save(team_stats, "understat_team_match")
     return team_stats
 
@@ -450,7 +512,11 @@ def ingest_understat_shots(seasons: list[str] | None = None,
                 continue
             try:
                 us = sd.Understat(leagues=[lega], seasons=[stagione])
-                df = us.read_shot_events().reset_index()
+                # Qui serve soprattutto a ripulire la cache: i match_*.json
+                # sono migliaia, e uno solo con dentro HTML bloccherebbe la
+                # stagione a ogni rilancio.
+                with risposta_understat(us):
+                    df = us.read_shot_events().reset_index()
                 for c in df.columns:
                     if df[c].dtype == object:
                         df[c] = df[c].astype("string")
