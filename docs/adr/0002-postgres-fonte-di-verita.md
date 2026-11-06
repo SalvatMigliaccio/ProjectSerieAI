@@ -1,6 +1,7 @@
 # ADR 0002 — Postgres e' la fonte di verita' dei dati, non solo degli account
 
-- **Stato**: accettata come **direzione**, non ancora schedulata
+- **Stato**: accettata, **in attuazione**: schema e meccanismo in ADR 0006
+  (6 novembre 2026), produzione ancora su parquet
 - **Data**: 22 settembre 2026
 - **Contesto**: fase 2 del piano (infrastruttura enterprise)
 - **Decide**: dove stanno i dati del modello quando il progetto diventa un
@@ -105,7 +106,7 @@ nuova. Verificato che scatti.
 
 ## Cosa non e' stato deciso qui
 
-- Lo schema delle tabelle.
+- Lo schema delle tabelle. **Deciso in ADR 0006.**
 - Se il percorso di addestramento avra' bisogno di una cache derivata. Se un
   giorno servira', sara' una **ottimizzazione misurata e buttabile**, non una
   seconda fonte di verita'. La fonte resta una.

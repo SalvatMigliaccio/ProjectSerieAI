@@ -1,7 +1,7 @@
 """
 L'accesso ai dati su disco, in un posto solo.
 
-PERCHE' ESISTE. `pd.read_parquet(config.INTERIM / "matches_master.parquet")`
+PERCHE' ESISTE. La lettura di `interim/matches_master.parquet`
 compariva in undici punti fra moduli, test e script, e ognuno ripeteva il
 percorso, la gestione dell'assenza e la conversione delle date. Cambiare
 formato — o anche solo migliorare il messaggio d'errore — voleva dire
@@ -27,14 +27,14 @@ from dataclasses import replace
 
 import pandas as pd
 
-from . import config, schema
+from . import schema, storage
 
 log = logging.getLogger("data")
 
-MASTER = config.INTERIM / "matches_master.parquet"
+MASTER = storage.percorso("interim", "matches_master")
 
 
-def _leggi(path, descrizione: str, rimedio: str,
+def _leggi(livello: str, descrizione: str, rimedio: str,
            columns: list[str] | None = None) -> pd.DataFrame:
     """
     Un parquet, con un messaggio che dice COSA LANCIARE quando manca.
@@ -44,9 +44,13 @@ def _leggi(path, descrizione: str, rimedio: str,
     repository, e `data/` non e' versionata — quindi in un clone pulito questo
     e' lo stato NORMALE, non un guasto.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"{descrizione} assente ({path}). Lancia: {rimedio}")
-    df = pd.read_parquet(path, columns=columns)
+    try:
+        # `storage` sa se il dato sta su file o in Postgres (ADR 0006); qui
+        # importa solo che arrivi, e che rispetti il contratto.
+        df = storage.leggi(livello, descrizione, columns)
+    except storage.DatoAssente as exc:
+        raise FileNotFoundError(
+            f"{descrizione} assente ({exc}). Lancia: {rimedio}") from exc
 
     # IL CONTRATTO SI VERIFICA QUI, non dove il dato serve. E' l'unico punto
     # che tutti attraversano, ed e' il piu' vicino al disco: un tipo sbagliato
@@ -76,7 +80,7 @@ def load_raw(nome: str, rimedio: str | None = None) -> pd.DataFrame:
     `rimedio` serve a chi sa NOMINARE lo stage: il messaggio predefinito dice
     `--stage <stage>`, che e' onesto ma inutile a chi ha appena clonato.
     """
-    df = _leggi(config.RAW / f"{nome}.parquet", nome,
+    df = _leggi("raw", nome,
                 rimedio or f"goalmodel ingest --stage <stage>  (per '{nome}')")
     log.info("caricato %-24s %6d righe, %3d colonne", nome, len(df), df.shape[1])
     return df
@@ -97,19 +101,19 @@ def load_raw_opzionale(nome: str) -> pd.DataFrame | None:
     contiene niente" sono stati diversi, e confonderli e' il modo tipico di
     far sparire un problema di ingestion in un grafico vuoto.
     """
-    if not (config.RAW / f"{nome}.parquet").exists():
+    if not storage.esiste("raw", nome):
         return None
     return load_raw(nome)
 
 
 def processed_esiste(nome: str) -> bool:
     """Per chi deve DECIDERE se un blocco c'e', non leggerlo."""
-    return (config.PROCESSED / f"{nome}.parquet").exists()
+    return storage.esiste("processed", nome)
 
 
 def load_processed(nome: str, rimedio: str | None = None) -> pd.DataFrame:
     """Un parquet di `data/processed`: feature o previsioni gia' calcolate."""
-    return _leggi(config.PROCESSED / f"{nome}.parquet", nome,
+    return _leggi("processed", nome,
                   rimedio or f"il comando che produce '{nome}'")
 
 
@@ -129,7 +133,7 @@ def nomi_processed(pattern: str) -> list[str]:
     formato su disco, quindi sta qui e non nel chiamante: quando i dati
     staranno in Postgres questa diventa una query, e chi chiama non cambia.
     """
-    return sorted(p.stem for p in config.PROCESSED.glob(f"{pattern}.parquet"))
+    return storage.nomi("processed", pattern)
 
 
 def load_whoscored_schedules() -> pd.DataFrame | None:
@@ -145,9 +149,9 @@ def load_whoscored_schedules() -> pd.DataFrame | None:
     `None` se la cartella non c'e' o e' vuota: e' lo stato normale di un clone
     pulito, non un guasto. Chi chiama decide cosa farne.
     """
-    cartella = config.RAW / "whoscored"
-    pezzi = [pd.read_parquet(p)[["season", "game_id", "home_team", "away_team"]]
-             for p in sorted(cartella.glob("schedule_*.parquet"))]
+    colonne = ["season", "game_id", "home_team", "away_team"]
+    pezzi = [storage.leggi("raw", nome, colonne)
+             for nome in storage.nomi("raw", "whoscored/schedule_*")]
     if not pezzi:
         return None
     return pd.concat(pezzi, ignore_index=True).drop_duplicates("game_id")
@@ -163,7 +167,7 @@ def load_master(columns: list[str] | None = None,
     confrontava stringhe con Timestamp — un confronto che in pandas non
     solleva, restituisce solo il risultato sbagliato.
     """
-    df = _leggi(MASTER, "matches_master", "goalmodel normalize --build", columns)
+    df = _leggi("interim", "matches_master", "goalmodel normalize --build", columns)
     if date and "date" in df.columns:
         df["date"] = pd.to_datetime(df["date"])
     return df
@@ -171,4 +175,4 @@ def load_master(columns: list[str] | None = None,
 
 def master_esiste() -> bool:
     """Per chi deve DECIDERE se il dataset c'e', non leggerlo."""
-    return MASTER.exists()
+    return storage.esiste("interim", "matches_master")

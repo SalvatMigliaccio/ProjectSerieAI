@@ -11,6 +11,7 @@ Contesto operativo per Claude Code.
 | `docs/ROADMAP.md` | le fasi del progetto, chi le fa, quando si chiudono |
 | `docs/adr/` | decisioni di architettura, una per file |
 | `docs/SPEC_PRIVACY_COOKIE.md` | informativa, cookie, cancellazione e conservazione: cosa promettiamo e cosa lo verifica |
+| `docs/adr/0006-schema-postgres-dati.md` | lo schema dei dati in Postgres, le tre modalita' di `storage` e il piano per spegnere il parquet |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
 | **`docs/COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
 
@@ -1769,12 +1770,21 @@ Cosa ne segue, in pratica:
 - Ogni modulo eseguibile con un `argparse`, raggiungibile sia come
   `python -m goalmodel.<percorso>` sia come sottocomando di `goalmodel`
   (registrarlo in `src/goalmodel/cli.py`, una riga)
-- Parquet per tutti i dati intermedi — **ma ha una scadenza nota**: in fase 2
-  la fonte di verita' diventa Postgres (`docs/adr/0002-postgres-fonte-di-verita.md`).
-  Il `track_record/` no, e resta su file: la sua integrita' e' una proprieta'
-  di processo, non di schema. **La precondizione e' chiudere il confine di
-  lettura**: oggi 11 moduli di produzione leggono parquet saltando `data.py`, e con quelli
-  in giro la migrazione si dimentica un file senza dare errore
+- **I dati si scrivono con `storage.scrivi(livello, nome, df)` e si leggono da
+  `data.py`, mai con `to_parquet`/`read_parquet`** (6 novembre 2026, ADR 0006).
+  `storage` decide se il dato sta su file o in Postgres secondo
+  `GOALMODEL_STORAGE` (`parquet` | `doppio` | `postgres`); oggi la produzione
+  e' ancora su `parquet`. Il viaggio di andata e ritorno in Postgres e'
+  verificato bit a bit su tutti i 35 dati (`goalmodel db --verifica`), e una
+  pipeline costruita tutta su Postgres da' gli stessi bit di quella su file.
+  `tests/test_confine_lettura.py` sorveglia i due confini. Il `track_record/`
+  NON passa di li' e resta su file: la sua integrita' e' una proprieta' di
+  processo, non di schema (ADR 0002)
+- **Un test che scrive dati sposta `storage.CARTELLE`**, non `ingest.RAW` o
+  `config.RAW`: l'ingestion non guarda piu' quelle variabili, e quattro test
+  che le dirottavano avrebbero scritto nel `data/raw` vero. `conftest.py` ora
+  fa fallire qualunque scrittura nei dati veri e manda Postgres sugli schemi
+  `test_*`
 - Niente notebook nel codice di produzione: solo esplorazione in `notebooks/`
 - Log via `logging`, non `print`
 

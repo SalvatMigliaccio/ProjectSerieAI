@@ -56,8 +56,10 @@ def proteggi_produzione() -> None:
 
     Idempotente. Si chiama in testa a ogni script sperimentale.
 
-    COSA COPRE, ESATTAMENTE (audit B6). Due metodi di pandas:
-    `DataFrame.to_parquet` e `DataFrame.to_csv`. Nient'altro.
+    COSA COPRE, ESATTAMENTE (audit B6). Due metodi di pandas,
+    `DataFrame.to_parquet` e `DataFrame.to_csv`, e `storage.scrivi` (che con
+    `GOALMODEL_STORAGE=postgres` scrive nel database). Nient'altro: in
+    particolare non una connessione a Postgres aperta a mano.
 
     NON copre: `to_feather`, `to_pickle`, `to_hdf`, `to_excel`, `np.save`,
     `Path.write_text`, `Path.write_bytes`, `open(..., "w")`,
@@ -74,6 +76,14 @@ def proteggi_produzione() -> None:
     smette di far pensare. Leggere questa lista deve costare quanto fidarsi.
     """
     global _protetto
+    # Con i dati in Postgres (ADR 0006) una scrittura di produzione non passa
+    # piu' per `to_parquet`: `storage.scrivi` va chiuso a parte, e tutto. Un
+    # esperimento non ha niente da scrivere attraverso `storage`, che serve
+    # solo i dati di produzione; il suo posto e' `experiments.percorso()`.
+    from .. import storage
+
+    storage.vieta_scritture("un esperimento non scrive i dati di produzione: "
+                            "usa experiments.percorso()")
     if _protetto:
         return
 

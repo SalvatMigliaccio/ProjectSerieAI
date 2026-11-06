@@ -129,6 +129,45 @@ def default_sources() -> Sources:
     return Sources.at(config.TRACK_RECORD, config.DATA)
 
 
+# ---------------------------------------------------------------------------
+# The data sources: files, or Postgres (ADR 0006)
+# ---------------------------------------------------------------------------
+
+def _in_db(path: Path) -> tuple[str, str] | None:
+    """
+    `(level, name)` when this path is a dataset that lives in Postgres.
+
+    Only in `GOALMODEL_STORAGE=postgres`, and only for paths inside `data/`:
+    the tests point `Sources` at their own fixture files, and those stay files
+    whatever the mode. `goalmodel.storage` is imported lazily like every other
+    `goalmodel` module here.
+    """
+    from goalmodel import storage
+
+    if storage.modalita() != "postgres":
+        return None
+    return storage.da_percorso(path)
+
+
+def _data_exists(path: Path) -> bool:
+    key = _in_db(path)
+    if key is None:
+        return path.exists()
+    from goalmodel import storage
+
+    return storage.esiste(*key)
+
+
+def _read_data(path: Path, columns: list[str] | None = None) -> pd.DataFrame:
+    """THE read of a dataset. Every `read_parquet` of this API is this one."""
+    key = _in_db(path)
+    if key is None:
+        return pd.read_parquet(path, columns=columns)
+    from goalmodel import storage
+
+    return storage.leggi(*key, columns)
+
+
 def read_master(src: Sources | None = None) -> pd.DataFrame:
     """
     `matches_master`, checked against its schema before anyone uses it.
@@ -145,12 +184,27 @@ def read_master(src: Sources | None = None) -> pd.DataFrame:
     changes, a column that vanishes, a key that duplicates.
     """
     src = src or default_sources()
-    if not src.master.exists():
+    if not _data_exists(src.master):
         raise FileNotFoundError(
             f"{src.master.name} is missing: run 'goalmodel normalize --build'")
-    df = pd.read_parquet(src.master)
+    df = _read_data(src.master)
     schema.MATCHES_MASTER.verifica(df, "goalmodel normalize --build")
     return df
+
+
+def read_shots(columns: list[str], src: Sources | None = None) -> pd.DataFrame | None:
+    """
+    Understat's shots, for the scorers on the season screen (`players.py`).
+
+    Here and not in `players.py` for the reason `read_master` gives: this is the
+    one module of the API that touches the disk, so the Postgres migration
+    (ADR 0002) changes one function per source instead of hunting for readers.
+    `None` when the shots stage never ran: a state, not a fault.
+    """
+    src = src or default_sources()
+    if not _data_exists(src.understat_shots):
+        return None
+    return _read_data(src.understat_shots, columns)
 
 
 # ---------------------------------------------------------------------------
@@ -234,6 +288,10 @@ def season_in(label: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _stat(path: Path) -> tuple:
+    if _in_db(path) is not None:
+        from goalmodel import storage
+
+        return storage.impronta(*_in_db(path))
     try:
         st = path.stat()
         return (str(path), st.st_mtime_ns, st.st_size)
@@ -351,7 +409,7 @@ def _read_calendar(src: Sources) -> tuple:
     If the calendar is missing the API still works — `kickoff_utc` comes back
     null, which is the honest answer, not an error.
     """
-    if not src.schedule.exists():
+    if not _data_exists(src.schedule):
         log.warning("no schedule at %s: kickoff_utc will be null", src.schedule)
         return ()
     try:
@@ -381,9 +439,9 @@ def _results_frame(fingerprint: tuple, src: Sources) -> pd.DataFrame:
 
     found = risultati.catena(
         read_master(src),
-        understat=(pd.read_parquet(src.understat_schedule)
-                   if src.understat_schedule.exists() else None),
-        fbref=pd.read_parquet(src.schedule) if src.schedule.exists() else None,
+        understat=(_read_data(src.understat_schedule)
+                   if _data_exists(src.understat_schedule) else None),
+        fbref=_read_data(src.schedule) if _data_exists(src.schedule) else None,
     )
     found = found[found["league"].isin(config.LEAGUES_PRODUZIONE)].copy()
     found["season"] = found["season"].astype(str)
@@ -934,12 +992,12 @@ def odds_snapshot(src: Sources | None = None) -> dict:
     `pd.notna` guard and an explicit `empty` flag.
     """
     src = src or default_sources()
-    out = {"exists": src.odds_snapshot.exists(), "empty": None,
+    out = {"exists": _data_exists(src.odds_snapshot), "empty": None,
            "rows": None, "downloaded_at": None, "age_hours": None}
     if not out["exists"]:
         return out
     try:
-        df = pd.read_parquet(src.odds_snapshot)
+        df = _read_data(src.odds_snapshot)
     except Exception as exc:
         log.warning("unreadable odds snapshot: %s", exc)
         return out

@@ -21,7 +21,7 @@ from typing import ClassVar
 import pandas as pd
 import pytest
 
-from goalmodel import config, ingest
+from goalmodel import config, ingest, storage
 from goalmodel.prediction import close_round, predict_round, rounds
 
 PREDICTION = Path(predict_round.__file__).resolve().parent
@@ -54,7 +54,9 @@ class _UnderstatFinto:
 def understat(monkeypatch, tmp_path):
     _UnderstatFinto.chieste = []
     _UnderstatFinto.rotte = set()
-    monkeypatch.setattr(ingest, "RAW", tmp_path)
+    # La cartella si sposta in `storage`, che e' dove l'ingestion scrive. Spostare
+    # `ingest.RAW` non basta piu' e scriverebbe nel `data/raw` vero.
+    monkeypatch.setitem(storage.CARTELLE, "raw", tmp_path)
     monkeypatch.setattr(ingest.sd, "Understat", _UnderstatFinto)
     in_corso = ingest.season_from_date(pd.Timestamp.now())
     pd.concat([_tiri("ITA-Serie A", "1920", 3, "vecchio"),

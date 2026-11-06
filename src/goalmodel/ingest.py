@@ -52,7 +52,7 @@ from pathlib import Path
 import pandas as pd
 import soccerdata as sd
 
-from . import config
+from . import config, storage
 
 try:  # la barra e' un di piu': senza tqdm tutto funziona identico
     from tqdm import tqdm as _TQDM
@@ -67,19 +67,16 @@ except ImportError:  # pragma: no cover
 
 LEAGUE = config.LEAGUES
 SEASONS = config.SEASONS
-RAW = config.RAW
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
 log = logging.getLogger("ingest")
 
 
 def save(df: pd.DataFrame, name: str) -> None:
-    """Salva in Parquet resettando l'indice (soccerdata usa MultiIndex)."""
-    RAW.mkdir(parents=True, exist_ok=True)
-    out = RAW / f"{name}.parquet"
-    df.reset_index().to_parquet(out, index=False)
+    """Salva resettando l'indice (soccerdata usa MultiIndex). Dove, lo sa `storage`."""
+    storage.scrivi("raw", name, df.reset_index())
     log.info("%-22s %6d righe, %2d colonne -> %s",
-             name, len(df), df.shape[1], out)
+             name, len(df), df.shape[1], storage.percorso("raw", name).name)
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +329,8 @@ def ingest_fixtures(source: str | Path | None = None) -> pd.DataFrame:
     odds = [c for c in df.columns if c not in keep and c not in ("Div", "Date", "Time")]
     out = df[keep + odds].sort_values("date").reset_index(drop=True)
 
-    RAW.mkdir(parents=True, exist_ok=True)
-    dst = RAW / "fixtures_odds.parquet"
-    out.to_parquet(dst, index=False)
-    log.info("fixtures_odds        %6d righe, %2d colonne -> %s", len(out), out.shape[1], dst)
+    storage.scrivi("raw", "fixtures_odds", out)
+    log.info("fixtures_odds        %6d righe, %2d colonne", len(out), out.shape[1])
     if len(out):
         log.info("turno coperto: dal %s al %s (snapshot %s)",
                  out["date"].min().date(), out["date"].max().date(),
@@ -358,12 +353,12 @@ def _check_fixture_teams(df: pd.DataFrame) -> None:
     previsione. Meglio un avviso esplicito con il nome esatto da aggiungere a
     team_name_map.json.
     """
-    master = config.INTERIM / "matches_master.parquet"
-    if not master.exists():
-        log.warning("%s assente: salto la verifica dei nomi squadra", master.name)
+    noti = storage.leggi_opzionale("interim", "matches_master",
+                                   columns=["home_team", "away_team"])
+    if noti is None:
+        log.warning("matches_master assente: salto la verifica dei nomi squadra")
         return
 
-    noti = pd.read_parquet(master, columns=["home_team", "away_team"])
     noti = set(noti["home_team"]) | set(noti["away_team"])
     presenti = set(df["home_team"]) | set(df["away_team"])
     sconosciute = sorted(presenti - noti)
@@ -497,8 +492,8 @@ def ingest_understat_shots(seasons: list[str] | None = None,
     """
     seasons = seasons or SEASONS
     leagues = leagues or LEAGUE
-    dst = RAW / "understat_shots.parquet"
-    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    precedente = storage.leggi_opzionale("raw", "understat_shots")
+    pezzi = [precedente] if precedente is not None else []
     in_corso = season_from_date(pd.Timestamp.now())
     fatte = (set(zip(pezzi[0]["league"].astype(str), pezzi[0]["season"].astype(str), strict=True))
              if pezzi else set())
@@ -528,13 +523,13 @@ def ingest_understat_shots(seasons: list[str] | None = None,
                              & (p["season"].astype(str) == str(stagione)))]
                          for p in pezzi]
                 pezzi.append(df)
-                pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+                storage.scrivi("raw", "understat_shots", pd.concat(pezzi, ignore_index=True))
                 log.info("%s %s: %d tiri", lega, stagione, len(df))
             except Exception as exc:
                 log.warning("%s %s: %s — proseguo", lega, stagione, type(exc).__name__)
 
     out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
-    log.info("%-22s %6d righe -> %s", "understat_shots", len(out), dst)
+    log.info("%-22s %6d righe", "understat_shots", len(out))
     return out
 
 
@@ -601,10 +596,9 @@ def ingest_cups() -> pd.DataFrame:
     stagione. Cambia solo dove si mette il `try`.
     """
     coppe = registra_coppe()
-    dst = RAW / "fbref_cups_schedule.parquet"
     # Quello che il file ha gia': serve a distinguere "questa coppa non
     # esisteva" da "questo giro non l'ha presa", e a non buttare la seconda.
-    precedente = pd.read_parquet(dst) if dst.exists() else None
+    precedente = storage.leggi_opzionale("raw", "fbref_cups_schedule")
     avute_prima = (set(zip(precedente["league"], precedente["season"].astype(str),
                            strict=True))
                    if precedente is not None else set())
@@ -664,10 +658,9 @@ def ingest_cups() -> pd.DataFrame:
                         "(coppa, stagione) che questo giro non ha preso: %s",
                         len(recuperate), len(mancanti), sorted(mancanti)[:5])
 
-    RAW.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(dst, index=False)
-    log.info("%-22s %6d righe, %2d colonne -> %s",
-             "fbref_cups_schedule", len(out), out.shape[1], dst)
+    storage.scrivi("raw", "fbref_cups_schedule", out)
+    log.info("%-22s %6d righe, %2d colonne",
+             "fbref_cups_schedule", len(out), out.shape[1])
     return out
 
 
@@ -734,8 +727,8 @@ def ingest_player_stats(seasons: list[str] | None = None) -> pd.DataFrame:
     # in qualsiasi momento avendo gia' in mano le stagioni che servono a
     # misurare. Vedi `config.SEASONS_PRIORITA`.
     seasons = seasons or config.SEASONS_PRIORITA
-    dst = RAW / "fbref_player_match.parquet"
-    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
+    precedente = storage.leggi_opzionale("raw", "fbref_player_match")
+    pezzi = [precedente] if precedente is not None else []
     fatte = set(pezzi[0]["season"].astype(str)) if pezzi else set()
     if fatte:
         log.info("stagioni gia' scaricate: %s", sorted(fatte))
@@ -758,14 +751,14 @@ def ingest_player_stats(seasons: list[str] | None = None) -> pd.DataFrame:
                 if df[c].dtype == object:
                     df[c] = df[c].astype("string")
             pezzi.append(df)
-            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+            storage.scrivi("raw", "fbref_player_match", pd.concat(pezzi, ignore_index=True))
             log.info("%s: %d righe giocatore-partita", stagione, len(df))
         except Exception as exc:
             log.warning("%s: %s — proseguo con la prossima stagione",
                         stagione, type(exc).__name__)
 
     out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
-    log.info("%-22s %6d righe -> %s", "fbref_player_match", len(out), dst)
+    log.info("%-22s %6d righe", "fbref_player_match", len(out))
     return out
 
 
@@ -822,11 +815,9 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
 
     applica_locale_whoscored()
     seasons = seasons or config.SEASONS_PRIORITA   # vedi player_stats
-    dst = RAW / "whoscored_missing.parquet"
-    viste_path = RAW / "whoscored_missing_viste.parquet"
-
-    pezzi = [pd.read_parquet(dst)] if dst.exists() else []
-    viste = [pd.read_parquet(viste_path)] if viste_path.exists() else []
+    pezzi = [d for d in [storage.leggi_opzionale("raw", "whoscored_missing")] if d is not None]
+    viste = [d for d in [storage.leggi_opzionale("raw", "whoscored_missing_viste")]
+             if d is not None]
     fatte = set(viste[0]["game_id"].astype(int)) if viste else set()
     if fatte:
         log.info("gia' scaricate %d partite: le salto", len(fatte))
@@ -852,9 +843,7 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
         # `carica_assenze` falliva su una cartella che nessuno scriveva. Il
         # blocco giocatori era costruibile solo se quei file erano avanzati da
         # una versione precedente del codice — e `data/` non e' versionata.
-        cartella = RAW / "whoscored"
-        cartella.mkdir(parents=True, exist_ok=True)
-        sched.to_parquet(cartella / f"schedule_{stagione}.parquet", index=False)
+        storage.scrivi("raw", f"whoscored/schedule_{stagione}", sched)
 
         ids = [i for i in sched["game_id"].dropna().astype(int) if i not in fatte]
         if not ids:
@@ -863,13 +852,14 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
         try:
             miss = ws.read_missing_players(match_id=ids).reset_index()
             pezzi.append(miss)
-            pd.concat(pezzi, ignore_index=True).to_parquet(dst, index=False)
+            storage.scrivi("raw", "whoscored_missing", pd.concat(pezzi, ignore_index=True))
             # Le partite senza assenti non producono righe: senza registrare
             # QUALI sono state interrogate non si distingue "nessun assente"
             # da "non scaricata", e ogni statistica a valle sarebbe calcolata
             # sulle sole partite con assenze.
             viste.append(pd.DataFrame({"season": stagione, "game_id": ids}))
-            pd.concat(viste, ignore_index=True).to_parquet(viste_path, index=False)
+            storage.scrivi("raw", "whoscored_missing_viste",
+                           pd.concat(viste, ignore_index=True))
             log.info("%s: %d partite -> %d assenti (%.0f min)",
                      stagione, len(ids), len(miss), (time.time() - t0) / 60)
         except Exception as exc:
@@ -878,7 +868,7 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
         time.sleep(20)
 
     out = pd.concat(pezzi, ignore_index=True) if pezzi else pd.DataFrame()
-    log.info("%-22s %6d righe -> %s", "whoscored_missing", len(out), dst)
+    log.info("%-22s %6d righe", "whoscored_missing", len(out))
     return out
 
 
@@ -886,7 +876,7 @@ def ingest_missing(seasons: list[str] | None = None) -> pd.DataFrame:
 # Stage 5 - Rating Elo (ClubElo)
 # ---------------------------------------------------------------------------
 
-def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataFrame:
+def ingest_elo() -> pd.DataFrame:
     """
     Storico Elo giornaliero per ogni squadra apparsa in Serie A nel periodo.
 
@@ -899,12 +889,9 @@ def ingest_elo(schedule_path: Path = RAW / "fbref_schedule.parquet") -> pd.DataF
     read_team_history() restituisce la serie storica completa per squadra:
     una richiesta per squadra invece di una per data. Molto piu' efficiente.
     """
-    if not schedule_path.exists():
-        raise FileNotFoundError(
-            f"{schedule_path} mancante: lancia prima --stage schedule"
-        )
-
-    sched = pd.read_parquet(schedule_path)
+    sched = storage.leggi_opzionale("raw", "fbref_schedule")
+    if sched is None:
+        raise FileNotFoundError("fbref_schedule mancante: lancia prima --stage schedule")
     teams = sorted(set(sched["home_team"]) | set(sched["away_team"]))
     log.info("Squadre trovate: %d", len(teams))
 

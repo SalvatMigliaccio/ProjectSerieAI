@@ -173,3 +173,46 @@ def _limitatori_azzerati():
     for limiter in ALL_LIMITERS:
         limiter.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def _dati_veri_intoccabili(monkeypatch):
+    """
+    Nessun test scrive nei dati veri, ne' su file ne' in Postgres.
+
+    PERCHE' UNA RETE E NON UNA CONVENZIONE. Lo e' stata, ed e' gia' caduta due
+    volte: `test_form` sovrascriveva `features_form.parquet` con 90 righe
+    sintetiche, e con il passaggio a `storage` (ADR 0006) quattro test che
+    dirottavano `ingest.RAW` avrebbero scritto nel `data/raw` vero, perche'
+    l'ingestion non guardava piu' quella variabile. Nessuno dei due casi da'
+    un errore: i dati restano plausibili e sbagliati.
+
+    Due cose: la modalita' e' sempre `parquet`, qualunque cosa dica
+    l'ambiente di chi lancia i test — una suite che gira con
+    `GOALMODEL_STORAGE=postgres` scriverebbe nel database vero; e ogni
+    `storage.scrivi` che cadrebbe dentro il `data/` vero fallisce. Chi deve
+    scrivere sposta prima `storage.CARTELLE` su una cartella temporanea.
+    """
+    from goalmodel import pg, storage
+
+    monkeypatch.setenv(storage.VARIABILE, "parquet")
+    # E in Postgres, schemi `test_*`: i test che ci scrivono non vedono e non
+    # toccano `raw`, `interim`, `processed`.
+    monkeypatch.setenv(pg.VARIABILE_PREFISSO, "test_")
+    # Le guardie dell'API e degli esperimenti chiudono `storage` per tutto il
+    # processo, e pytest e' un processo solo: senza riaprirlo, ogni test dopo
+    # il primo che importa l'API non potrebbe scrivere nemmeno in tmp_path.
+    # Chi verifica una guardia la invoca nel test, e la guardia richiude.
+    monkeypatch.setattr(storage, "_vietato", None)
+    vera = config.DATA.resolve()
+    originale = storage.scrivi
+
+    def scrivi(livello: str, nome: str, df) -> None:
+        dst = storage.percorso(livello, nome).resolve()
+        if dst.is_relative_to(vera):
+            raise AssertionError(
+                f"un test stava per scrivere nei dati veri: {dst}. "
+                f"Sposta storage.CARTELLE['{livello}'] su tmp_path.")
+        originale(livello, nome, df)
+
+    monkeypatch.setattr(storage, "scrivi", scrivi)

@@ -41,7 +41,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config, data
+from .. import config, data, storage
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("form")
@@ -270,9 +270,8 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
     log.info("righe di burn-in escluse dal training: %d", int(wide["is_burn_in"].sum()))
 
     if save:
-        out = config.PROCESSED / "features_form.parquet"
-        wide.to_parquet(out, index=False)
-        log.info("scritto %s: %d righe, %d colonne", out.name, len(wide), wide.shape[1])
+        storage.scrivi("processed", "features_form", wide)
+        log.info("scritto features_form: %d righe, %d colonne", len(wide), wide.shape[1])
     return wide
 
 

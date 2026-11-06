@@ -31,23 +31,30 @@ import pytest
 RADICE = Path(__file__).resolve().parent.parent
 
 # I due confini: qui leggere dal disco e' il mestiere, non un'eccezione.
+# `goalmodel` legge da `data.py`, che chiede a `storage.py`: e' quest'ultimo
+# l'unico a sapere se il dato sta su file o in Postgres (ADR 0006).
 CONFINI = {
-    Path("src/goalmodel/data.py"),
+    Path("src/goalmodel/storage.py"),
     Path("backend/api/store.py"),
 }
 
 # LE ECCEZIONI, UNA PER UNA E CON IL MOTIVO. Non e' una lista di comodo: ogni
-# riga qui e' un posto che la migrazione a Postgres dovra' toccare a mano,
-# quindi allungarla e' una decisione, non una scorciatoia.
-AMMESSI = {
-    Path("src/goalmodel/ingest.py"):
-        "lato produttore: rilegge il parquet che ha appena scritto per "
-        "accodare la stagione nuova. `load_raw` farebbe la cosa sbagliata, "
-        "perche' solleva quando il file manca — e al primo run manca sempre.",
-    Path("src/goalmodel/normalize.py"):
-        "lato produttore: conta le righe del file prima di sovrascriverlo, "
-        "per dire di quanto e' cresciuto.",
+# riga qui e' un posto che legge un file anche con i dati in Postgres, quindi
+# allungarla e' una decisione, non una scorciatoia. Vuota dal 6 novembre 2026:
+# le riletture lato produttore di `ingest.py` e `normalize.py` passano da
+# `storage.leggi_opzionale`.
+AMMESSI: dict[Path, str] = {
+    Path("src/goalmodel/archivio.py"):
+        "e' lo strumento della migrazione: legge OGNI file di data/ per "
+        "caricarlo in Postgres e per confrontarlo bit a bit con la sua "
+        "tabella. Passare da `storage` vorrebbe dire confrontare Postgres con "
+        "se stesso in modalita' postgres.",
 }
+
+# L'unico posto di `goalmodel` che scrive un dato. Fuori da `experiments/`, che
+# scrive in `experiments/output/` per conto suo.
+CONFINE_SCRITTURA = Path("src/goalmodel/storage.py")
+SCRITTURA = re.compile(r"\.to_parquet\s*\(")
 
 # `experiments/` per progetto legge tutto e non e' importato da nessuno.
 ESCLUSI = ("experiments/",)
@@ -83,6 +90,27 @@ def test_nessuna_lettura_fuori_dai_confini() -> None:
           "dovra' toccare a mano."
     )
     print(f"  {len(_sorgenti())} moduli, nessuna lettura fuori dai confini  ok")
+
+
+def test_nessuna_scrittura_fuori_da_storage() -> None:
+    """
+    Il confine di SCRITTURA, che prima non c'era (ADR 0006).
+
+    Era la meta' mancante: con le letture centralizzate e quindici
+    `to_parquet` sparsi, un dato passato a Postgres avrebbe continuato a
+    essere scritto su file da qualche modulo dimenticato — e letto stantio
+    da tutti gli altri, senza un errore.
+    """
+    fuori = []
+    for p in _sorgenti():
+        if p == CONFINE_SCRITTURA or not p.as_posix().startswith("src/"):
+            continue
+        righe = (RADICE / p).read_text(encoding="utf-8").splitlines()
+        if any(SCRITTURA.search(r) for r in righe if not r.lstrip().startswith("#")):
+            fuori.append(p)
+    assert not fuori, (
+        "questi moduli scrivono un parquet saltando storage.scrivi:\n  "
+        + "\n  ".join(p.as_posix() for p in fuori))
 
 
 def test_le_eccezioni_esistono_ancora() -> None:

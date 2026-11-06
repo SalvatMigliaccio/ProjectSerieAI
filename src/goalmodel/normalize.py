@@ -39,7 +39,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import linear_sum_assignment
 
-from . import config, data
+from . import config, data, storage
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("normalize")
@@ -412,7 +412,7 @@ def check_dates(merged: pd.DataFrame, suffix: str, tolerance_days: int = 3) -> N
         log.info("date coerenti su tutte le righe accoppiate")
 
 
-def _guard_shrink(out, nuovo, soglia: float = 0.20) -> None:
+def _guard_shrink(nuovo, soglia: float = 0.20) -> None:
     """
     Rifiuta di sostituire il dataset con uno molto piu' piccolo.
 
@@ -429,13 +429,16 @@ def _guard_shrink(out, nuovo, soglia: float = 0.20) -> None:
     """
     import os
 
-    if not out.exists() or os.environ.get("AI_NAPLES_FORCE_BUILD") == "1":
+    if os.environ.get("AI_NAPLES_FORCE_BUILD") == "1":
         return
-    vecchio = len(pd.read_parquet(out, columns=["league"]))
+    attuale = storage.leggi_opzionale("interim", "matches_master", columns=["league"])
+    if attuale is None:
+        return
+    vecchio = len(attuale)
     if len(nuovo) >= vecchio * (1 - soglia):
         return
     raise ValueError(
-        f"il nuovo {out.name} avrebbe {len(nuovo)} righe contro le {vecchio} "
+        f"il nuovo matches_master avrebbe {len(nuovo)} righe contro le {vecchio} "
         f"attuali: un calo del {100 * (1 - len(nuovo) / vecchio):.0f}%.\n"
         f"    Il dataset non si accorcia mai da solo. Controlla data/raw/: "
         f"probabilmente un file grezzo e' stato sovrascritto (tests/"
@@ -490,10 +493,9 @@ def cmd_build() -> None:
     if len(merged) != n_expected:
         raise ValueError(f"righe attese {n_expected}, ottenute {len(merged)}")
 
-    out = config.INTERIM / "matches_master.parquet"
-    _guard_shrink(out, merged)
-    merged.to_parquet(out, index=False)
-    log.info("scritto %s: %d righe, %d colonne", out, len(merged), merged.shape[1])
+    _guard_shrink(merged)
+    storage.scrivi("interim", "matches_master", merged)
+    log.info("scritto matches_master: %d righe, %d colonne", len(merged), merged.shape[1])
 
     # Riepilogo per lega e stagione: utile per accorgersi di buchi.
     summary = merged.groupby(["league", "season"], observed=True).size()

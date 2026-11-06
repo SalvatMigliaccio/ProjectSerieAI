@@ -102,9 +102,19 @@ def _guard_writes() -> None:
     protects is the registry on disk. Loosening it to let auth through would
     have been the easy mistake — auth does not need it loosened.
 
-    Still partial, and still says so: it wraps `to_parquet` and `to_csv`, not
-    `to_pickle`, `open()`, `shutil.copy` or pyarrow (security rule 9).
+    Still partial, and still says so: it wraps `to_parquet`, `to_csv` and
+    `goalmodel.storage.scrivi`, not `to_pickle`, `open()`, `shutil.copy`,
+    pyarrow or a hand-made database connection (security rule 9).
     """
+    # The match data may live in Postgres (ADR 0006), where `to_parquet` never
+    # runs. The API writes no dataset at all, so `goalmodel.storage` is closed
+    # outright, not by path. Account rows go through SQLAlchemy and are not
+    # affected.
+    from goalmodel import storage
+
+    storage.vieta_scritture("the API is read-only: datasets are written by "
+                            "the pipeline on the machine, never by a request")
+
     if getattr(pd.DataFrame.to_csv, "_api_guarded", False):
         return
 

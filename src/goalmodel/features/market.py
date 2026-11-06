@@ -65,7 +65,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import poisson
 
-from .. import config, data
+from .. import config, data, storage
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("market")
@@ -455,9 +455,8 @@ def build(df: pd.DataFrame | None = None, save: bool = True) -> pd.DataFrame:
     out["drift_abs"] = out[["drift_p_home", "drift_p_away"]].abs().sum(axis=1)
 
     if save:
-        dst = config.PROCESSED / "features_market.parquet"
-        out.to_parquet(dst, index=False)
-        log.info("scritto %s: %d righe, %d colonne", dst.name, len(out), out.shape[1])
+        storage.scrivi("processed", "features_market", out)
+        log.info("scritto features_market: %d righe, %d colonne", len(out), out.shape[1])
 
         cov = out.groupby("season")[["mkt_p_home", "mkt_p_over25", "close_p_home"]].apply(
             lambda g: g.notna().mean().mul(100).round(1)

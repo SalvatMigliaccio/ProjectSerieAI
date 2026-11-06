@@ -859,6 +859,41 @@ goalmodel backtest --by-season # stagione per stagione
 goalmodel backtest --backfill  # rilegge le ricostruzioni (NON e' un track record)
 ```
 
+### I dati in Postgres (ADR 0006)
+
+```bash
+goalmodel db --stato        # il catalogo: ogni dato, righe, versione, quando
+goalmodel db --carica       # ogni parquet di data/ -> Postgres (~5 s in tutto)
+goalmodel db --carica --solo matches_master
+goalmodel db --verifica     # ogni parquet contro la sua tabella, bit a bit
+```
+
+Dove la pipeline legge e scrive lo decide `GOALMODEL_STORAGE`, con lo stesso
+`AI_NAPLES_DATABASE_URL` dell'autenticazione:
+
+| valore | scrive | legge |
+|---|---|---|
+| `parquet` (predefinito) | file | file |
+| `doppio` | file e Postgres | file |
+| `postgres` | Postgres | Postgres |
+
+```powershell
+$env:GOALMODEL_STORAGE = "doppio"; goalmodel predict-round     # PowerShell
+```
+```bash
+GOALMODEL_STORAGE=doppio goalmodel predict-round                # Linux
+```
+
+In `doppio` un Postgres irraggiungibile non ferma niente: il file e' gia'
+scritto, e il log dice `scritto su file ma NON in Postgres`. **Dopo ogni
+giornata in `doppio` lanciare `goalmodel db --verifica`**: e' l'unica cosa che
+dice se le due copie divergono. Non passare a `postgres` con una verifica che
+non esce a 0.
+
+Le tabelle dei dati NON sono in Alembic e non vanno create a mano: le crea la
+prima scrittura, insieme agli schemi `raw`, `interim`, `processed` e al
+catalogo `goalmodel.catalogo`. Il registro delle previsioni resta su file.
+
 ---
 
 ## 9. Test senza rete
@@ -1069,7 +1104,8 @@ for a real deployment:
 |---|---|
 | `AI_NAPLES_SECRET_KEY` | signs emailed tokens and (derived) the access JWT; the example value is public. Rotating it kills every JWT at once |
 | `AI_NAPLES_COOKIE_SECURE` | `1` behind HTTPS, or the session cookie travels in the clear |
-| `AI_NAPLES_DATABASE_URL` | never a versioned file; comes from the service environment |
+| `AI_NAPLES_DATABASE_URL` | never a versioned file; comes from the service environment. Also where the model data lives once `GOALMODEL_STORAGE` is not `parquet` (ADR 0006) |
+| `GOALMODEL_STORAGE` | `parquet` (default), `doppio`, `postgres`: where the pipeline and the API read and write the match data. See section 8 |
 | `AI_NAPLES_SMTP_*` | point at a real provider instead of Mailpit |
 | `AI_NAPLES_PUBLIC_URL` | builds the links inside emails — wrong value, dead links |
 | `AI_NAPLES_ACCESS_TOKEN_MINUTES` | life of the access JWT, default 15, max 60: how long a revoked session still reaches the data routes (ADR 0003) |

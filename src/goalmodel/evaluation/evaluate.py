@@ -57,7 +57,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, storage
 
 # Riesportati di proposito: mezzo progetto li chiede a questo modulo.
 from ..features.dataset import add_matchday, load_dataset  # noqa: F401
@@ -803,9 +803,8 @@ def run(save: bool = True, models: list[Model] | None = None) -> pd.DataFrame:
     df = load_dataset()
     preds = walk_forward(df, models or all_models())
     if save:
-        dst = config.PROCESSED / "walk_forward_predictions.parquet"
-        preds.to_parquet(dst, index=False)
-        log.info("scritto %s", dst.name)
+        storage.scrivi("processed", "walk_forward_predictions", preds)
+        log.info("scritto walk_forward_predictions")
     return preds
 
 
@@ -850,9 +849,8 @@ def main() -> None:
     if args.blocco:
         preds, coppie = misura_blocco(args.blocco)
         if not args.no_save:
-            dst = config.PROCESSED / f"walk_forward_blocco_{args.blocco}.parquet"
-            preds.to_parquet(dst, index=False)
-            log.info("scritto %s", dst.name)
+            storage.scrivi("processed", f"walk_forward_blocco_{args.blocco}", preds)
+            log.info("scritto walk_forward_blocco_%s", args.blocco)
 
         print(f"\n=== BLOCCO '{args.blocco.upper()}' — walk-forward sul test set ===")
         print(report(preds).to_string())

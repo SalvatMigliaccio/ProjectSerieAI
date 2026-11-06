@@ -55,6 +55,7 @@ COMANDI: dict[str, tuple[str, str]] = {
     "rounds":        ("goalmodel.prediction.rounds", "stato di ogni giornata"),
     "backtest":      ("goalmodel.prediction.backtest_log", "metriche reali dal registro"),
     "report":        ("goalmodel.reporting.report", "rigenera il report HTML"),
+    "db":            ("goalmodel.archivio", "dati in Postgres: carica, verifica, stato"),
 }
 
 

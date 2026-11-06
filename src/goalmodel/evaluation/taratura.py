@@ -31,7 +31,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, storage
 from ..features.dataset import load_dataset
 from ..models import dixon_coles as dc
 from ..models.gbm import (
@@ -230,8 +230,7 @@ def main_gbm() -> None:
     variants = tuple(v.strip() for v in args.variants.split(",") if v.strip())
     tab = tune(load_dataset(), n_configs=args.configs, stride=args.stride,
                n_workers=args.workers, variants=variants)
-    out = config.PROCESSED / "gbm_tuning.parquet"
-    tab.to_parquet(out, index=False)
+    storage.scrivi("processed", "gbm_tuning", tab)
 
     for variant in variants:
         sub = tab[tab["variante"] == variant].sort_values("RPS_validazione")
@@ -247,7 +246,7 @@ def main_gbm() -> None:
         else:
             print("nessun parametro sul bordo: il minimo e' interno")
 
-    print(f"\nscritto {out.name}")
+    print("\nscritto gbm_tuning")
 
 
 def main_dixon_coles() -> None:

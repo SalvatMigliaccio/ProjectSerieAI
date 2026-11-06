@@ -23,7 +23,7 @@ THREE THINGS ABOUT THE SOURCE THAT ARE EASY TO GET WRONG
 Team names go through `manual/team_name_map.json`, the same map the results
 chain uses: Understat writes "AC Milan" and "Parma Calcio 1913".
 
-READ ONLY. Reads one parquet, writes nothing.
+READ ONLY. Reads one source through `store.read_shots`, writes nothing.
 """
 
 from __future__ import annotations
@@ -44,12 +44,13 @@ COLUMNS = ["league", "season", "game_id", "team", "player", "assist_player", "xg
 
 
 @lru_cache(maxsize=2)
-def _shots(stat: tuple, path_str: str) -> pd.DataFrame:
-    from pathlib import Path
-
+def _shots(stat: tuple, src: store.Sources) -> pd.DataFrame:
+    """`stat` is only the cache key: a new file, a new entry."""
     from goalmodel import normalize as nz
 
-    df = pd.read_parquet(Path(path_str), columns=COLUMNS)
+    df = store.read_shots(COLUMNS, src)
+    if df is None:
+        return pd.DataFrame(columns=COLUMNS)
     df = df[df["league"].isin(config.LEAGUES_PRODUZIONE)].copy()
     mapping = nz.load_name_map()
     df["team"] = nz.clean_name(df["team"]).map(lambda x: mapping.get(x, x))
@@ -71,12 +72,12 @@ def leaders(season: str, limit: int = 10, src: store.Sources | None = None) -> d
     """Scorers and assist men of the season. `None` if there is no shot at all."""
     src = src or store.default_sources()
     path = src.understat_shots
-    if not path.exists():
+    if not store._data_exists(path):
         log.warning("no shots at %s: run 'goalmodel ingest --stage shots'", path)
         return None
 
     code = store.season_in(season)
-    shots = _shots(store._stat(path), str(path))
+    shots = _shots(store._stat(path), src)
     shots = shots[shots["season"] == code]
     if shots.empty:
         return None

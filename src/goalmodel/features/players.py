@@ -64,7 +64,7 @@ import unicodedata
 import numpy as np
 import pandas as pd
 
-from .. import config, data
+from .. import config, data, storage
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
 log = logging.getLogger("players")
@@ -397,9 +397,8 @@ def build(df: pd.DataFrame | None = None, save: bool = True,
              100 * coperto)
 
     if save:
-        dst = config.PROCESSED / "features_players.parquet"
-        out.to_parquet(dst, index=False)
-        log.info("scritto %s: %d righe, %d colonne", dst.name, len(out), out.shape[1])
+        storage.scrivi("processed", "features_players", out)
+        log.info("scritto features_players: %d righe, %d colonne", len(out), out.shape[1])
     return out
 
 

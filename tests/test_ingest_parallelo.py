@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from goalmodel import ingest
+from goalmodel import ingest, storage
 
 
 class Spia:
@@ -237,7 +237,7 @@ def test_coppa_sopravvive_a_una_stagione_mancante() -> None:
             return pd.DataFrame({"game": [f"g{self.stagione}"]})
 
     orig_fb, orig_seasons = ingest.sd.FBref, ingest.SEASONS
-    orig_registra, orig_raw = ingest.registra_coppe, ingest.RAW
+    orig_registra, orig_raw = ingest.registra_coppe, storage.CARTELLE["raw"]
     orig_save = pd.DataFrame.to_parquet
     ingest.sd.FBref = FBrefFinto
     ingest.SEASONS = ["1415", "1516", "2122", "2223", "2324"]
@@ -245,13 +245,13 @@ def test_coppa_sopravvive_a_una_stagione_mancante() -> None:
     # RAW dirottata: senza, `ingest_cups` leggerebbe il file vero per capire
     # cosa aveva gia', e il test dipenderebbe dai dati sul disco.
     with tempfile.TemporaryDirectory() as tmp:
-        ingest.RAW = Path(tmp)
+        storage.CARTELLE["raw"] = Path(tmp)
         pd.DataFrame.to_parquet = lambda self, *a, **k: None
         try:
             out = ingest.ingest_cups()
         finally:
             ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
-            ingest.registra_coppe, ingest.RAW = orig_registra, orig_raw
+            ingest.registra_coppe, storage.CARTELLE["raw"] = orig_registra, orig_raw
             pd.DataFrame.to_parquet = orig_save
 
     assert len(out) == len(VIVE), (
@@ -291,13 +291,13 @@ def test_un_giro_parziale_non_cancella_le_coppe_gia_prese() -> None:
                                  "season": [self.stagione]})
 
     orig_fb, orig_seasons = ingest.sd.FBref, ingest.SEASONS
-    orig_registra, orig_raw = ingest.registra_coppe, ingest.RAW
+    orig_registra, orig_raw = ingest.registra_coppe, storage.CARTELLE["raw"]
     ingest.sd.FBref = FBrefACaptcha
     ingest.SEASONS = ["2122", "2223", "2324"]
     ingest.registra_coppe = lambda: ["UEFA-Conference League"]
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            ingest.RAW = Path(tmp)
+            storage.CARTELLE["raw"] = Path(tmp)
             # Il file "di ieri": ha anche la 2324, che oggi non arrivera'.
             gia = pd.DataFrame({"game": ["g2122", "g2223", "g2324"],
                                 "league": ["UEFA-Conference League"] * 3,
@@ -307,7 +307,7 @@ def test_un_giro_parziale_non_cancella_le_coppe_gia_prese() -> None:
             out = ingest.ingest_cups()
     finally:
         ingest.sd.FBref, ingest.SEASONS = orig_fb, orig_seasons
-        ingest.registra_coppe, ingest.RAW = orig_registra, orig_raw
+        ingest.registra_coppe, storage.CARTELLE["raw"] = orig_registra, orig_raw
 
     stagioni = set(out["season"].astype(str))
     assert stagioni == {"2122", "2223", "2324"}, (
@@ -360,7 +360,7 @@ def test_missing_salva_il_calendario_che_serve_ai_giocatori() -> None:
                                  "player": ["Tizio"] * len(match_id),
                                  "reason": ["injured"] * len(match_id)})
 
-    orig = (ingest.sd.WhoScored, ingest.SEASONS, ingest.RAW,
+    orig = (ingest.sd.WhoScored, ingest.SEASONS, storage.CARTELLE["raw"],
             ingest.applica_locale_whoscored, _time.sleep)
     ingest.sd.WhoScored = WhoScoredFinto
     ingest.SEASONS = ["2324"]
@@ -368,7 +368,7 @@ def test_missing_salva_il_calendario_che_serve_ai_giocatori() -> None:
     _time.sleep = lambda _s: None
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            ingest.RAW = Path(tmp)
+            storage.CARTELLE["raw"] = Path(tmp)
             ingest.ingest_missing()
 
             atteso = Path(tmp) / "whoscored" / "schedule_2324.parquet"
@@ -381,7 +381,7 @@ def test_missing_salva_il_calendario_che_serve_ai_giocatori() -> None:
             mancanti = [c for c in RICHIESTE if c not in cal.columns]
             assert not mancanti, f"al calendario salvato mancano {mancanti}"
     finally:
-        (ingest.sd.WhoScored, ingest.SEASONS, ingest.RAW,
+        (ingest.sd.WhoScored, ingest.SEASONS, storage.CARTELLE["raw"],
          ingest.applica_locale_whoscored, _time.sleep) = orig
 
     print("9. missing: salva il calendario che serve ai giocatori   ok")

@@ -74,10 +74,17 @@ ingest = [
     "tqdm>=4.67,<5",
 ]
 
+# I dati del modello in Postgres (ADR 0006): serve solo con
+# GOALMODEL_STORAGE=doppio o postgres, e `goalmodel.pg` lo importa dentro le
+# funzioni. Stessa versione di `auth`, che lo porta gia'.
+db = [
+    "psycopg[binary]>=3.2,<4",
+]
+
 # Everything, for a development machine or CI. `pip install -e ".[all]"` is the
 # one-liner that behaves the way `pip install -e .` used to.
 all = [
-    "goalmodel[ml,ingest,api,auth]",
+    "goalmodel[ml,ingest,api,auth,db]",
 ]
 
 dev = [
@@ -212,6 +219,12 @@ ignore = [
 # la forma giusta, perche' e' il corpo del controllo e non una difesa.
 "src/goalmodel/models/baseline.py" = ["S101"]      # _demo()
 "src/goalmodel/models/dixon_coles.py" = ["S101"]   # _check_gradient()
+# S608 (SQL composto con f-string). In pg.py gli identificatori sono nomi di
+# tabella e di colonna, che i parametri di psycopg non coprono: passano tutti
+# da `pg._q`, che applica il quoting di Postgres (lo stesso di
+# `psycopg.sql.Identifier`). I VALORI sono sempre parametri. Ogni altro file
+# resta sotto la regola.
+"src/goalmodel/pg.py" = ["S608"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["goalmodel"]
