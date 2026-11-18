@@ -40,6 +40,7 @@ const TITOLI: Record<string, string> = {
   "/dashboard/admin/utenti": "Utenti · Amministrazione · MatchPoint",
   "/dashboard/admin/registro": "Registro · Amministrazione · MatchPoint",
   "/dashboard/admin/metriche": "Metriche · Amministrazione · MatchPoint",
+  "/dashboard/admin/pipeline": "Pipeline · Amministrazione · MatchPoint",
 };
 
 /**

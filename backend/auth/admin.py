@@ -52,7 +52,7 @@ GRANTABLE = frozenset({"admin"})
 # The events the panel's audit list shows: what staff did, and the account
 # changes that explain them. Sign-ins stay in each account's own detail view.
 STAFF_KINDS = ("role_granted", "role_revoked", "suspended", "reactivated",
-               "unlocked", "account_deleted")
+               "unlocked", "account_deleted", "pipeline_requested", "pipeline_cancelled")
 
 
 # --- who may call -----------------------------------------------------------

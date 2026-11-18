@@ -1465,9 +1465,11 @@ potersi fare dall'interfaccia. Fase 1 fatta: sezione Amministrazione della dashb
 legge i permessi dal DB a ogni chiamata. Fase 2: il registro passa in Postgres,
 con append-only, timestamp e controllo sul fischio imposti dal database
 (FATTA: `goalmodel/registro.py`, segue `GOALMODEL_STORAGE`, comando
-`goalmodel registro --importa | --verifica`; in `parquet` non cambia niente). Fase 3:
-predict e close si lanciano dalla dashboard accodando un job per un worker (PC
-ora, VPS poi), mai eseguendo il modello nell'API. Finche' la produzione resta
+`goalmodel registro --importa | --verifica`; in `parquet` non cambia niente). Fase 3
+(FATTA): predict e close si lanciano dalla dashboard (Amministrazione →
+Pipeline) accodando un job in `pipeline_jobs`; lo esegue `python -m
+backend.worker` sulla macchina della pipeline (PC ora, VPS poi), un job alla
+volta, mai il modello dentro l'API. Lo scheduler accoda con `worker --accoda`. Finche' la produzione resta
 in `parquet` e la fase 3 non e' fatta, sotto vale quanto scritto.
 
 **Le uniche cose che scrivono nel registro sono `predict_round` e

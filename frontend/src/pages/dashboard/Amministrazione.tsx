@@ -21,7 +21,15 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { type AdminEvent, type AdminUser, type Count, type UserDetail, admin } from "../../api/admin";
+import {
+  type AdminEvent,
+  type AdminUser,
+  type Count,
+  type Job,
+  type PipelineState,
+  type UserDetail,
+  admin,
+} from "../../api/admin";
 import { api } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { FormAlert, FormSuccess, serverError } from "../../components/Form";
@@ -60,6 +68,8 @@ const EVENTI: Record<string, string> = {
   reactivated: "Account riattivato",
   unlocked: "Account sbloccato",
   account_deleted: "Account eliminato",
+  pipeline_requested: "Comando della pipeline lanciato",
+  pipeline_cancelled: "Comando della pipeline annullato",
 };
 
 /** Dentro la dashboard, dal 18 novembre 2026: una schermata come le altre. */
@@ -70,6 +80,8 @@ const SEZIONI = [
     lead: "Le iscrizioni degli ultimi trenta giorni e lo stato degli account." },
   { id: "utenti", path: `${BASE}/utenti`, label: "Utenti",
     lead: "Cerca un account per indirizzo, guardane la storia, sospendilo o riattivalo." },
+  { id: "pipeline", path: `${BASE}/pipeline`, label: "Pipeline",
+    lead: "Lancia predict round e close round. Li esegue il worker sulla macchina della pipeline." },
   { id: "metriche", path: `${BASE}/metriche`, label: "Metriche",
     lead: "Chi usa il sito, chi non riesce a entrare, cosa si pronostica. Ultimi 30 giorni." },
   { id: "registro", path: `${BASE}/registro`, label: "Registro",
@@ -95,6 +107,7 @@ const ICONE: Record<string, ReactNode> = {
   ),
   registro: <Icon><path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6" /></Icon>,
   metriche: <Icon><path d="M3 12h4l3-8 4 16 3-8h4" /></Icon>,
+  pipeline: <Icon><path d="M7 4v16l13-8z" /></Icon>,
 };
 
 function StatoBadge({ u }: { u: AdminUser }) {
@@ -138,7 +151,6 @@ function Panoramica() {
 
   return (
     <>
-      <Pipeline />
       <div className="adm-tiles">
         {tiles.map(([label, value, tone]) => (
           <div key={label} className={`adm-tile${tone ? ` adm-tile--${tone}` : ""}`}>
@@ -233,6 +245,240 @@ function Pipeline() {
       </p>
       {d.warnings.map((w) => <p key={w} className="adm-warn">{w}</p>)}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: lanciare predict e close (ADR 0007, fase 3)
+
+const COMANDI: Record<string, { label: string; spiega: string }> = {
+  predict_round: {
+    label: "Predict round",
+    spiega: "Scarica quote e dati, riaddestra e registra le previsioni della prossima giornata aperta. "
+      + "Se le quote non sono ancora uscite non scrive niente.",
+  },
+  close_round: {
+    label: "Close round",
+    spiega: "Aggancia i risultati e archivia la prima giornata predetta e interamente giocata. "
+      + "Una giornata incompleta non si chiude.",
+  },
+};
+
+const STATI_JOB: Record<string, [string, string]> = {
+  queued: ["In coda", "idle"],
+  running: ["In corso", "warn"],
+  done: ["Completato", "ok"],
+  failed: ["Fallito", "ko"],
+  cancelled: ["Annullato", "idle"],
+};
+
+function JobBadge({ job }: { job: Job }) {
+  const [label, tone] = job.stale ? ["Worker muto", "ko"] : STATI_JOB[job.status] ?? [job.status, "idle"];
+  return <span className={`adm-badge adm-badge--${tone}`}>{label}</span>;
+}
+
+function durata(a: string | null, b: string | null): string {
+  if (!a) return "";
+  const ms = (b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime();
+  const s = Math.max(0, Math.round(ms / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}
+
+function SezionePipeline() {
+  const [stato, setStato] = useState<PipelineState | null>(null);
+  const [errore, setErrore] = useState<Error | null>(null);
+  const [azione, setAzione] = useState<string | null>(null);
+  const [fallita, setFallita] = useState<string | null>(null);
+  const [conferma, setConferma] = useState<string | null>(null);
+  const [prova, setProva] = useState(false);
+  const [senzaDownload, setSenzaDownload] = useState(false);
+  const [aperto, setAperto] = useState<Job | null>(null);
+
+  // Ogni 3 secondi mentre un job e' attivo, ogni 30 altrimenti: l'output in
+  // diretta serve solo quando qualcosa gira.
+  const attivo = stato?.active?.status;
+  useEffect(() => {
+    let vivo = true;
+    const carica = () =>
+      admin.pipeline()
+        .then((s) => { if (vivo) { setStato(s); setErrore(null); } })
+        .catch((e: unknown) => { if (vivo) setErrore(e instanceof Error ? e : new Error(String(e))); });
+    void carica();
+    const t = window.setInterval(carica, attivo === "queued" || attivo === "running" ? 3000 : 30000);
+    return () => { vivo = false; window.clearInterval(t); };
+  }, [attivo]);
+
+  if (errore && !stato) return <ErrorState error={errore} what="Non riesco a leggere la pipeline" />;
+  if (!stato) return <Loading what="Carico la pipeline…" />;
+
+  async function lancia(command: string) {
+    setAzione(command);
+    setFallita(null);
+    try {
+      setStato(await admin.launch(command, { dry_run: prova, skip_ingest: senzaDownload }));
+      setConferma(null);
+    } catch (e) {
+      setFallita(serverError(e, "non sono riuscito a mettere in coda il comando"));
+    } finally {
+      setAzione(null);
+    }
+  }
+
+  async function annulla(job: Job) {
+    setAzione(`annulla-${job.id}`);
+    setFallita(null);
+    try {
+      setStato(await admin.cancelJob(job.id));
+    } catch (e) {
+      setFallita(serverError(e, "non sono riuscito ad annullare"));
+    } finally {
+      setAzione(null);
+    }
+  }
+
+  async function apri(job: Job) {
+    if (aperto?.id === job.id) { setAperto(null); return; }
+    try {
+      setAperto(await admin.job(job.id));
+    } catch (e) {
+      setFallita(serverError(e, "non riesco a leggere il log"));
+    }
+  }
+
+  const a = stato.active;
+  const worker = stato.workers[0];
+
+  return (
+    <>
+      <section className="adm-card">
+        <div className="adm-card__head">
+          <h2>Worker</h2>
+          <span className={`adm-badge adm-badge--${stato.any_online ? "ok" : "ko"}`}>
+            {stato.any_online ? "Online" : "Offline"}
+          </span>
+        </div>
+        {worker ? (
+          <p className="adm-next">
+            <code>{worker.name}</code> · ultimo contatto {ago(worker.last_seen_at)}
+            {" "}· controlla la coda ogni {worker.poll_seconds} s
+          </p>
+        ) : (
+          <p className="adm-next">Nessun worker si è mai collegato.</p>
+        )}
+        {!stato.any_online && (
+          <p className="adm-warn">
+            Il worker non risponde: probabilmente il PC della pipeline è spento. Un comando lanciato
+            ora resta in coda e parte quando il worker torna online.
+          </p>
+        )}
+      </section>
+
+      <FormAlert>{fallita}</FormAlert>
+
+      {a && (
+        <section className="adm-card adm-job--active">
+          <div className="adm-card__head">
+            <h2>{COMANDI[a.command]?.label ?? a.command} <JobBadge job={a} /></h2>
+            <span className="adm-faint">
+              {a.status === "running" ? `da ${durata(a.started_at, null)}` : `in coda ${ago(a.requested_at)}`}
+            </span>
+          </div>
+          <p className="adm-next">
+            Richiesto da {a.requested_by ?? "?"} · {localDateTime(a.requested_at)}
+            {a.options.dry_run && " · prova, senza scrivere"}
+            {a.options.skip_ingest && " · senza scaricare"}
+            {a.worker && <> · worker <code>{a.worker}</code></>}
+          </p>
+          {a.log_tail && <pre className="adm-log" aria-live="polite">{a.log_tail}</pre>}
+          {stato.can_launch && (a.status === "queued" || a.stale) && (
+            <button className="btn btn--ghost btn--sm" type="button" disabled={azione !== null}
+              onClick={() => void annulla(a)}>
+              {a.status === "queued" ? "Togli dalla coda" : "Segna come fallito"}
+            </button>
+          )}
+        </section>
+      )}
+
+      {stato.can_launch ? (
+        <section className="adm-card">
+          <h2>Lancia</h2>
+          <div className="adm-launch">
+            {Object.entries(COMANDI).map(([cmd, c]) => (
+              <div key={cmd} className="adm-launch__item">
+                <p className="adm-events__what">{c.label}</p>
+                <p className="adm-events__meta">{c.spiega}</p>
+                {conferma === cmd ? (
+                  <div className="adm-confirm__btns">
+                    <button className="btn btn--sm" type="button" disabled={azione !== null}
+                      aria-busy={azione === cmd || undefined} onClick={() => void lancia(cmd)}>
+                      {azione === cmd ? "Metto in coda…" : `Sì, lancia${prova ? " in prova" : ""}`}
+                    </button>
+                    <button className="btn btn--ghost btn--sm" type="button" onClick={() => setConferma(null)}>
+                      Annulla
+                    </button>
+                  </div>
+                ) : (
+                  <button className="btn btn--sm" type="button" disabled={a !== null}
+                    title={a ? "C'è già un comando in coda o in corso" : undefined}
+                    onClick={() => setConferma(cmd)}>
+                    {c.label}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="adm-launch__opts">
+            <label>
+              <input type="checkbox" checked={prova} onChange={(e) => setProva(e.target.checked)} />
+              Prova (<code>--dry-run</code>): mostra cosa farebbe, non scrive niente
+            </label>
+            <label>
+              <input type="checkbox" checked={senzaDownload} onChange={(e) => setSenzaDownload(e.target.checked)} />
+              Senza scaricare (<code>--skip-ingest</code>): usa i dati già presenti
+            </label>
+          </div>
+        </section>
+      ) : (
+        <p className="adm-faint adm-card">Lanciare i comandi è riservato al super amministratore.</p>
+      )}
+
+      <Pipeline />
+
+      <section className="adm-card">
+        <h2>Ultimi lanci</h2>
+        {stato.jobs.length === 0 ? (
+          <EmptyState>Nessun comando lanciato dal pannello.</EmptyState>
+        ) : (
+          <ul className="adm-events">
+            {stato.jobs.map((j) => (
+              <li key={j.id} className={j.status === "failed" ? "is-ko" : ""}>
+                <span className="adm-events__dot" aria-hidden="true" />
+                <div>
+                  <p className="adm-events__what">
+                    {COMANDI[j.command]?.label ?? j.command} <JobBadge job={j} />
+                    {j.options.dry_run && <span className="adm-badge">prova</span>}
+                    {j.exit_code !== null && j.exit_code !== 0 && (
+                      <span className="adm-faint"> · uscita {j.exit_code}</span>
+                    )}
+                  </p>
+                  <p className="adm-events__meta">
+                    {localDateTime(j.requested_at)} · {j.requested_by ?? "?"}
+                    {j.started_at && ` · durata ${durata(j.started_at, j.finished_at)}`}
+                    {" · "}
+                    <button type="button" className="adm-linkbtn" onClick={() => void apri(j)}>
+                      {aperto?.id === j.id ? "nascondi output" : "output"}
+                    </button>
+                  </p>
+                  {aperto?.id === j.id && (
+                    <pre className="adm-log">{aperto.log_tail ?? "(nessun output)"}</pre>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </>
   );
 }
 
@@ -492,6 +738,7 @@ function dettagli(e: AdminEvent): string {
   if (typeof d.reason === "string" && d.reason) parti.push(`motivo: ${d.reason}`);
   if (typeof d.sessions_revoked === "number") parti.push(`${d.sessions_revoked} sessioni chiuse`);
   if (typeof d.via === "string") parti.push("da variabile d'ambiente");
+  if (typeof d.command === "string") parti.push(d.command);
   if (e.actor_email) parti.push(`da ${e.actor_email}`);
   return parti.join(" · ");
 }
@@ -745,6 +992,7 @@ export function Amministrazione() {
       <div key={`${attiva.id}/${id ?? ""}`} className="adm-screen">
         {attiva.id === "panoramica" && <Panoramica />}
         {attiva.id === "utenti" && (id ? <SchedaUtente userId={id} /> : <Utenti />)}
+        {attiva.id === "pipeline" && <SezionePipeline />}
         {attiva.id === "metriche" && <Metriche />}
         {attiva.id === "registro" && <Registro />}
       </div>

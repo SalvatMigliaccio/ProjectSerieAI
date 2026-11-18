@@ -96,6 +96,40 @@ export interface Metrics {
   daily: { day: string; sign_ins: number; failed: number; picks: number }[];
 }
 
+export interface Job {
+  id: string;
+  command: "predict_round" | "close_round" | string;
+  options: { dry_run?: boolean; skip_ingest?: boolean };
+  status: "queued" | "running" | "done" | "failed" | "cancelled" | string;
+  requested_by: string | null;
+  requested_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  heartbeat_at: string | null;
+  worker: string | null;
+  exit_code: number | null;
+  /** Un job "running" il cui worker non scrive da oltre 10 minuti. */
+  stale: boolean;
+  log_tail: string | null;
+}
+
+export interface Worker {
+  name: string;
+  host: string | null;
+  started_at: string;
+  last_seen_at: string;
+  poll_seconds: number;
+  online: boolean;
+}
+
+export interface PipelineState {
+  workers: Worker[];
+  any_online: boolean;
+  active: Job | null;
+  jobs: Job[];
+  can_launch: boolean;
+}
+
 export interface UserQuery {
   q?: string;
   status?: string;
@@ -121,6 +155,12 @@ export const admin = {
   users: (params: UserQuery = {}) => getJson<UserPage>(`/api/admin/users${query(params)}`),
   user: (userId: string) => getJson<UserDetail>(`/api/admin/users/${id(userId)}`),
   audit: (limit = 50) => getJson<AdminEvent[]>(`/api/admin/audit?limit=${limit}`),
+  pipeline: () => getJson<PipelineState>("/api/admin/pipeline"),
+  job: (jobId: string) => getJson<Job>(`/api/admin/pipeline/jobs/${id(jobId)}`),
+  launch: (command: string, options: { dry_run?: boolean; skip_ingest?: boolean }) =>
+    post<PipelineState>("/api/admin/pipeline/jobs", { command, options }, { renew: true }),
+  cancelJob: (jobId: string) =>
+    post<PipelineState>(`/api/admin/pipeline/jobs/${id(jobId)}/cancel`, undefined, { renew: true }),
 
   suspend: (userId: string, reason: string) =>
     post<UserDetail>(`/api/admin/users/${id(userId)}/suspend`, { reason: reason || null }, { renew: true }),

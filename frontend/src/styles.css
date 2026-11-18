@@ -3739,3 +3739,21 @@ td > .adm-badge:first-child, .adm-user-head__badges > .adm-badge:first-child { m
 .adm-next code { font-family: var(--mono); color: var(--fg); }
 .adm-warn { margin: var(--s2) 0 0; max-width: none; color: var(--warn); font-size: 0.8125rem; }
 .adm-screen > .adm-card:first-child { margin-top: var(--s4); }
+
+/* Pipeline dell'amministrazione: lancio, output in diretta, storico. */
+.adm-job--active { border-color: var(--line-strong); }
+.adm-log {
+  max-height: 22rem; overflow: auto; margin: var(--s3) 0;
+  padding: var(--s3); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--muted);
+  font-family: var(--mono); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.adm-launch { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--s4); }
+.adm-launch__item { display: grid; gap: var(--s2); align-content: start; justify-items: start;
+  padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); }
+.adm-launch__opts { display: grid; gap: var(--s2); margin-top: var(--s4); color: var(--muted); font-size: 0.875rem; }
+.adm-launch__opts label { display: flex; gap: var(--s2); align-items: center; }
+.adm-launch__opts code, .adm-launch__item code { font-family: var(--mono); color: var(--fg); }
+.adm-linkbtn { padding: 0; border: 0; background: none; color: var(--mint); font: inherit; cursor: pointer; }
+.adm-linkbtn:hover { text-decoration: underline; }
+p.adm-card { margin-top: var(--s5); }

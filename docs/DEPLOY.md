@@ -89,6 +89,16 @@ goalmodel close-round       # once every match of the round has a result
 They write `track_record/` and `data/`, which the containers read. Nothing over
 HTTP can write either.
 
+### The pipeline worker (ADR 0007, phase 3)
+
+The admin panel queues `predict_round` and `close_round` in Postgres; a worker
+on the pipeline machine runs them: `python -m backend.worker`. On the owner's
+PC it is a Task Scheduler task (`docs/COMANDI.md`). On this VPS it will be a
+host service, like the pipeline itself and for the same reason: it writes the
+track record, and it needs the `ingest` and `ml` extras the API image
+deliberately leaves out. It opens outbound connections only, so it publishes
+no port. Run `alembic upgrade head` first: the queue is two tables.
+
 ## Known limits, stated rather than discovered later
 
 - **One API worker.** The rate limiter counts in process memory, so two workers

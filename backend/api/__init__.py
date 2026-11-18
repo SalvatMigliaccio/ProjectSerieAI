@@ -397,12 +397,14 @@ def create_app() -> FastAPI:
     #
     # A broken install must stop the process, not quietly widen access.
     from backend.auth import admin as admin_routes
+    from backend.auth import pipeline as pipeline_routes
     from backend.auth import me as me_routes
     from backend.auth import routes as auth_routes
 
     app.include_router(auth_routes.router)
     app.include_router(me_routes.router)
     app.include_router(admin_routes.router)
+    app.include_router(pipeline_routes.router)
 
     _assert_read_only_routes(app)
     return app

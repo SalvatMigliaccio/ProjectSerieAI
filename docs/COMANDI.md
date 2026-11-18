@@ -797,6 +797,71 @@ Get-Content logs\last_run.json
 (0x41303) vuol dire "mai eseguito", `267009` (0x41301) "in esecuzione adesso",
 `0` finito bene. L'esito vero del comando sta in `last_run.json`.
 
+### Il worker: predict e close dalla dashboard (ADR 0007, fase 3)
+
+Dalla dashboard, **Amministrazione → Pipeline**, il superadmin lancia
+`predict_round` e `close_round`. Il pulsante non esegue niente: mette una
+richiesta in coda in Postgres (`pipeline_jobs`). La esegue il **worker**, un
+processo su questa macchina che controlla la coda ogni 30 secondi, lancia lo
+stesso modulo dello scheduler, manda l'output in diretta al pannello e scrive
+`logs\worker_YYYYMMDD.log` e `logs\last_run.json`.
+
+```powershell
+python -m backend.worker                     # gira finche' non lo fermi
+python -m backend.worker --once              # prende al massimo un job ed esce
+python -m backend.worker --accoda predict_round   # mette in coda, come lo scheduler
+```
+
+Il database della coda e' quello di `AI_NAPLES_DATABASE_URL`: **lo stesso del
+sito**, cioe' Neon in produzione, o i pulsanti del sito deployato metterebbero
+in coda richieste che nessun worker legge. Prima migrazione:
+`alembic -c alembic.ini upgrade head` (tabelle `pipeline_jobs`,
+`pipeline_workers`). Il worker legge anche le `GOALMODEL_*` dal `.env`, cosi'
+lanciato a mano non ricade su `parquet` per sbaglio.
+
+**Avvio automatico all'accesso**, una volta sola:
+
+```powershell
+$repo = "D:\Progetti\AI_Naples"
+schtasks /create /tn "AI_Naples worker" /tr "$repo\backend\scripts\worker.cmd" /sc onlogon /f
+Set-ScheduledTask -TaskName "AI_Naples worker" -Settings (New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+  -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew `
+  -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1))
+schtasks /run /tn "AI_Naples worker"
+```
+
+`-ExecutionTimeLimit 0` perche' il worker non finisce mai: con il limite di
+un'ora degli altri task Windows lo ucciderebbe. `-RestartCount` lo riavvia se
+cade; al riavvio segna come falliti i job che aveva lasciato a meta'.
+
+**Poi i task del venerdi' e del martedi' passano dalla coda.** Due processi
+che scrivono gli stessi file insieme (uno pianificato e uno lanciato dal
+pannello) e' il caso che la coda esiste per impedire: in coda girano uno alla
+volta, e il pannello mostra anche quelli pianificati.
+
+```powershell
+foreach ($n in "predict_round 1815", "predict_round 1915", "predict_round 2000", "predict_round sabato") {
+  schtasks /change /tn "AI_Naples $n" /tr "$repo\backend\scripts\accoda.cmd predict_round"
+}
+schtasks /change /tn "AI_Naples close_round" /tr "$repo\backend\scripts\accoda.cmd close_round"
+```
+
+Se c'e' gia' un job attivo, `--accoda` non ne aggiunge un secondo ed esce
+con 0: per un task pianificato e' il comportamento giusto. Resta fuori dalla
+coda `aggiorna_risultati`, che non tocca il registro: i suoi orari stanno gia'
+lontani da quelli di predict e close.
+
+Cosa il pannello **non** puo' fare, di proposito:
+- eseguire un comando fuori lista: `command` e' un nome che il worker traduce
+  in un argv fisso (`pipeline.argv_for`), e le opzioni sono solo `dry_run` e
+  `skip_ingest`;
+- fermare un job che sta girando: lo si ferma sulla macchina. Si puo' solo
+  togliere dalla coda un job in attesa, o segnare fallito un job il cui worker
+  tace da oltre 10 minuti;
+- scrivere una previsione: la scrive il comando, e il registro accetta solo
+  quelle con il calcio d'inizio davanti.
+
 ---
 
 ## 7quinquies. Frontend — React + TypeScript

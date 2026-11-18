@@ -33,6 +33,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -309,3 +310,76 @@ class UserPrediction(Base):
         UniqueConstraint("user_id", "season", "home_team", "away_team", "market",
                          name="uq_user_predictions_pick"),
     )
+
+
+class PipelineJob(Base):
+    """
+    A request to run `predict_round` or `close_round` (ADR 0007, phase 3).
+
+    THE API WRITES THE REQUEST, NEVER THE RESULT. A button in the admin panel
+    inserts a `queued` row; a worker on the pipeline machine claims it, runs
+    the same command the scheduler runs, and writes back how it went. Nothing
+    here can say WHAT the predictions are: the command computes them, and the
+    track record's own rules (append-only, kickoff in the future, server
+    clock) decide whether they are accepted.
+
+    `command` is a name from a closed list, not a command line: the worker maps
+    it to a fixed argv. A string from the database is never executed.
+    """
+
+    __tablename__ = "pipeline_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    command: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Only flags from a fixed list (`dry_run`, `skip_ingest`): validated by the
+    # route on the way in and by the worker on the way out.
+    options: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"))
+    requested_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    started_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    # Moved by the worker while it runs: a `running` job whose heartbeat is
+    # old belongs to a worker that died, and the panel says so.
+    heartbeat_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    worker: Mapped[str | None] = mapped_column(String(128))
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    # The last part of the output, refreshed while it runs. The full log stays
+    # on the worker's disk, in logs/.
+    log_tail: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("command IN ('predict_round', 'close_round')",
+                        name="ck_pipeline_jobs_command"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'done', 'failed', 'cancelled')",
+            name="ck_pipeline_jobs_status"),
+        # ONE ACTIVE JOB AT A TIME, enforced by the database: two clicks, two
+        # tabs or two admins cannot queue predict_round twice, and predict and
+        # close never run together on the same files.
+        # On a constant, not on `status`, which would allow one queued AND one
+        # running row. The migration creates it with the same expression.
+        Index("uq_pipeline_jobs_one_active", text("(true)"),
+              unique=True, postgresql_where=text("status IN ('queued', 'running')")),
+        Index("ix_pipeline_jobs_requested_at", "requested_at"),
+    )
+
+
+class PipelineWorker(Base):
+    """
+    Which worker is alive. One row per worker name, refreshed at every poll.
+
+    The panel reads `last_seen_at` to tell "queued, the worker will take it in
+    a minute" from "queued, and the PC is off": the second is normal while the
+    worker runs on a home computer, and it must be visible, not guessed.
+    """
+
+    __tablename__ = "pipeline_workers"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    host: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    last_seen_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    poll_seconds: Mapped[int] = mapped_column(Integer, nullable=False)

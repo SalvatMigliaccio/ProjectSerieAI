@@ -1,6 +1,6 @@
 # ADR 0007 — Tutto dall'interfaccia: amministrazione, registro in Postgres, pipeline in coda
 
-- **Stato**: accettata. Fasi 1 e 2 implementate il 18 novembre 2026; fase 3 da fare
+- **Stato**: accettata. Fasi 1, 2 e 3 implementate il 18 novembre 2026
 - **Data**: 18 novembre 2026
 - **Contesto**: il progetto è deployato, e il proprietario deve poterlo gestire senza toccare codice né file
 - **Supera**: in parte l'ADR 0002 (punto 1, "`track_record/` resta su file") e la regola di
@@ -74,7 +74,7 @@ Verificato il 18 novembre 2026 sul Postgres locale: 127 previsioni e 9
 giornate importate, catena integra, e `goalmodel rounds --status` dà lo
 stesso risultato dai file e da Postgres (9 giornate chiuse, RPS 0.1894).
 
-### Fase 3 — predict e close dalla dashboard (da fare)
+### Fase 3 — predict e close dalla dashboard (fatta)
 
 Il pulsante **non** lancia il modello dentro l'API. Vercel non potrebbe comunque:
 le funzioni hanno un limite di minuti, non hanno un disco persistente e non
@@ -90,6 +90,30 @@ senza porte esposte). È lo stesso codice nei due posti.
 Perché è sicuro: il web può solo *chiedere* di eseguire un comando che lo
 scheduler eseguirebbe comunque, idempotente, e che rifiuta ogni previsione dopo
 il calcio d'inizio. Non può scrivere il contenuto di una previsione.
+
+Come è fatto (`backend/auth/pipeline.py`, `backend/worker.py`):
+
+- **un job attivo alla volta, imposto dal database**: indice unico parziale su
+  una costante, `WHERE status IN ('queued', 'running')`. Due clic, due schede o
+  predict e close insieme non possono passare;
+- **nessuna stringa del database diventa un comando**: `command` ha un `CHECK`
+  sulla lista, e il worker lo traduce in un argv fisso, con un secondo
+  controllo sulla lista nella riga che finisce in `subprocess`;
+- **il worker apre solo connessioni in uscita** verso Postgres: niente porte,
+  né sul PC dietro il router né sul VPS;
+- **battito cardiaco**: il worker aggiorna `pipeline_workers.last_seen_at` a
+  ogni giro e `heartbeat_at` del job mentre gira. Il pannello dice "worker
+  offline" (PC spento: la richiesta aspetta in coda) e permette di segnare
+  fallito un job il cui worker tace da oltre 10 minuti. Un job vivo non si
+  ferma dal web;
+- **lo scheduler passa dalla stessa coda** (`worker --accoda`), così un task
+  pianificato e un lancio dal pannello non girano mai insieme;
+- **una prova (`--dry-run`) non entra in `last_run.json`**: non ha toccato
+  niente, e `/api/status` la prenderebbe per l'ultimo run vero.
+
+Verificato il 18 novembre 2026 sul Postgres locale: un `close_round` di prova
+messo in coda, preso dal worker vero, 50 secondi, uscita 0, output nel pannello
+e `track_record/` non toccato.
 
 ## Cosa non cambia
 

@@ -30,7 +30,11 @@ def _as(db, email: str, *roles: str) -> TestClient:
     user = _user(db, email)
     for r in roles:
         service.grant_role(db, user, r)
-    db.flush()
+    # COMMIT, not flush. A route that answers with an error rolls the shared
+    # session back, and a role that was only flushed would vanish with it:
+    # the next request would get a 403 for the wrong reason. The commit only
+    # reaches the fixture's savepoint, so the test still leaves nothing behind.
+    db.commit()
     return c
 
 

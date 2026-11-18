@@ -2160,6 +2160,155 @@
           }
         }
       }
+    },
+    "/api/admin/pipeline": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "State",
+        "operationId": "state_api_admin_pipeline_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Job Detail",
+        "operationId": "job_detail_api_admin_pipeline_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Launch",
+        "operationId": "launch_api_admin_pipeline_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaunchPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel",
+        "description": "Withdraw a queued job, or give up on a running one whose worker died.\n\nA LIVE running job is not cancellable from here: the command may be\nhalfway through writing, and killing it from a web page is exactly the\nkind of remote control this design avoids. Stop the worker on its machine.",
+        "operationId": "cancel_api_admin_pipeline_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2860,6 +3009,122 @@
         "title": "Identity",
         "description": "What the frontend needs to draw the interface. Never anything secret."
       },
+      "JobRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "requested_at": {
+            "type": "string",
+            "title": "Requested At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At"
+          },
+          "worker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "log_tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Tail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "command",
+          "options",
+          "status",
+          "requested_at",
+          "stale"
+        ],
+        "title": "JobRow"
+      },
       "LastRun": {
         "properties": {
           "command": {
@@ -2927,6 +3192,25 @@
           "command"
         ],
         "title": "LastRun"
+      },
+      "LaunchPayload": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "LaunchPayload"
       },
       "MLMarket": {
         "properties": {
@@ -4508,6 +4792,50 @@
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
       },
+      "PipelineState": {
+        "properties": {
+          "workers": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerRow"
+            },
+            "type": "array",
+            "title": "Workers"
+          },
+          "any_online": {
+            "type": "boolean",
+            "title": "Any Online"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobRow"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "can_launch": {
+            "type": "boolean",
+            "title": "Can Launch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workers",
+          "any_online",
+          "jobs",
+          "can_launch"
+        ],
+        "title": "PipelineState"
+      },
       "Players": {
         "properties": {
           "season": {
@@ -5933,6 +6261,50 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkerRow": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "title": "Last Seen At"
+          },
+          "poll_seconds": {
+            "type": "integer",
+            "title": "Poll Seconds"
+          },
+          "online": {
+            "type": "boolean",
+            "title": "Online"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "started_at",
+          "last_seen_at",
+          "poll_seconds",
+          "online"
+        ],
+        "title": "WorkerRow"
       },
       "backend__auth__admin__Summary": {
         "properties": {
