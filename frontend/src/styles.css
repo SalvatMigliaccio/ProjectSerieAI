@@ -3720,3 +3720,22 @@ td > .adm-badge:first-child, .adm-user-head__badges > .adm-badge:first-child { m
   color: var(--mint);
 }
 .adm-screen > .adm-tiles:first-child, .adm-screen > .adm-filters:first-child { margin-top: var(--s4); }
+
+/* Metriche dell'amministrazione: gruppi, interruttore di serie, barre
+   orizzontali. Stessi token del resto: --ko solo per gli accessi falliti. */
+.adm-group { margin: var(--s6) 0 0; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+.adm-screen > .adm-group:first-child { margin-top: var(--s4); }
+.adm-switch { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.adm-switch .filter { padding: var(--s1) var(--s3); }
+.adm-bars--ko .adm-bars__bar { background: var(--ko); }
+.adm-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0 var(--s5); }
+.adm-hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.adm-hbars li { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) 3rem; align-items: center; gap: var(--s3); font-size: 0.875rem; }
+.adm-hbars__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.adm-hbars__track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.adm-hbars__bar { display: block; height: 100%; border-radius: 4px; background: var(--mint); }
+.adm-hbars__value { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.adm-next { margin: 0 0 var(--s3); max-width: none; color: var(--muted); font-size: 0.875rem; }
+.adm-next code { font-family: var(--mono); color: var(--fg); }
+.adm-warn { margin: var(--s2) 0 0; max-width: none; color: var(--warn); font-size: 0.8125rem; }
+.adm-screen > .adm-card:first-child { margin-top: var(--s4); }

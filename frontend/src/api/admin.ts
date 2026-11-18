@@ -68,6 +68,34 @@ export interface Summary {
   signups_by_day: { day: string; signups: number }[];
 }
 
+export interface Count {
+  label: string;
+  count: number;
+}
+
+export interface Metrics {
+  active_24h: number;
+  active_7d: number;
+  active_30d: number;
+  signups_30d: number;
+  verified_30d: number;
+  pending_stale: number;
+  failed_sign_ins_24h: number;
+  failed_sign_ins_7d: number;
+  failed_ips_24h: number;
+  locked_now: number;
+  failure_causes_7d: Count[];
+  users_with_favorite: number;
+  favorite_teams: Count[];
+  pick_season: string | null;
+  users_with_picks: number;
+  picks_total: number;
+  picks_7d: number;
+  picks_by_market: Count[];
+  picks_by_matchday: Count[];
+  daily: { day: string; sign_ins: number; failed: number; picks: number }[];
+}
+
 export interface UserQuery {
   q?: string;
   status?: string;
@@ -89,6 +117,7 @@ const id = (value: string) => encodeURIComponent(value);
 
 export const admin = {
   summary: () => getJson<Summary>("/api/admin/summary"),
+  metrics: () => getJson<Metrics>("/api/admin/metrics"),
   users: (params: UserQuery = {}) => getJson<UserPage>(`/api/admin/users${query(params)}`),
   user: (userId: string) => getJson<UserDetail>(`/api/admin/users/${id(userId)}`),
   audit: (limit = 50) => getJson<AdminEvent[]>(`/api/admin/audit?limit=${limit}`),

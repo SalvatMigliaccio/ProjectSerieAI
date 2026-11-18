@@ -159,6 +159,7 @@ Caddy.
    | `AI_NAPLES_PUBLIC_URL` | `https://<your-domain>` — builds the links in emails |
    | `AI_NAPLES_SMTP_*` | a real provider, `starttls` or `ssl` |
    | `AI_NAPLES_SUPERADMIN_EMAILS` | your address: sign up, verify, and you are superadmin |
+   | `GOALMODEL_STORAGE` | `postgres` once the data and the track record are loaded: the API then reads the predictions from the database, not from the deployed files (ADR 0007) |
 
    Not needed: `AI_NAPLES_ROOT` (on Vercel the package uses the working
    directory, see `backend/src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`

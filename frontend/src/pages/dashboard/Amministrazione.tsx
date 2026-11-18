@@ -21,13 +21,14 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { type AdminEvent, type AdminUser, type UserDetail, admin } from "../../api/admin";
+import { type AdminEvent, type AdminUser, type Count, type UserDetail, admin } from "../../api/admin";
+import { api } from "../../api/client";
 import { useAuth } from "../../auth/AuthContext";
 import { FormAlert, FormSuccess, serverError } from "../../components/Form";
 import { ScreenHeader } from "../../components/ScreenHeader";
 import { EmptyState, ErrorState, Loading } from "../../components/States";
 import { useApi } from "../../hooks/useApi";
-import { ago, localDateTime } from "../../lib/format";
+import { ROUND_LABELS, ago, localDateTime } from "../../lib/format";
 
 const RUOLI: Record<string, string> = {
   customer: "Abbonato",
@@ -69,6 +70,8 @@ const SEZIONI = [
     lead: "Le iscrizioni degli ultimi trenta giorni e lo stato degli account." },
   { id: "utenti", path: `${BASE}/utenti`, label: "Utenti",
     lead: "Cerca un account per indirizzo, guardane la storia, sospendilo o riattivalo." },
+  { id: "metriche", path: `${BASE}/metriche`, label: "Metriche",
+    lead: "Chi usa il sito, chi non riesce a entrare, cosa si pronostica. Ultimi 30 giorni." },
   { id: "registro", path: `${BASE}/registro`, label: "Registro",
     lead: "Cosa hanno fatto gli amministratori, e chi lo ha fatto. Non si cancella." },
 ] as const;
@@ -91,6 +94,7 @@ const ICONE: Record<string, ReactNode> = {
     </Icon>
   ),
   registro: <Icon><path d="M7 3h8l4 4v14H7zM15 3v4h4M10 12h6M10 16h6" /></Icon>,
+  metriche: <Icon><path d="M3 12h4l3-8 4 16 3-8h4" /></Icon>,
 };
 
 function StatoBadge({ u }: { u: AdminUser }) {
@@ -134,6 +138,7 @@ function Panoramica() {
 
   return (
     <>
+      <Pipeline />
       <div className="adm-tiles">
         {tiles.map(([label, value, tone]) => (
           <div key={label} className={`adm-tile${tone ? ` adm-tile--${tone}` : ""}`}>
@@ -167,6 +172,196 @@ function Panoramica() {
         </div>
         {ultimi.error && <ErrorState error={ultimi.error} what="Non riesco a leggere gli utenti" />}
         {ultimi.data && <ElencoUtenti rows={ultimi.data.rows} />}
+      </section>
+    </>
+  );
+}
+
+/**
+ * Lo stato della pipeline, da `/api/status`: la giornata, cosa va fatto, come
+ * sono andati gli ultimi lanci. Solo lettura: il pulsante per lanciare
+ * predict e close arriva con la fase 3 (ADR 0007).
+ */
+function Pipeline() {
+  const st = useApi(() => api.status(), []);
+  if (st.error) return <ErrorState error={st.error} what="Non riesco a leggere lo stato della pipeline" />;
+  if (!st.data) return null;
+  const d = st.data;
+  return (
+    <section className="adm-card">
+      <div className="adm-card__head">
+        <h2>Pipeline</h2>
+        {d.current_round !== null && (
+          <span className="adm-faint">
+            Giornata {d.current_round} · {ROUND_LABELS[d.current_round_status ?? ""] ?? d.current_round_status}
+          </span>
+        )}
+      </div>
+      {d.next_action.command && (
+        <p className="adm-next">
+          Prossimo passo: <code>{d.next_action.command}</code>
+          {d.next_action.reason && <> — {d.next_action.reason}</>}
+        </p>
+      )}
+      {d.last_runs.length === 0 ? (
+        <p className="adm-faint">Nessun lancio registrato.</p>
+      ) : (
+        <ul className="adm-events">
+          {d.last_runs.map((r) => (
+            <li key={`${r.command}-${r.started_at}`} className={r.ok === false ? "is-ko" : ""}>
+              <span className="adm-events__dot" aria-hidden="true" />
+              <div>
+                <p className="adm-events__what">
+                  {r.command}
+                  {r.ok === false && <span className="adm-badge adm-badge--ko">uscita {r.exit_code}</span>}
+                </p>
+                <p className="adm-events__meta">
+                  {r.started_at ? `${localDateTime(r.started_at)} (${ago(r.started_at)})` : "mai"}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="adm-events__meta">
+        Snapshot quote:{" "}
+        {d.odds_snapshot.exists
+          ? d.odds_snapshot.empty
+            ? "vuoto (turno non ancora pubblicato)"
+            : `${d.odds_snapshot.rows} partite, scaricato ${ago(d.odds_snapshot.downloaded_at)}`
+          : "assente"}
+      </p>
+      {d.warnings.map((w) => <p key={w} className="adm-warn">{w}</p>)}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Metriche
+
+const CAUSE: Record<string, string> = {
+  wrong_password: "password sbagliata",
+  unknown_email: "email non registrata",
+  locked: "account bloccato",
+  status_pending: "email non verificata",
+  status_suspended: "account sospeso",
+};
+
+function Barre({ rows, etichette = {} }: { rows: Count[]; etichette?: Record<string, string> }) {
+  if (!rows.length) return <EmptyState>Ancora niente.</EmptyState>;
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <ul className="adm-hbars">
+      {rows.map((r) => (
+        <li key={r.label}>
+          <span className="adm-hbars__label" title={etichette[r.label] ?? r.label}>{etichette[r.label] ?? r.label}</span>
+          <span className="adm-hbars__track">
+            <span className="adm-hbars__bar" style={{ width: `${(r.count / max) * 100}%` }} />
+          </span>
+          <span className="adm-hbars__value">{r.count}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+type Serie = "sign_ins" | "failed" | "picks";
+const SERIE: [Serie, string][] = [["sign_ins", "Accessi"], ["failed", "Accessi falliti"], ["picks", "Pronostici"]];
+
+function Tile({ value, label, tone, hint }: { value: ReactNode; label: string; tone?: string; hint?: string }) {
+  return (
+    <div className={`adm-tile${tone ? ` adm-tile--${tone}` : ""}`} title={hint}>
+      <span className="adm-tile__value">{value}</span>
+      <span className="adm-tile__label">{label}</span>
+    </div>
+  );
+}
+
+function pct(a: number, b: number): string {
+  return b ? `${Math.round((a / b) * 100)}%` : "—";
+}
+
+function Metriche() {
+  const m = useApi(() => admin.metrics(), []);
+  const [serie, setSerie] = useState<Serie>("sign_ins");
+  if (m.error) return <ErrorState error={m.error} what="Non riesco a leggere le metriche" />;
+  if (!m.data) return <Loading what="Calcolo le metriche…" />;
+  const d = m.data;
+  const max = Math.max(1, ...d.daily.map((x) => x[serie]));
+  const totale = d.daily.reduce((s, x) => s + x[serie], 0);
+  const nome = SERIE.find(([k]) => k === serie)?.[1] ?? "";
+
+  return (
+    <>
+      <h2 className="adm-group">Attività</h2>
+      <div className="adm-tiles">
+        <Tile value={d.active_24h} label="Attivi in 24 ore" hint="Account con una sessione usata nelle ultime 24 ore" />
+        <Tile value={d.active_7d} label="Attivi in 7 giorni" />
+        <Tile value={d.active_30d} label="Attivi in 30 giorni" />
+        <Tile value={pct(d.verified_30d, d.signups_30d)} label={`Email verificate (${d.verified_30d} su ${d.signups_30d})`}
+          hint="Iscritti negli ultimi 30 giorni che hanno confermato l'indirizzo" />
+        <Tile value={d.pending_stale} label="In attesa da oltre 3 giorni" tone={d.pending_stale ? "idle" : undefined}
+          hint="Probabilmente un indirizzo sbagliato o la mail finita nello spam" />
+      </div>
+
+      <section className="adm-card">
+        <div className="adm-card__head">
+          <h2>{nome}, ultimi 30 giorni · {totale}</h2>
+          <div className="adm-switch" role="group" aria-label="Serie da mostrare">
+            {SERIE.map(([k, l]) => (
+              <button key={k} type="button" className="filter" aria-pressed={serie === k}
+                onClick={() => setSerie(k)}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className={`adm-bars${serie === "failed" ? " adm-bars--ko" : ""}`} role="img"
+          aria-label={`${nome} al giorno negli ultimi 30 giorni, ${totale} in tutto`}>
+          {d.daily.map((x) => (
+            <span key={x.day} className="adm-bars__col"
+              title={`${new Date(x.day).toLocaleDateString("it-IT")}: ${x[serie]}`}>
+              <span className="adm-bars__bar" style={{ height: `${(x[serie] / max) * 100}%` }} />
+            </span>
+          ))}
+        </div>
+        <p className="adm-bars__axis">
+          <span>{new Date(d.daily[0]?.day ?? "").toLocaleDateString("it-IT")}</span>
+          <span>oggi</span>
+        </p>
+      </section>
+
+      <h2 className="adm-group">Sicurezza</h2>
+      <div className="adm-tiles">
+        <Tile value={d.failed_sign_ins_24h} label="Accessi falliti in 24 ore" tone={d.failed_sign_ins_24h ? "ko" : undefined} />
+        <Tile value={d.failed_sign_ins_7d} label="Accessi falliti in 7 giorni" />
+        <Tile value={d.failed_ips_24h} label="IP con accessi falliti (24 ore)"
+          hint="Tanti fallimenti da pochi indirizzi: qualcuno prova password. Da tanti indirizzi: un attacco distribuito" />
+        <Tile value={d.locked_now} label="Account bloccati ora" tone={d.locked_now ? "ko" : undefined} />
+      </div>
+      <section className="adm-card">
+        <h2>Perché falliscono gli accessi (7 giorni)</h2>
+        <Barre rows={d.failure_causes_7d} etichette={CAUSE} />
+      </section>
+
+      <h2 className="adm-group">Pronostici{d.pick_season ? ` · stagione ${d.pick_season}` : ""}</h2>
+      <div className="adm-tiles">
+        <Tile value={d.users_with_picks} label="Utenti che pronosticano" />
+        <Tile value={d.picks_total} label="Pronostici in stagione" />
+        <Tile value={d.picks_7d} label="Pronostici in 7 giorni" />
+        <Tile value={d.users_with_favorite} label="Con una squadra preferita" />
+      </div>
+      <div className="adm-grid2">
+        <section className="adm-card">
+          <h2>Mercati più scelti</h2>
+          <Barre rows={d.picks_by_market} />
+        </section>
+        <section className="adm-card">
+          <h2>Squadre preferite</h2>
+          <Barre rows={d.favorite_teams} />
+        </section>
+      </div>
+      <section className="adm-card">
+        <h2>Pronostici per giornata</h2>
+        <Barre rows={d.picks_by_matchday.map((r) => ({ ...r, label: `Giornata ${r.label}` }))} />
       </section>
     </>
   );
@@ -550,6 +745,7 @@ export function Amministrazione() {
       <div key={`${attiva.id}/${id ?? ""}`} className="adm-screen">
         {attiva.id === "panoramica" && <Panoramica />}
         {attiva.id === "utenti" && (id ? <SchedaUtente userId={id} /> : <Utenti />)}
+        {attiva.id === "metriche" && <Metriche />}
         {attiva.id === "registro" && <Registro />}
       </div>
     </>

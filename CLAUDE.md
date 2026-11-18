@@ -1463,10 +1463,12 @@ lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 potersi fare dall'interfaccia. Fase 1 fatta: sezione Amministrazione della dashboard (`/dashboard/admin`) con
 `/api/admin`, che e' il terzo prefisso scrivibile, scrive solo account e ruoli e
 legge i permessi dal DB a ogni chiamata. Fase 2: il registro passa in Postgres,
-con append-only, timestamp e controllo sul fischio imposti dal database. Fase 3:
+con append-only, timestamp e controllo sul fischio imposti dal database
+(FATTA: `goalmodel/registro.py`, segue `GOALMODEL_STORAGE`, comando
+`goalmodel registro --importa | --verifica`; in `parquet` non cambia niente). Fase 3:
 predict e close si lanciano dalla dashboard accodando un job per un worker (PC
-ora, VPS poi), mai eseguendo il modello nell'API. Finche' le fasi 2 e 3 non
-sono fatte, sotto vale quanto scritto.
+ora, VPS poi), mai eseguendo il modello nell'API. Finche' la produzione resta
+in `parquet` e la fase 3 non e' fatta, sotto vale quanto scritto.
 
 **Le uniche cose che scrivono nel registro sono `predict_round` e
 `close_round`, lanciati sulla macchina.** Nessuna richiesta HTTP, mai. L'API in

@@ -1693,6 +1693,27 @@
         }
       }
     },
+    "/api/admin/metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Metrics",
+        "operationId": "metrics_api_admin_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metrics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/users": {
       "get": {
         "tags": [
@@ -2323,6 +2344,24 @@
         ],
         "title": "ChangePayload"
       },
+      "Count": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "Count"
+      },
       "Credentials": {
         "properties": {
           "email": {
@@ -2361,6 +2400,34 @@
           "signups"
         ],
         "title": "DayCount"
+      },
+      "DaySeries": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day"
+          },
+          "sign_ins": {
+            "type": "integer",
+            "title": "Sign Ins"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "sign_ins",
+          "failed",
+          "picks"
+        ],
+        "title": "DaySeries"
       },
       "DeletePayload": {
         "properties": {
@@ -3828,6 +3895,137 @@
         },
         "type": "object",
         "title": "MatchPoint"
+      },
+      "Metrics": {
+        "properties": {
+          "active_24h": {
+            "type": "integer",
+            "title": "Active 24H"
+          },
+          "active_7d": {
+            "type": "integer",
+            "title": "Active 7D"
+          },
+          "active_30d": {
+            "type": "integer",
+            "title": "Active 30D"
+          },
+          "signups_30d": {
+            "type": "integer",
+            "title": "Signups 30D"
+          },
+          "verified_30d": {
+            "type": "integer",
+            "title": "Verified 30D"
+          },
+          "pending_stale": {
+            "type": "integer",
+            "title": "Pending Stale"
+          },
+          "failed_sign_ins_24h": {
+            "type": "integer",
+            "title": "Failed Sign Ins 24H"
+          },
+          "failed_sign_ins_7d": {
+            "type": "integer",
+            "title": "Failed Sign Ins 7D"
+          },
+          "failed_ips_24h": {
+            "type": "integer",
+            "title": "Failed Ips 24H"
+          },
+          "locked_now": {
+            "type": "integer",
+            "title": "Locked Now"
+          },
+          "failure_causes_7d": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Failure Causes 7D"
+          },
+          "users_with_favorite": {
+            "type": "integer",
+            "title": "Users With Favorite"
+          },
+          "favorite_teams": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Favorite Teams"
+          },
+          "pick_season": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Season"
+          },
+          "users_with_picks": {
+            "type": "integer",
+            "title": "Users With Picks"
+          },
+          "picks_total": {
+            "type": "integer",
+            "title": "Picks Total"
+          },
+          "picks_7d": {
+            "type": "integer",
+            "title": "Picks 7D"
+          },
+          "picks_by_market": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Picks By Market"
+          },
+          "picks_by_matchday": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Picks By Matchday"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/DaySeries"
+            },
+            "type": "array",
+            "title": "Daily"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active_24h",
+          "active_7d",
+          "active_30d",
+          "signups_30d",
+          "verified_30d",
+          "pending_stale",
+          "failed_sign_ins_24h",
+          "failed_sign_ins_7d",
+          "failed_ips_24h",
+          "locked_now",
+          "failure_causes_7d",
+          "users_with_favorite",
+          "favorite_teams",
+          "pick_season",
+          "users_with_picks",
+          "picks_total",
+          "picks_7d",
+          "picks_by_market",
+          "picks_by_matchday",
+          "daily"
+        ],
+        "title": "Metrics",
+        "description": "How the site is used, beyond the head-count of `summary`.\n\nEverything is read from rows that already exist — sessions, audit events,\npicks — and nothing is stored to compute it. A metric that needs a new\ntable to be counted is a decision, not a query."
       },
       "MyPredictions": {
         "properties": {

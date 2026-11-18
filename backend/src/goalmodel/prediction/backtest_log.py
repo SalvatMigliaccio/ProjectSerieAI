@@ -56,13 +56,19 @@ PROB_COLS = ["p_home", "p_draw", "p_away"]
 
 
 def load_log(path=PREDICTIONS_LOG, first_only: bool = True) -> pd.DataFrame:
-    """Il registro, con una riga per (partita, modello) se `first_only`."""
-    if not path.exists():
+    """
+    Il registro, con una riga per (partita, modello) se `first_only`.
+
+    Dal file o da Postgres secondo `GOALMODEL_STORAGE` (`registro.leggi`).
+    """
+    from .. import registro
+
+    if not registro.esiste(path):
         raise FileNotFoundError(
             f"{path} non esiste. Nessuna previsione registrata: lancia prima "
             "goalmodel predict --next"
         )
-    df = pd.read_csv(path)
+    df = registro.leggi(path)
     mancanti = [c for c in LOG_COLUMNS if c not in df.columns]
     if mancanti:
         raise ValueError(f"registro malformato, colonne mancanti: {mancanti}")

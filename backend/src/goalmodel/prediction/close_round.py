@@ -48,7 +48,7 @@ import sys
 import numpy as np
 import pandas as pd
 
-from .. import config
+from .. import config, registro
 from ..reporting import report as report_mod
 from ..reporting.report import quando
 from . import predict as predict_mod
@@ -136,33 +136,13 @@ def aggiorna_riepilogo() -> pd.DataFrame:
     che i due divergano — che e' l'unico modo in cui un cumulativo scritto per
     aggiunte successive puo' sbagliare senza che nessuno se ne accorga.
     """
-    files = sorted(rounds.ROUNDS.glob("round_*.csv"))
-    if not files:
-        return pd.DataFrame()
-
-    righe = []
-    for f in files:
-        d = pd.read_csv(f)
-        valide = d[d["valida"].astype(bool)] if "valida" in d.columns else d
-        righe.append({
-            "season": str(d["season"].iloc[0]),
-            "matchday": int(d["matchday"].iloc[0]),
-            "n_previsioni": len(d),
-            "n_valide": len(valide),
-            "rps": float(valide["rps"].mean()) if len(valide) else np.nan,
-            "rps_mercato": float(valide["rps_mercato"].mean()) if len(valide) else np.nan,
-            "accuratezza": float(valide["azzeccato"].mean()) if len(valide) else np.nan,
-            "file": f.name,
-        })
-
-    tab = pd.DataFrame(righe).sort_values(["season", "matchday"]).reset_index(drop=True)
-    # Cumulativo pesato sulle partite, non media di medie: una giornata con
-    # tre previsioni valide non deve pesare quanto una da dieci.
-    tab["n_cumulate"] = tab["n_valide"].cumsum()
-    tab["rps_cumulativo"] = (
-        (tab["rps"] * tab["n_valide"]).cumsum() / tab["n_valide"].cumsum()
-    )
-    tab.to_csv(rounds.RIEPILOGO, index=False)
+    # Il calcolo sta in `registro.calcola_riepilogo`: serve anche a chi legge
+    # dal database, dove il riepilogo non e' un file ma una vista.
+    tab = registro.calcola_riepilogo(registro.leggi_giornate(rounds.ROUNDS))
+    if tab.empty:
+        return tab
+    if registro.su_file():
+        tab.to_csv(rounds.RIEPILOGO, index=False)
     return tab
 
 
@@ -248,7 +228,7 @@ def run(matchday: int | None = None, dry_run: bool = False,
             return 0
 
     percorso = rounds.file_giornata(season, matchday)
-    if percorso.exists():
+    if registro.giornata_chiusa(season, matchday, rounds.ROUNDS):
         print(f"\nLa giornata {matchday} e' gia' chiusa: {percorso.name} esiste.")
         print("Non la riscrivo: l'archivio di una giornata si scrive una volta sola.")
         rounds.riepilogo_due_righe(
@@ -291,9 +271,9 @@ def run(matchday: int | None = None, dry_run: bool = False,
         return 0
 
     if not dry_run:
-        rounds.ROUNDS.mkdir(parents=True, exist_ok=True)
-        d.to_csv(percorso, index=False)
-        log.info("giornata archiviata in %s", percorso)
+        # File, Postgres o entrambi secondo GOALMODEL_STORAGE (`registro`).
+        registro.archivia_giornata(d, season, matchday, rounds.ROUNDS)
+        log.info("giornata archiviata: %s (%s)", percorso.name, registro.modalita())
         riepilogo = aggiorna_riepilogo()
     else:
         log.info("dry-run: la giornata NON e' stata archiviata")

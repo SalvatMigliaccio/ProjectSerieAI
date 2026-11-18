@@ -39,6 +39,7 @@ const TITOLI: Record<string, string> = {
   "/dashboard/admin": "Amministrazione · MatchPoint",
   "/dashboard/admin/utenti": "Utenti · Amministrazione · MatchPoint",
   "/dashboard/admin/registro": "Registro · Amministrazione · MatchPoint",
+  "/dashboard/admin/metriche": "Metriche · Amministrazione · MatchPoint",
 };
 
 /**

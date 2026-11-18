@@ -170,7 +170,10 @@ def cambiamenti(preds: pd.DataFrame, model_version: str,
         return pd.DataFrame()
 
     try:
-        storico = pd.read_csv(predict_mod.PREDICTIONS_LOG)
+        from .. import registro
+        if not registro.esiste(predict_mod.PREDICTIONS_LOG):
+            raise FileNotFoundError(predict_mod.PREDICTIONS_LOG)
+        storico = registro.leggi(predict_mod.PREDICTIONS_LOG)
     except FileNotFoundError:
         diag.avvisa("registro assente: nessun confronto con le previsioni precedenti")
         return pd.DataFrame()

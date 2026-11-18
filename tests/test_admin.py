@@ -181,3 +181,20 @@ def test_the_audit_list_names_who_did_what(staff, customer, db) -> None:
     assert top["kind"] == "suspended"
     assert top["user_email"] == "customer@example.com"
     assert top["actor_email"] == "staff@example.com"
+
+
+# --- metrics ------------------------------------------------------------------
+
+def test_metrics_count_failures_and_activity(staff, customer, db) -> None:
+    TestClient(app).post("/api/auth/sign-in",
+                         json={"email": "customer@example.com", "password": "wrong password!"})
+    m = staff.get("/api/admin/metrics").json()
+    assert m["active_24h"] >= 2, "staff and customer both hold a fresh session"
+    assert m["failed_sign_ins_24h"] >= 1
+    assert any(c["label"] == "wrong_password" for c in m["failure_causes_7d"])
+    assert len(m["daily"]) == 30 and m["daily"][-1]["failed"] >= 1
+    assert m["verified_30d"] <= m["signups_30d"]
+
+
+def test_metrics_are_staff_only(customer) -> None:
+    assert customer.get("/api/admin/metrics").status_code == 403

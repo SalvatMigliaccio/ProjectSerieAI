@@ -892,7 +892,40 @@ non esce a 0.
 
 Le tabelle dei dati NON sono in Alembic e non vanno create a mano: le crea la
 prima scrittura, insieme agli schemi `raw`, `interim`, `processed` e al
-catalogo `goalmodel.catalogo`. Il registro delle previsioni resta su file.
+catalogo `goalmodel.catalogo`.
+
+### Il track record in Postgres (ADR 0007, fase 2)
+
+La stessa `GOALMODEL_STORAGE` decide anche dove stanno il registro delle
+previsioni e l'archivio delle giornate chiuse (`goalmodel/registro.py`): in
+`parquet` i CSV di `track_record/`, in `doppio` CSV e database, in `postgres`
+solo il database, schema `track_record`, tabelle `previsioni` e `giornate`.
+
+```bash
+goalmodel registro --importa    # i CSV di track_record/ -> Postgres, idempotente
+goalmodel registro --verifica   # catena delle impronte, e CSV contro Postgres
+goalmodel registro --stato      # quante previsioni e giornate ci sono
+```
+
+Cosa impone il database, anche al proprietario delle tabelle e anche contro
+un bug dell'applicazione: niente `UPDATE`, `DELETE`, `TRUNCATE`; l'ora della
+previsione e' quella del server; una previsione con il calcio d'inizio
+passato o sconosciuto e' rifiutata; ogni riga porta l'impronta della
+precedente, e `--verifica` trova una riga cambiata o tolta da chi ha spento i
+trigger.
+
+**L'import si fa una volta e poi si chiude da solo**: le righe storiche
+entrano con `origine = 'import'` solo finche' non esiste una previsione
+`live`. Ordine del passaggio:
+
+1. `goalmodel registro --importa` contro il database di produzione
+   (`AI_NAPLES_DATABASE_URL` di Neon), finche' esce con `verifica: ... coincidono`;
+2. una o due giornate in `doppio`, con `goalmodel registro --verifica` dopo
+   ognuna;
+3. `GOALMODEL_STORAGE=postgres` sulla macchina della pipeline **e** su Vercel.
+
+I CSV restano in git come archivio congelato dello storico. In `postgres` non
+si scrivono piu', e non vanno piu' committati dopo le giornate.
 
 ---
 

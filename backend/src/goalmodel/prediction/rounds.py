@@ -44,7 +44,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .. import config, data
+from .. import config, data, registro
 from . import predict as predict_mod
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)-7s %(message)s")
@@ -333,7 +333,8 @@ def stato_giornate(
 
     righe = []
     for matchday, g in sched.groupby("matchday", sort=True):
-        chiusa = file_giornata(season, matchday).exists()
+        # Il file, o le righe dell'archivio in Postgres (`registro`).
+        chiusa = registro.giornata_chiusa(season, matchday, ROUNDS)
         n, n_gio = len(g), int(g["giocata"].sum())
         n_pre, n_quo = int(g["predetta"].sum()), int(g["ha_quote"].sum())
         # Predicibili: hanno le quote, non sono ancora in registro e il

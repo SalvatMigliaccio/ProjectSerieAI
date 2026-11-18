@@ -40,7 +40,7 @@ from sqlalchemy.orm import Session
 
 from . import service
 from .deps import CurrentUser, Db, client_ip
-from .models import AuthEvent, Role, User, UserRole, UserSession, now
+from .models import AuthEvent, Role, User, UserPrediction, UserRole, UserSession, now
 from .ratelimit import admin_action_limiter
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -286,6 +286,144 @@ def summary(actor: Staff, db: Db) -> Summary:
         new_24h=since(dt.timedelta(hours=24)), new_7d=since(dt.timedelta(days=7)),
         new_30d=since(dt.timedelta(days=30)), admins=admins, active_sessions=live,
         signups_by_day=series)
+
+
+class Count(BaseModel):
+    label: str
+    count: int
+
+
+class DaySeries(BaseModel):
+    day: str
+    sign_ins: int
+    failed: int
+    picks: int
+
+
+class Metrics(BaseModel):
+    """
+    How the site is used, beyond the head-count of `summary`.
+
+    Everything is read from rows that already exist — sessions, audit events,
+    picks — and nothing is stored to compute it. A metric that needs a new
+    table to be counted is a decision, not a query.
+    """
+
+    # Distinct accounts with a session seen in the window: the honest
+    # "active users", since a session's `last_seen_at` moves at each refresh.
+    active_24h: int
+    active_7d: int
+    active_30d: int
+    # The last 30 days of signups: how many verified the address.
+    signups_30d: int
+    verified_30d: int
+    # Pending for over three days: probably a wrong address or a spam filter.
+    pending_stale: int
+    failed_sign_ins_24h: int
+    failed_sign_ins_7d: int
+    failed_ips_24h: int
+    locked_now: int
+    failure_causes_7d: list[Count]
+    users_with_favorite: int
+    favorite_teams: list[Count]
+    pick_season: str | None
+    users_with_picks: int
+    picks_total: int
+    picks_7d: int
+    picks_by_market: list[Count]
+    picks_by_matchday: list[Count]
+    daily: list[DaySeries]
+
+
+@router.get("/metrics")
+def metrics(actor: Staff, db: Db) -> Metrics:
+    at = now()
+
+    def active(delta: dt.timedelta) -> int:
+        return db.scalar(select(func.count(func.distinct(UserSession.user_id)))
+                         .where(UserSession.last_seen_at >= at - delta)) or 0
+
+    def failed(delta: dt.timedelta, what=AuthEvent.id) -> int:
+        return db.scalar(select(func.count(func.distinct(what))).where(
+            AuthEvent.kind == "sign_in", AuthEvent.outcome == "ko",
+            AuthEvent.at >= at - delta)) or 0
+
+    month = at - dt.timedelta(days=30)
+    signups_30d = db.scalar(select(func.count()).select_from(User)
+                            .where(User.created_at >= month)) or 0
+    verified_30d = db.scalar(select(func.count()).select_from(User).where(
+        User.created_at >= month, User.email_verified_at.is_not(None))) or 0
+    pending_stale = db.scalar(select(func.count()).select_from(User).where(
+        User.status == "pending", User.created_at < at - dt.timedelta(days=3))) or 0
+    locked = db.scalar(select(func.count()).select_from(User)
+                       .where(User.locked_until > at)) or 0
+
+    cause = AuthEvent.details["cause"].astext
+    causes = db.execute(
+        select(func.coalesce(cause, "unknown"), func.count())
+        .where(AuthEvent.kind == "sign_in", AuthEvent.outcome == "ko",
+               AuthEvent.at >= at - dt.timedelta(days=7))
+        .group_by(cause).order_by(func.count().desc())).all()
+
+    favorites = db.execute(
+        select(User.favorite_team, func.count()).where(User.favorite_team.is_not(None))
+        .group_by(User.favorite_team).order_by(func.count().desc()).limit(10)).all()
+    with_favorite = db.scalar(select(func.count()).select_from(User)
+                              .where(User.favorite_team.is_not(None))) or 0
+
+    # The picks of the latest season that has any: last season's totals next
+    # to this season's would be two different products added together.
+    season = db.scalar(select(func.max(UserPrediction.season)))
+    in_season = UserPrediction.season == season
+    users_with_picks = db.scalar(select(func.count(func.distinct(UserPrediction.user_id)))
+                                 .where(in_season)) or 0
+    picks_total = db.scalar(select(func.count()).select_from(UserPrediction).where(in_season)) or 0
+    picks_7d = db.scalar(select(func.count()).select_from(UserPrediction).where(
+        UserPrediction.created_at >= at - dt.timedelta(days=7))) or 0
+    by_market = db.execute(
+        select(UserPrediction.market, func.count()).where(in_season)
+        .group_by(UserPrediction.market).order_by(func.count().desc()).limit(10)).all()
+    by_matchday = db.execute(
+        select(UserPrediction.matchday, func.count()).where(in_season)
+        .group_by(UserPrediction.matchday).order_by(UserPrediction.matchday)).all()
+
+    # Thirty days, empty ones included, as in `summary`.
+    start = (at - dt.timedelta(days=29)).date()
+    since = dt.datetime.combine(start, dt.time(), tzinfo=dt.UTC)
+    ev_day = func.date_trunc("day", AuthEvent.at)
+    events = {}
+    for d, outcome, n in db.execute(
+            select(ev_day, AuthEvent.outcome, func.count())
+            .where(AuthEvent.kind == "sign_in", AuthEvent.at >= since)
+            .group_by(ev_day, AuthEvent.outcome)).all():
+        events[(d.date(), outcome)] = n
+    pk_day = func.date_trunc("day", UserPrediction.created_at)
+    picks = {d.date(): n for d, n in db.execute(
+        select(pk_day, func.count()).where(UserPrediction.created_at >= since)
+        .group_by(pk_day)).all()}
+    daily = []
+    for i in range(30):
+        day = start + dt.timedelta(days=i)
+        daily.append(DaySeries(day=day.isoformat(), sign_ins=events.get((day, "ok"), 0),
+                               failed=events.get((day, "ko"), 0), picks=picks.get(day, 0)))
+
+    return Metrics(
+        active_24h=active(dt.timedelta(hours=24)), active_7d=active(dt.timedelta(days=7)),
+        active_30d=active(dt.timedelta(days=30)),
+        signups_30d=signups_30d, verified_30d=verified_30d, pending_stale=pending_stale,
+        failed_sign_ins_24h=failed(dt.timedelta(hours=24)),
+        failed_sign_ins_7d=failed(dt.timedelta(days=7)),
+        failed_ips_24h=failed(dt.timedelta(hours=24), AuthEvent.ip),
+        locked_now=locked,
+        failure_causes_7d=[Count(label=c, count=n) for c, n in causes],
+        users_with_favorite=with_favorite,
+        favorite_teams=[Count(label=t, count=n) for t, n in favorites],
+        pick_season=season, users_with_picks=users_with_picks, picks_total=picks_total,
+        picks_7d=picks_7d,
+        picks_by_market=[Count(label=m, count=n) for m, n in by_market],
+        picks_by_matchday=[Count(label=str(m), count=n) for m, n in by_matchday],
+        daily=daily,
+    )
 
 
 @router.get("/users")
