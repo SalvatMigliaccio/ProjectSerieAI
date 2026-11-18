@@ -1052,7 +1052,7 @@ If port 5432 is already taken, set `POSTGRES_PORT` in your `.env` and update
 Public signup only ever grants `customer`. `superadmin` comes from two places
 and never from a click: the variable `AI_NAPLES_SUPERADMIN_EMAILS` (the listed
 addresses get the role at sign-in or verification, **only once verified**), or
-the commands below. The admin panel (`/#/admin`) can grant and revoke `admin`
+the commands below. The admin panel (`/#/dashboard/admin`, in the dashboard sidebar) can grant and revoke `admin`
 and nothing else; `tests/test_admin.py` checks that `superadmin` is refused.
 Removing an address from the variable does not revoke the role: use `revoke`.
 

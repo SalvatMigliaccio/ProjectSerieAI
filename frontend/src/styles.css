@@ -3214,7 +3214,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     background: rgba(var(--surface-rgb), 0.96);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
-  .dash-nav ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  /* auto-flow e non 5 colonne fisse: agli amministratori ne compare una sesta. */
+  .dash-nav ul { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .dash-nav__link {
     flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 0;
     font-size: 0.6875rem;
@@ -3705,3 +3706,17 @@ td > .adm-badge:first-child, .adm-user-head__badges > .adm-badge:first-child { m
 @media (max-width: 860px) {
   .adm-table td:nth-child(4), .adm-table th:nth-child(4) { display: none; }
 }
+
+/* Amministrazione dentro la dashboard: la voce in fondo, separata da una
+   linea, e le sezioni come i filtri della giornata (NavLink, quindi .active
+   invece di aria-pressed). */
+.dash-nav__sep { margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line); }
+@media (max-width: 1023px) { .dash-nav__sep { margin-top: 0; padding-top: 0; border-top: 0; } }
+.adm-tabs { margin-top: var(--s5); }
+.adm-tabs .filter { text-decoration: none; }
+.adm-tabs .filter.active {
+  border-color: var(--line-strong);
+  background: var(--mint-wash);
+  color: var(--mint);
+}
+.adm-screen > .adm-tiles:first-child, .adm-screen > .adm-filters:first-child { margin-top: var(--s4); }

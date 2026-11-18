@@ -1460,7 +1460,7 @@ lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 ### Il track record si scrive solo da processi locali — regola, non preferenza
 
 **IN REVISIONE DAL 18 NOVEMBRE 2026 (ADR 0007).** Dopo il deploy tutto deve
-potersi fare dall'interfaccia. Fase 1 fatta: pannello `/admin` con
+potersi fare dall'interfaccia. Fase 1 fatta: sezione Amministrazione della dashboard (`/dashboard/admin`) con
 `/api/admin`, che e' il terzo prefisso scrivibile, scrive solo account e ruoli e
 legge i permessi dal DB a ogni chiamata. Fase 2: il registro passa in Postgres,
 con append-only, timestamp e controllo sul fischio imposti dal database. Fase 3:

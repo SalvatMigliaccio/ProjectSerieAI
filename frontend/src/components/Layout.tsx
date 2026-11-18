@@ -202,7 +202,7 @@ function SkipLink() {
  * reload, and it reads as the account dropping out by itself.
  */
 function AccountLink() {
-  const { phase, user, can } = useAuth();
+  const { phase, user } = useAuth();
 
   if (phase === "checking") return null;
   if (phase === "anonymous") return <Link to="/sign-in">Accedi</Link>;
@@ -211,19 +211,10 @@ function AccountLink() {
   // che disconnette al primo clic e' un'azione distruttiva senza conferma nel
   // posto dove si clicca per sbaglio; e non lasciava nessun punto in cui
   // cambiare la password o vedere le sessioni aperte.
-  // "Admin" solo a chi lo puo' usare: per tutti gli altri sarebbe un link a
-  // una pagina che dice "accesso riservato". Il server decide comunque.
   return (
-    <>
-      {can("users:manage") && (
-        <NavLink className="nav__account" to="/admin">
-          Admin
-        </NavLink>
-      )}
-      <NavLink className="nav__account" to="/account" title={user?.email}>
-        Account
-      </NavLink>
-    </>
+    <NavLink className="nav__account" to="/account" title={user?.email}>
+      Account
+    </NavLink>
   );
 }
 

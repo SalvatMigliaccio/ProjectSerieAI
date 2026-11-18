@@ -11,13 +11,13 @@ import {
   SignUp,
   VerifyEmail,
 } from "./pages/Account";
+import { Amministrazione } from "./pages/dashboard/Amministrazione";
 import { Giornata } from "./pages/dashboard/Giornata";
 import { Modello } from "./pages/dashboard/Modello";
 import { Pronostici } from "./pages/dashboard/Pronostici";
 import { DashboardShell } from "./pages/dashboard/Shell";
 import { Squadra } from "./pages/dashboard/Squadra";
 import { Stagione } from "./pages/dashboard/Stagione";
-import { Admin } from "./pages/Admin";
 import { Hero } from "./pages/Hero";
 import { Profile } from "./pages/Profile";
 
@@ -36,9 +36,9 @@ const TITOLI: Record<string, string> = {
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
-  "/admin": "Amministrazione · MatchPoint",
-  "/admin/utenti": "Utenti · Amministrazione · MatchPoint",
-  "/admin/registro": "Registro · Amministrazione · MatchPoint",
+  "/dashboard/admin": "Amministrazione · MatchPoint",
+  "/dashboard/admin/utenti": "Utenti · Amministrazione · MatchPoint",
+  "/dashboard/admin/registro": "Registro · Amministrazione · MatchPoint",
 };
 
 /**
@@ -97,10 +97,8 @@ export function App() {
           <Route path="/" element={<Hero />} />
 
           <Route path="/account/:sezione?" element={<Profile />} />
-          {/* L'amministrazione controlla da se' accesso e permesso, come
-              l'account: chi non e' amministratore vede perche', non un
-              rimbalzo. Il server rifiuta comunque ogni chiamata. */}
-          <Route path="/admin/:sezione?/:id?" element={<Admin />} />
+          {/* L'amministrazione sta nella dashboard; il vecchio indirizzo ci porta. */}
+          <Route path="/admin/*" element={<Navigate to="/dashboard/admin" replace />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -125,6 +123,9 @@ export function App() {
             <Route path="squadra" element={<Squadra />} />
             <Route path="stagione" element={<Stagione />} />
             <Route path="modello" element={<Modello />} />
+            {/* Solo per chi ha `users:manage`: la schermata lo controlla da
+                se', e il server rifiuta comunque ogni chiamata. */}
+            <Route path="admin/:sezione?/:id?" element={<Amministrazione />} />
           </Route>
           {/* Il primo indirizzo dei pronostici, prima che entrassero nella
               dashboard: un link salvato continua a portare nel posto giusto. */}

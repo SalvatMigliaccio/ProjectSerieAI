@@ -1,9 +1,10 @@
 /**
  * L'amministrazione: i nuovi iscritti, la ricerca, la sospensione, i ruoli.
  *
- * TRE SEZIONI CON UN INDIRIZZO CIASCUNA, come l'account: `/admin`,
- * `/admin/utenti` (con `/admin/utenti/<id>` per la scheda di una persona) e
- * `/admin/registro`. Il link alla scheda di un utente e' quello che si manda
+ * UNA SCHERMATA DELLA DASHBOARD, con tre sezioni e un indirizzo ciascuna:
+ * `/dashboard/admin`, `/dashboard/admin/utenti` (con `/utenti/<id>` per la
+ * scheda di una persona) e `/dashboard/admin/registro`. La voce nella barra
+ * laterale compare solo a chi ha `users:manage`. Il link alla scheda di un utente e' quello che si manda
  * a un altro amministratore, e deve aprire quella scheda.
  *
  * QUESTA PAGINA NON PROTEGGE NIENTE. Il server rifiuta ogni chiamata a chi non
@@ -20,13 +21,13 @@
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, NavLink, Navigate, useNavigate, useParams } from "react-router-dom";
 
-import { type AdminEvent, type AdminUser, type UserDetail, admin } from "../api/admin";
-import { useAuth } from "../auth/AuthContext";
-import { FormAlert, FormSuccess, serverError } from "../components/Form";
-import { Colophon, Masthead } from "../components/Layout";
-import { EmptyState, ErrorState, Loading } from "../components/States";
-import { useApi } from "../hooks/useApi";
-import { ago, localDateTime } from "../lib/format";
+import { type AdminEvent, type AdminUser, type UserDetail, admin } from "../../api/admin";
+import { useAuth } from "../../auth/AuthContext";
+import { FormAlert, FormSuccess, serverError } from "../../components/Form";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { EmptyState, ErrorState, Loading } from "../../components/States";
+import { useApi } from "../../hooks/useApi";
+import { ago, localDateTime } from "../../lib/format";
 
 const RUOLI: Record<string, string> = {
   customer: "Abbonato",
@@ -60,12 +61,15 @@ const EVENTI: Record<string, string> = {
   account_deleted: "Account eliminato",
 };
 
+/** Dentro la dashboard, dal 18 novembre 2026: una schermata come le altre. */
+export const BASE = "/dashboard/admin";
+
 const SEZIONI = [
-  { id: "panoramica", path: "/admin", label: "Panoramica",
+  { id: "panoramica", path: BASE, label: "Panoramica",
     lead: "Le iscrizioni degli ultimi trenta giorni e lo stato degli account." },
-  { id: "utenti", path: "/admin/utenti", label: "Utenti",
+  { id: "utenti", path: `${BASE}/utenti`, label: "Utenti",
     lead: "Cerca un account per indirizzo, guardane la storia, sospendilo o riattivalo." },
-  { id: "registro", path: "/admin/registro", label: "Registro",
+  { id: "registro", path: `${BASE}/registro`, label: "Registro",
     lead: "Cosa hanno fatto gli amministratori, e chi lo ha fatto. Non si cancella." },
 ] as const;
 
@@ -159,7 +163,7 @@ function Panoramica() {
       <section className="adm-card">
         <div className="adm-card__head">
           <h2>Ultimi iscritti</h2>
-          <Link to="/admin/utenti" className="adm-link">Tutti gli utenti →</Link>
+          <Link to={`${BASE}/utenti`} className="adm-link">Tutti gli utenti →</Link>
         </div>
         {ultimi.error && <ErrorState error={ultimi.error} what="Non riesco a leggere gli utenti" />}
         {ultimi.data && <ElencoUtenti rows={ultimi.data.rows} />}
@@ -188,11 +192,11 @@ function ElencoUtenti({ rows }: { rows: AdminUser[] }) {
         </thead>
         <tbody>
           {rows.map((u) => (
-            <tr key={u.id} onClick={() => navigate(`/admin/utenti/${u.id}`)}>
+            <tr key={u.id} onClick={() => navigate(`${BASE}/utenti/${u.id}`)}>
               <td>
                 {/* Il link e' il bersaglio vero, per tastiera e screen reader;
                     il clic sulla riga e' solo una comodita' per il mouse. */}
-                <Link to={`/admin/utenti/${u.id}`} onClick={(e) => e.stopPropagation()}>{u.email}</Link>
+                <Link to={`${BASE}/utenti/${u.id}`} onClick={(e) => e.stopPropagation()}>{u.email}</Link>
                 <RuoliBadge roles={u.roles} />
               </td>
               <td><StatoBadge u={u} /></td>
@@ -372,7 +376,7 @@ function SchedaUtente({ userId }: { userId: string }) {
 
   return (
     <>
-      <Link to="/admin/utenti" className="adm-link adm-back">← Tutti gli utenti</Link>
+      <Link to={`${BASE}/utenti`} className="adm-link adm-back">← Tutti gli utenti</Link>
 
       <section className="adm-card">
         <div className="adm-user-head">
@@ -506,82 +510,48 @@ function Registro() {
 
 // ---------------------------------------------------------------------------
 
-function Fermo({ titolo, testo, azione }: { titolo: string; testo: string; azione?: ReactNode }) {
-  return (
-    <>
-      <Masthead current="hero" />
-      <main id="contenuto" className="account" tabIndex={-1}>
-        <section className="account-card">
-          <h1>{titolo}</h1>
-          <p className="lead">{testo}</p>
-          {azione}
-        </section>
-      </main>
-      <Colophon modelVersion={null} />
-    </>
-  );
-}
-
-export function Admin() {
-  const { phase, user, can } = useAuth();
+export function Amministrazione() {
+  const { user, can } = useAuth();
   const { sezione: param, id } = useParams();
 
-  if (phase === "checking") return <Fermo titolo="Amministrazione" testo="Controllo la sessione…" />;
-  if (phase !== "authenticated" || !user) {
+  // La rotta sta dentro RequireAuth: qui manca solo il permesso. Chi non lo ha
+  // vede perche', non un rimbalzo; il server rifiuta comunque ogni chiamata.
+  if (!user || !can("users:manage")) {
     return (
-      <Fermo titolo="Amministrazione" testo="Per vedere questa pagina serve entrare."
-        azione={<Link className="btn btn--block" to="/sign-in" state={{ from: "/admin" }}>Accedi</Link>} />
-    );
-  }
-  if (!can("users:manage")) {
-    return (
-      <Fermo titolo="Accesso riservato" testo="Questa sezione è per gli amministratori."
-        azione={<Link className="btn btn--block" to="/dashboard">Vai alla dashboard</Link>} />
+      <>
+        <ScreenHeader title="Amministrazione" subtitle="Sezione riservata agli amministratori" />
+        <EmptyState>Il tuo account non ha i permessi per questa sezione.</EmptyState>
+      </>
     );
   }
 
   const attiva = SEZIONI.find((s) => s.id === (param ?? "panoramica"));
-  if (!attiva || (id && attiva.id !== "utenti")) return <Navigate to="/admin" replace />;
+  if (!attiva || (id && attiva.id !== "utenti")) return <Navigate to={BASE} replace />;
 
   return (
     <>
-      <Masthead current="hero" />
-      <main id="contenuto" className="profilo" tabIndex={-1}>
-        <div className="wrap profilo__layout adm-layout">
-          <aside className="profilo__side">
-            <div className="profilo__identita">
-              <div className="profilo__avatar" aria-hidden="true">{user.email.slice(0, 1).toUpperCase()}</div>
-              <div className="profilo__chi">
-                <p className="profilo__chi-email">{user.email}</p>
-                <p className="profilo__chi-ruolo">
-                  {can("system:manage") ? RUOLI.superadmin : RUOLI.admin}
-                </p>
-              </div>
-            </div>
-            <nav className="profilo__nav" aria-label="Sezioni dell'amministrazione">
-              {SEZIONI.map((s) => (
-                <NavLink key={s.id} to={s.path} end={s.id === "panoramica"} className="profilo__nav-link">
-                  {ICONE[s.id]}
-                  <span>{s.label}</span>
-                </NavLink>
-              ))}
-            </nav>
-          </aside>
+      <ScreenHeader
+        title={id ? "Scheda utente" : "Amministrazione"}
+        badge={<span className="adm-badge adm-badge--role">
+          {can("system:manage") ? RUOLI.superadmin : RUOLI.admin}
+        </span>}
+        subtitle={attiva.lead}
+      />
 
-          <div className="profilo__panel" key={`${attiva.id}/${id ?? ""}`}>
-            <header className="profilo__head">
-              <p className="profilo__eyebrow">Amministrazione</p>
-              <h1>{id ? "Scheda utente" : attiva.label}</h1>
-              {!id && <p className="profilo__lead">{attiva.lead}</p>}
-            </header>
+      <nav className="filters adm-tabs" aria-label="Sezioni dell'amministrazione">
+        {SEZIONI.map((s) => (
+          <NavLink key={s.id} to={s.path} end={s.id === "panoramica"} className="filter">
+            {ICONE[s.id]}
+            {s.label}
+          </NavLink>
+        ))}
+      </nav>
 
-            {attiva.id === "panoramica" && <Panoramica />}
-            {attiva.id === "utenti" && (id ? <SchedaUtente userId={id} /> : <Utenti />)}
-            {attiva.id === "registro" && <Registro />}
-          </div>
-        </div>
-      </main>
-      <Colophon modelVersion={null} />
+      <div key={`${attiva.id}/${id ?? ""}`} className="adm-screen">
+        {attiva.id === "panoramica" && <Panoramica />}
+        {attiva.id === "utenti" && (id ? <SchedaUtente userId={id} /> : <Utenti />)}
+        {attiva.id === "registro" && <Registro />}
+      </div>
     </>
   );
 }
