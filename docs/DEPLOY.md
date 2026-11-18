@@ -158,6 +158,7 @@ Caddy.
    | `AI_NAPLES_COOKIE_SECURE` | `1` |
    | `AI_NAPLES_PUBLIC_URL` | `https://<your-domain>` — builds the links in emails |
    | `AI_NAPLES_SMTP_*` | a real provider, `starttls` or `ssl` |
+   | `AI_NAPLES_SUPERADMIN_EMAILS` | your address: sign up, verify, and you are superadmin |
 
    Not needed: `AI_NAPLES_ROOT` (on Vercel the package uses the working
    directory, see `backend/src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`
@@ -168,8 +169,11 @@ Caddy.
 
    ```bash
    AI_NAPLES_DATABASE_URL="<the string above>" alembic -c alembic.ini upgrade head
-   AI_NAPLES_DATABASE_URL="<...>" python -m backend.auth.cli create-superadmin --email you@example.com
    ```
+
+   The first administrator no longer needs a command: with your address in
+   `AI_NAPLES_SUPERADMIN_EMAILS`, sign up from the site and verify the email.
+   `create-superadmin` still works, for a database without a mail relay.
 
 ## Deploying: from the pipeline machine, after every matchday
 

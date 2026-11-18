@@ -1049,9 +1049,12 @@ If port 5432 is already taken, set `POSTGRES_PORT` in your `.env` and update
 
 ### The first administrator
 
-Public signup only ever grants `customer`. `superadmin` is created from the
-machine, and there is no HTTP route that can grant it — a test walks the route
-table to keep it that way.
+Public signup only ever grants `customer`. `superadmin` comes from two places
+and never from a click: the variable `AI_NAPLES_SUPERADMIN_EMAILS` (the listed
+addresses get the role at sign-in or verification, **only once verified**), or
+the commands below. The admin panel (`/#/admin`) can grant and revoke `admin`
+and nothing else; `tests/test_admin.py` checks that `superadmin` is refused.
+Removing an address from the variable does not revoke the role: use `revoke`.
 
 ```bash
 python -m backend.auth.cli create-superadmin --email you@example.com
@@ -1110,6 +1113,7 @@ for a real deployment:
 | `AI_NAPLES_PUBLIC_URL` | builds the links inside emails — wrong value, dead links |
 | `AI_NAPLES_ACCESS_TOKEN_MINUTES` | life of the access JWT, default 15, max 60: how long a revoked session still reaches the data routes (ADR 0003) |
 | `AI_NAPLES_SESSION_MAX_HOURS` | absolute life of a session (the refresh token), default 24 |
+| `AI_NAPLES_SUPERADMIN_EMAILS` | comma-separated addresses that become superadmin once verified. Empty: nobody does |
 
 ### Migrations
 

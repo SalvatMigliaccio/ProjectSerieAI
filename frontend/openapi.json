@@ -1671,6 +1671,474 @@
           }
         }
       }
+    },
+    "/api/admin/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Summary",
+        "operationId": "summary_api_admin_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/backend__auth__admin__Summary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Users",
+        "description": "Newest first, filtered by partial address, status and role.\n\n`role=staff` means admin OR superadmin. The search uses the trigram index\non `users.email`, which is what makes a substring match cheap.",
+        "operationId": "users_api_admin_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 254
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(pending|active|suspended)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(admin|superadmin|customer|staff)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "User Detail",
+        "operationId": "user_detail_api_admin_users__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Audit",
+        "description": "What staff did lately, and the deletions, newest first.",
+        "operationId": "audit_api_admin_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventRow"
+                  },
+                  "title": "Response Audit Api Admin Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/suspend": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Suspend",
+        "description": "Block the account and end every session it holds.\n\nWHAT IT DOES NOT DO AT ONCE, said plainly: an access token already issued\nkeeps reading the DATA routes until it lapses, at most\n`access_token_minutes` (ADR 0003). Account and admin routes stop at once,\nand the next refresh is refused.",
+        "operationId": "suspend_api_admin_users__user_id__suspend_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/reactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reactivate",
+        "description": "Undo a suspension. Back to `active` only if the address was verified:\nreactivating must not become a way around verification.",
+        "operationId": "reactivate_api_admin_users__user_id__reactivate_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/unlock": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Unlock",
+        "description": "Lift the lock-out after too many wrong passwords, before it expires.",
+        "operationId": "unlock_api_admin_users__user_id__unlock_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/roles/{role}/grant": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Grant Role",
+        "operationId": "grant_role_api_admin_users__user_id__roles__role__grant_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/roles/{role}/revoke": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke Role",
+        "operationId": "revoke_role_api_admin_users__user_id__roles__role__revoke_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1876,6 +2344,24 @@
         ],
         "title": "Credentials"
       },
+      "DayCount": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day"
+          },
+          "signups": {
+            "type": "integer",
+            "title": "Signups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "signups"
+        ],
+        "title": "DayCount"
+      },
       "DeletePayload": {
         "properties": {
           "password": {
@@ -1904,6 +2390,91 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "EventRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "outcome",
+          "at"
+        ],
+        "title": "EventRow",
+        "description": "An audit row as staff see it: WITH `details`, unlike the owner's view.\n\n`details` never holds credentials (`record_event` is written that way), and\nthe context it does hold — the cause of a refusal, who granted a role — is\nprecisely what an administrator needs. `actor_email` resolves the `by` id."
       },
       "ExpectedPoints": {
         "properties": {
@@ -3261,7 +3832,7 @@
       "MyPredictions": {
         "properties": {
           "summary": {
-            "$ref": "#/components/schemas/Summary"
+            "$ref": "#/components/schemas/backend__auth__me__Summary"
           },
           "picks": {
             "items": {
@@ -3796,6 +4367,24 @@
         },
         "type": "object",
         "title": "Preferences"
+      },
+      "Reason": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "Reason"
       },
       "Refreshed": {
         "properties": {
@@ -4516,6 +5105,56 @@
         "title": "Selections",
         "description": "Selections inside an odds band, with hits and their denominator.\n\nThe numbers travel together on purpose: \"10 su 11\" says what \"91%\" hides,\nwhich is that eleven bets decide nothing. Filtering by odds moves variance,\nnot edge — M1's probabilities are the book's own line with the margin\nremoved, so expected value is minus the margin at every threshold."
       },
+      "SessionInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "title": "Last Seen At"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_seen_at",
+          "expires_at"
+        ],
+        "title": "SessionInfo"
+      },
       "SessionRow": {
         "properties": {
           "id": {
@@ -4834,80 +5473,6 @@
         "title": "Status",
         "description": "Enough for a frontend to show that the system is alive — and no way to\ncommand it. Writing happens only from local processes."
       },
-      "Summary": {
-        "properties": {
-          "picks": {
-            "type": "integer",
-            "title": "Picks"
-          },
-          "pending": {
-            "type": "integer",
-            "title": "Pending"
-          },
-          "resolved": {
-            "type": "integer",
-            "title": "Resolved"
-          },
-          "won": {
-            "type": "integer",
-            "title": "Won"
-          },
-          "hit_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hit Rate"
-          },
-          "mean_model_probability": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mean Model Probability"
-          },
-          "model_resolved": {
-            "type": "integer",
-            "title": "Model Resolved",
-            "default": 0
-          },
-          "model_won": {
-            "type": "integer",
-            "title": "Model Won",
-            "default": 0
-          },
-          "model_hit_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Hit Rate"
-          }
-        },
-        "type": "object",
-        "required": [
-          "picks",
-          "pending",
-          "resolved",
-          "won",
-          "hit_rate",
-          "mean_model_probability"
-        ],
-        "title": "Summary",
-        "description": "The comparison without a score.\n\n`mean_model_probability` is what the model expected of the resolved picks\non average; `hit_rate` is what actually happened. Side by side they say\nwhether the user's picks did better or worse than the model thought they\nwould — the one honest comparison with no points table."
-      },
       "TokenOnly": {
         "properties": {
           "token": {
@@ -4994,6 +5559,143 @@
         ],
         "title": "TrackRecord"
       },
+      "UserDetail": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserRow"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionInfo"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventRow"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "can_change_roles": {
+            "type": "boolean",
+            "title": "Can Change Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "sessions",
+          "events",
+          "can_manage",
+          "can_change_roles"
+        ],
+        "title": "UserDetail"
+      },
+      "UserPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/UserRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "rows"
+        ],
+        "title": "UserPage"
+      },
+      "UserRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "email_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Verified At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "status",
+          "roles",
+          "created_at",
+          "active_sessions",
+          "locked"
+        ],
+        "title": "UserRow"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -5033,6 +5735,134 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "backend__auth__admin__Summary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Status"
+          },
+          "new_24h": {
+            "type": "integer",
+            "title": "New 24H"
+          },
+          "new_7d": {
+            "type": "integer",
+            "title": "New 7D"
+          },
+          "new_30d": {
+            "type": "integer",
+            "title": "New 30D"
+          },
+          "admins": {
+            "type": "integer",
+            "title": "Admins"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "signups_by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayCount"
+            },
+            "type": "array",
+            "title": "Signups By Day"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "by_status",
+          "new_24h",
+          "new_7d",
+          "new_30d",
+          "admins",
+          "active_sessions",
+          "signups_by_day"
+        ],
+        "title": "Summary"
+      },
+      "backend__auth__me__Summary": {
+        "properties": {
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "mean_model_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Model Probability"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved",
+            "default": 0
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won",
+            "default": 0
+          },
+          "model_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Hit Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "picks",
+          "pending",
+          "resolved",
+          "won",
+          "hit_rate",
+          "mean_model_probability"
+        ],
+        "title": "Summary",
+        "description": "The comparison without a score.\n\n`mean_model_probability` is what the model expected of the resolved picks\non average; `hit_rate` is what actually happened. Side by side they say\nwhether the user's picks did better or worse than the model thought they\nwould — the one honest comparison with no points table."
       }
     }
   }

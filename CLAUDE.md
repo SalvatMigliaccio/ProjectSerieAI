@@ -12,6 +12,7 @@ Contesto operativo per Claude Code.
 | `docs/adr/` | decisioni di architettura, una per file |
 | `docs/SPEC_PRIVACY_COOKIE.md` | informativa, cookie, cancellazione e conservazione: cosa promettiamo e cosa lo verifica |
 | `docs/adr/0006-schema-postgres-dati.md` | lo schema dei dati in Postgres, le tre modalita' di `storage` e il piano per spegnere il parquet |
+| `docs/adr/0007-amministrazione-e-pipeline-da-interfaccia.md` | pannello admin, registro delle previsioni in Postgres, predict/close dalla dashboard via coda e worker |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
 | **`docs/COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
 
@@ -1457,6 +1458,15 @@ il weekend e il **martedi' entro le 13:00** per gli infrasettimanali. Lanciare
 lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 
 ### Il track record si scrive solo da processi locali — regola, non preferenza
+
+**IN REVISIONE DAL 18 NOVEMBRE 2026 (ADR 0007).** Dopo il deploy tutto deve
+potersi fare dall'interfaccia. Fase 1 fatta: pannello `/admin` con
+`/api/admin`, che e' il terzo prefisso scrivibile, scrive solo account e ruoli e
+legge i permessi dal DB a ogni chiamata. Fase 2: il registro passa in Postgres,
+con append-only, timestamp e controllo sul fischio imposti dal database. Fase 3:
+predict e close si lanciano dalla dashboard accodando un job per un worker (PC
+ora, VPS poi), mai eseguendo il modello nell'API. Finche' le fasi 2 e 3 non
+sono fatte, sotto vale quanto scritto.
 
 **Le uniche cose che scrivono nel registro sono `predict_round` e
 `close_round`, lanciati sulla macchina.** Nessuna richiesta HTTP, mai. L'API in

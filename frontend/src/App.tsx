@@ -17,6 +17,7 @@ import { Pronostici } from "./pages/dashboard/Pronostici";
 import { DashboardShell } from "./pages/dashboard/Shell";
 import { Squadra } from "./pages/dashboard/Squadra";
 import { Stagione } from "./pages/dashboard/Stagione";
+import { Admin } from "./pages/Admin";
 import { Hero } from "./pages/Hero";
 import { Profile } from "./pages/Profile";
 
@@ -35,6 +36,9 @@ const TITOLI: Record<string, string> = {
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
+  "/admin": "Amministrazione · MatchPoint",
+  "/admin/utenti": "Utenti · Amministrazione · MatchPoint",
+  "/admin/registro": "Registro · Amministrazione · MatchPoint",
 };
 
 /**
@@ -93,6 +97,10 @@ export function App() {
           <Route path="/" element={<Hero />} />
 
           <Route path="/account/:sezione?" element={<Profile />} />
+          {/* L'amministrazione controlla da se' accesso e permesso, come
+              l'account: chi non e' amministratore vede perche', non un
+              rimbalzo. Il server rifiuta comunque ogni chiamata. */}
+          <Route path="/admin/:sezione?/:id?" element={<Admin />} />
           <Route path="/sign-in" element={<SignIn />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />

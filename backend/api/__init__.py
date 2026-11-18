@@ -178,7 +178,13 @@ def config_digest() -> str:
 # favourite team, the picks of "My Prediction" — in Postgres, with a server-side
 # kickoff check on every pick. It is a second narrow door, not a wider one:
 # the track record is still out of reach of every route.
-WRITABLE_PREFIX = ("/api/auth/", "/api/me/")
+#
+# /api/admin joined on 18 November 2026: accounts and roles, the same tables
+# /api/auth writes, behind `users:manage` checked against the database on every
+# call. Still nothing over the track record. Launching the pipeline from the
+# panel is phase 3 of that plan, and it will queue a request for a worker, not
+# run a model inside this process.
+WRITABLE_PREFIX = ("/api/auth/", "/api/me/", "/api/admin/")
 
 
 def iter_routes(app: FastAPI) -> Iterator[tuple[str, set[str]]]:
@@ -390,11 +396,13 @@ def create_app() -> FastAPI:
     # guards with it and serve everything to anyone, while looking healthy.
     #
     # A broken install must stop the process, not quietly widen access.
+    from backend.auth import admin as admin_routes
     from backend.auth import me as me_routes
     from backend.auth import routes as auth_routes
 
     app.include_router(auth_routes.router)
     app.include_router(me_routes.router)
+    app.include_router(admin_routes.router)
 
     _assert_read_only_routes(app)
     return app

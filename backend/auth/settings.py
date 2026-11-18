@@ -106,6 +106,23 @@ class Settings(BaseSettings):
     # Where the frontend lives: used to build the links inside emails.
     public_url: str = "http://127.0.0.1:5173"
 
+    # THE BOOTSTRAP SUPERADMIN, comma-separated addresses (18 November 2026).
+    # An account whose address is listed here receives `superadmin` when it
+    # signs in or verifies — ONLY if the address is verified. Without that
+    # condition the variable would hand the role to whoever registers the
+    # address first; with it, holding the role requires holding the mailbox.
+    #
+    # From the environment and not from the code: the address stays out of the
+    # repository, and the list changes without a deploy. Removing an address
+    # does NOT revoke the role: a typo in a variable must not be able to lock
+    # the only administrator out. Revoking is `cli revoke`, deliberately.
+    superadmin_emails: str = ""
+
+    @property
+    def bootstrap_superadmins(self) -> frozenset[str]:
+        """The listed addresses, lower-cased (the column is CITEXT)."""
+        return frozenset(e.strip().lower() for e in self.superadmin_emails.split(",") if e.strip())
+
     @field_validator("smtp_security")
     @classmethod
     def _known_security(cls, v: str) -> str:

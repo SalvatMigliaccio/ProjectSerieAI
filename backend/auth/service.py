@@ -182,6 +182,7 @@ def verify_email(db: Session, token: str) -> User:
         user.status = "active"
     user.email_verified_at = now()
     record_event(db, "verify_email", "ok", user_id=user.id)
+    apply_bootstrap(db, user)
     return user
 
 
@@ -236,6 +237,9 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
     user.failed_attempts = 0
     user.locked_until = None
     record_event(db, "sign_in", "ok", user_id=user.id, ip=ip, user_agent=user_agent)
+    # Before the session opens, so the first access token already carries the
+    # role's permissions.
+    apply_bootstrap(db, user, cfg)
     return open_session(db, user, cfg, ip=ip, user_agent=user_agent)
 
 
@@ -580,6 +584,32 @@ def revoke_role(db: Session, user: User, name: str, *, by: uuid.UUID | None = No
             record_event(db, "role_revoked", "ok", user_id=user.id,
                          details={"role": name, "by": str(by) if by else None})
             return
+
+
+def apply_bootstrap(db: Session, user: User, cfg: Settings | None = None) -> bool:
+    """
+    Grant `superadmin` to a listed, VERIFIED address. True if it was granted.
+
+    Called at sign-in and at verification, the two moments an account proves
+    it holds its mailbox. It only ever adds: see `Settings.superadmin_emails`
+    for why taking an address off the list does not take the role away.
+    """
+    cfg = cfg or settings()
+    if user.email_verified_at is None or user.status != "active":
+        return False
+    if user.email.lower() not in cfg.bootstrap_superadmins:
+        return False
+    if any(r.name == "superadmin" for r in user.roles):
+        return False
+    role = db.scalar(select(Role).where(Role.name == "superadmin"))
+    if role is None:
+        # The base-roles migration has not run. Not worth taking sign-in down.
+        log.error("superadmin role missing: run the base-roles migration")
+        return False
+    user.roles.append(role)
+    record_event(db, "role_granted", "ok", user_id=user.id,
+                 details={"role": "superadmin", "by": None, "via": "AI_NAPLES_SUPERADMIN_EMAILS"})
+    return True
 
 
 def permission_exists(db: Session, name: str) -> bool:

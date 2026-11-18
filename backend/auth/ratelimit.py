@@ -142,6 +142,11 @@ session_admin_limiter = RateLimiter(limit=30, window_seconds=300)
 # someone filling a matchday market by market, tight for a script.
 prediction_limiter = RateLimiter(limit=120, window_seconds=300)
 
+# The administration panel's writes (suspend, reactivate, roles), per admin
+# account. A person clicks a few times a minute; a loop here would fill the
+# audit log and revoke sessions in bulk.
+admin_action_limiter = RateLimiter(limit=60, window_seconds=300)
+
 ALL_LIMITERS = (sign_in_limiter, signup_limiter, reset_limiter, api_limiter,
                 refresh_limiter, token_limiter, password_change_limiter,
-                session_admin_limiter, prediction_limiter)
+                session_admin_limiter, prediction_limiter, admin_action_limiter)
