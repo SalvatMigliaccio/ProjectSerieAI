@@ -2,7 +2,7 @@ data/
 __pycache__/
 *.pyc
 .venv/
-manual/team_name_map_suggested.json
+backend/manual/team_name_map_suggested.json
 
 # Il registro delle previsioni E' versionato: e' l'unico dato del progetto
 # che non si puo' rigenerare. Si escludono le copie di lavoro e le

@@ -11,12 +11,10 @@
 
 /*
 !backend
-!src
 !frontend
 !data
 !experiments
 !track_record
-!manual
 !logs
 !pyproject.toml
 !README.md

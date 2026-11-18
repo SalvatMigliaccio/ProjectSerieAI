@@ -34,7 +34,7 @@ RADICE = Path(__file__).resolve().parent.parent
 # `goalmodel` legge da `data.py`, che chiede a `storage.py`: e' quest'ultimo
 # l'unico a sapere se il dato sta su file o in Postgres (ADR 0006).
 CONFINI = {
-    Path("src/goalmodel/storage.py"),
+    Path("backend/src/goalmodel/storage.py"),
     Path("backend/api/store.py"),
 }
 
@@ -44,7 +44,7 @@ CONFINI = {
 # le riletture lato produttore di `ingest.py` e `normalize.py` passano da
 # `storage.leggi_opzionale`.
 AMMESSI: dict[Path, str] = {
-    Path("src/goalmodel/archivio.py"):
+    Path("backend/src/goalmodel/archivio.py"):
         "e' lo strumento della migrazione: legge OGNI file di data/ per "
         "caricarlo in Postgres e per confrontarlo bit a bit con la sua "
         "tabella. Passare da `storage` vorrebbe dire confrontare Postgres con "
@@ -53,7 +53,7 @@ AMMESSI: dict[Path, str] = {
 
 # L'unico posto di `goalmodel` che scrive un dato. Fuori da `experiments/`, che
 # scrive in `experiments/output/` per conto suo.
-CONFINE_SCRITTURA = Path("src/goalmodel/storage.py")
+CONFINE_SCRITTURA = Path("backend/src/goalmodel/storage.py")
 SCRITTURA = re.compile(r"\.to_parquet\s*\(")
 
 # `experiments/` per progetto legge tutto e non e' importato da nessuno.
@@ -63,7 +63,8 @@ CHIAMATA = re.compile(r"\bpd\.read_parquet\s*\(|\bread_parquet\s*\(")
 
 
 def _sorgenti() -> list[Path]:
-    file = [*(RADICE / "src").rglob("*.py"), *(RADICE / "backend").rglob("*.py")]
+    # backend/ contiene anche il pacchetto goalmodel (backend/src) dal 6 novembre 2026.
+    file = list((RADICE / "backend").rglob("*.py"))
     return sorted(
         p.relative_to(RADICE) for p in file
         if not any(e in p.as_posix() for e in ESCLUSI)
@@ -103,7 +104,7 @@ def test_nessuna_scrittura_fuori_da_storage() -> None:
     """
     fuori = []
     for p in _sorgenti():
-        if p == CONFINE_SCRITTURA or not p.as_posix().startswith("src/"):
+        if p == CONFINE_SCRITTURA or not p.as_posix().startswith("backend/src/"):
             continue
         righe = (RADICE / p).read_text(encoding="utf-8").splitlines()
         if any(SCRITTURA.search(r) for r in righe if not r.lstrip().startswith("#")):

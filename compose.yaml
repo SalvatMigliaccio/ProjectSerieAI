@@ -98,7 +98,7 @@ services:
       AI_NAPLES_ROOT: /srv
       # I sorgenti montati vincono sul pacchetto installato nell'immagine: i
       # percorsi in PYTHONPATH precedono site-packages.
-      PYTHONPATH: /srv/src:/srv
+      PYTHONPATH: /srv/backend/src:/srv
       # Dentro la rete di compose l'host e' il nome del servizio, mai
       # 127.0.0.1 — che in un container e' il container stesso.
       AI_NAPLES_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ainaples}:${POSTGRES_PASSWORD:?serve POSTGRES_PASSWORD, copia .env.example in .env}@db:5432/${POSTGRES_DB:-ainaples}
@@ -114,11 +114,10 @@ services:
       WATCHFILES_FORCE_POLLING: "true"
     command: >-
       uvicorn backend.api:app --host 0.0.0.0 --port 8000
-      --reload --reload-dir /srv/backend --reload-dir /srv/src
+      --reload --reload-dir /srv/backend
     volumes:
+      # Porta con se' anche backend/src (goalmodel) e backend/manual.
       - ./backend:/srv/backend:ro
-      - ./src:/srv/src:ro
-      - ./manual:/srv/manual:ro
       - ./data:/srv/data:ro
       - ./track_record:/srv/track_record:ro
       # Le previsioni di M5 (`previsioni_m5_*.csv`), lette da `backend/api/ml.py`

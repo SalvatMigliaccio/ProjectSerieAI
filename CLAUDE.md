@@ -20,7 +20,7 @@ li', non qui: due elenchi divergono e viene sempre letto quello sbagliato.
 
 ## Dove sta il codice
 
-Il pacchetto e' **`goalmodel`**, installabile, sotto `src/goalmodel/`. Ogni
+Il pacchetto e' **`goalmodel`**, installabile, sotto `backend/src/goalmodel/`. Ogni
 livello puo' importare **solo quelli sotto di se'**:
 
 ```
@@ -72,7 +72,7 @@ guadagno pubblicate piu' sotto, a partire da `goals_for` al 4.7%.
 
 I comandi passano dal CLI: `goalmodel <comando>`, che funziona da qualsiasi
 directory e allo stesso modo su Linux e Windows. `python -m goalmodel.<modulo>`
-resta valido. Un modulo eseguibile nuovo si registra in `src/goalmodel/cli.py`,
+resta valido. Un modulo eseguibile nuovo si registra in `backend/src/goalmodel/cli.py`,
 una riga.
 
 Perche' un repository solo e cosa lo spezzerebbe:
@@ -264,7 +264,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
     `dict.update` al primo livello e si porterebbe via anche le mappe di
     FBref, Understat e MatchHistory.
   - `IndexError: list index out of range` a `whoscored.py:290` e' il link
-    "Fixtures" che non esiste. Rimedio: `src/goalmodel/whoscored_patch.py`, che cerca
+    "Fixtures" che non esiste. Rimedio: `backend/src/goalmodel/whoscored_patch.py`, che cerca
     l'href invece del testo — gli URL restano in inglese in ogni lingua.
     **Attenzione alle maiuscole**: l'href e' `/fixtures` minuscolo e XPath 1.0
     non ha `lower-case()`, quindi serve `translate()`. Cercare `/Fixtures` non
@@ -320,7 +320,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
 
 ### Moduli scritti e verificati
 
-- `src/goalmodel/ingest.py` — download multi-fonte. Legge leghe e stagioni da `src/goalmodel/config.py`.
+- `backend/src/goalmodel/ingest.py` — download multi-fonte. Legge leghe e stagioni da `backend/src/goalmodel/config.py`.
   Fail-fast dopo 3 errori consecutivi su ClubElo.
   Lo stage `fixtures` scarica le quote del turno imminente: filtra su `Div`
   (`config.FOOTBALL_DATA_DIV`), deduce la stagione dalla data (stacco a
@@ -328,8 +328,8 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   applica `team_name_map.json` e **avvisa nominando le squadre non
   riconosciute** — un nome non mappato non darebbe errore, farebbe sparire la
   partita dalla previsione in silenzio
-- `src/goalmodel/config.py` — percorsi, leghe, stagioni, iperparametri
-- `src/goalmodel/schema.py` — il contratto dei file su disco, verificato da
+- `backend/src/goalmodel/config.py` — percorsi, leghe, stagioni, iperparametri
+- `backend/src/goalmodel/schema.py` — il contratto dei file su disco, verificato da
   `data.py` a ogni lettura. **Non** e' l'elenco delle 222 colonne: sono solo
   quelle la cui assenza o il cui tipo sbagliato produce un errore SILENZIOSO —
   chiavi, date, risultati. I tre modi in cui e' gia' successo: un tipo che
@@ -338,13 +338,13 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   una chiave che si duplica (ogni merge senza `validate=` moltiplica righe e
   le metriche restano plausibili). `tests/test_schema.py` verifica che ognuno
   dei casi venga davvero fermato
-- `src/goalmodel/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
+- `backend/src/goalmodel/normalize.py` — mapping nomi squadra tramite **assegnamento bipartito**
   (`scipy.optimize.linear_sum_assignment`), non fuzzy matching greedy. Risolve
   per esclusione i casi che difflib non trova, come Internazionale -> Inter.
   `--report --apply` scrive la mappa automaticamente sopra confidenza 0.75
-- `src/goalmodel/features/form.py` — medie mobili esponenziali leakage-safe, continue
+- `backend/src/goalmodel/features/form.py` — medie mobili esponenziali leakage-safe, continue
   attraverso le stagioni con attenuazione del 30% al confine
-- `src/goalmodel/features/market.py` — de-vigging proporzionale e di Shin su 1X2 e
+- `backend/src/goalmodel/features/market.py` — de-vigging proporzionale e di Shin su 1X2 e
   over/under 2.5, riferimento `B365` in **apertura**. Produce anche il
   benchmark market-only sulla scala dei gol (`mkt_lambda_home/away`,
   ottenuti invertendo un Poisson indipendente su totale e supremazia).
@@ -353,22 +353,22 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   (scarto 9e-16) e contro i risultati veri: over 2.5 atteso 0.515 contro
   0.520 reale, gol totali 2.75 contro 2.72, gol casa 1.51 contro 1.48.
   Usare `FEATURES_T24`, mai `FEATURES_CLOSING`
-- `src/goalmodel/evaluation/evaluate.py` — RPS, log loss, Brier, accuratezza, curve di calibrazione
+- `backend/src/goalmodel/evaluation/evaluate.py` — RPS, log loss, Brier, accuratezza, curve di calibrazione
   ed ECE, harness di walk-forward per giornata. **Il ciclo di valutazione e'
   stato costruito prima delle altre feature**, di proposito: ogni feature
   successiva si misura sullo stesso test set invece di accumularsi non
   validata
-- `src/goalmodel/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
+- `backend/src/goalmodel/models/baseline.py` — M0/M0b/M1/M1b/M2 piu' la funzione condivisa
   `score_matrix` (lambda -> matrice dei risultati esatti -> 1X2 e over/under)
   con correzione Dixon-Coles opzionale, spenta di default. `valid_rho_floor`
   da il rho minimo ammissibile: la correzione DC non e' valida per ogni rho,
   serve rho > -1/max(lam, mu) o escono probabilita' negative
-- `src/goalmodel/models/dixon_coles.py` — M3, decadimento temporale esponenziale e rho
+- `backend/src/goalmodel/models/dixon_coles.py` — M3, decadimento temporale esponenziale e rho
   stimato **insieme** ad attacchi e difese, non fissato a priori. Gradiente
   analitico (verificato a 1.8e-8 relativo contro differenza finita centrata:
   con la differenza in avanti di `approx_fprime` l'errore di troncamento e'
   1e-4 e sembra un bug del gradiente). Un fit costa 25-70 ms
-- `src/goalmodel/models/gbm.py` — M4 (LightGBM Poisson a due gol separati, con e senza
+- `backend/src/goalmodel/models/gbm.py` — M4 (LightGBM Poisson a due gol separati, con e senza
   feature di mercato), **M5** (`MarketAnchoredGBM`, ancorato al mercato via
   `init_score = log(mkt_lambda)`: stima il residuo, non il livello) e **M6**
   (`LogBlend`, media geometrica fra i lambda del mercato e quelli di M4).
@@ -380,7 +380,7 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   `exp(somma degli alberi)` e NON riaggiunge l'init_score. Va sommato a mano
   in scala logaritmica, come fa `MarketAnchoredGBM.predict`. Sbagliarlo non
   solleva nessun errore: produce semplicemente il modello sbagliato
-- `src/goalmodel/prediction/predict.py` — inferenza settimanale. Modello **parametrico**, con M1
+- `backend/src/goalmodel/prediction/predict.py` — inferenza settimanale. Modello **parametrico**, con M1
   (market-only) come predefinito: e' l'unica scelta coerente con il test set,
   che dice che nessun modello statistico batte il mercato. Quando un M7 lo
   battera' con intervallo netto, qui cambia un argomento.
@@ -392,23 +392,23 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   `assert_no_post_match` (nessuna colonna post-partita valorizzata sulle righe
   future), il controllo di duplicazione storico/futuro, e l'assert che il
   timestamp UTC preceda il calcio d'inizio
-- `src/goalmodel/prediction/backtest_log.py` — rilegge `predictions_log.csv`, aggancia i risultati
+- `backend/src/goalmodel/prediction/backtest_log.py` — rilegge `predictions_log.csv`, aggancia i risultati
   veri sulla quadrupla e calcola RPS e calibrazione **solo** sulle previsioni
   scritte prima del calcio d'inizio. Quando ci sono piu' righe per la stessa
   partita usa la PRIMA per timestamp: il registro e' append-only e la piu'
   recente sarebbe anche la piu' informata. Ricalcola anche l'RPS delle quote
   registrate, che e' il motivo per cui vanno salvate: a mesi di distanza
   distingue un errore del modello da un prezzo cambiato
-- `src/goalmodel/features/context.py` — **blocco A**: riposo, congestione su finestra
+- `backend/src/goalmodel/features/context.py` — **blocco A**: riposo, congestione su finestra
   (d-14, d) aperta da entrambi i lati, infrasettimanale, derby da
-  `manual/derbies.csv` con coppia NON ordinata. Solo calendario, nessuna
+  `backend/manual/derbies.csv` con coppia NON ordinata. Solo calendario, nessuna
   ingestion nuova. **Le coppe europee non ci sono e non ci possono essere**:
   `fbref_schedule` contiene la sola Serie A, quindi una partita di Champions
   del martedi' non compare da nessuna parte. Le due scorciatoie (dedurre chi
   gioca in Europa dalla classifica dell'anno prima; usare l'orario di calcio
   d'inizio come indizio) sono peggio del buco — la prima e' una funzione dei
   risultati passati, cioe' proprio cio' che il piano esclude
-- `src/goalmodel/reporting/` — tre file, non uno: `sezioni.py` calcola e
+- `backend/src/goalmodel/reporting/` — tre file, non uno: `sezioni.py` calcola e
   restituisce DataFrame, `pagina.py` impagina e restituisce stringhe,
   `report.py` fa solo da regia e scrive i due file. La separazione e' la
   chiusura di A4: finche' stavano insieme, `divergenza()` addestrava un
@@ -426,16 +426,16 @@ Quote disponibili: `B365H/D/A`, `BWH/D/A`, `IWH/D/A`, `PSH/D/A` (Pinnacle),
   La sezione 3 addestra M4 e controlla che non sia degenerato: con le feature
   di forma nulle LightGBM si ferma a un albero e prevede la stessa cosa per
   tutte le partite, senza sollevare niente
-- `src/goalmodel/prediction/rounds.py` — il ciclo di vita della giornata e la tabella di stato. E'
+- `backend/src/goalmodel/prediction/rounds.py` — il ciclo di vita della giornata e la tabella di stato. E'
   qui che si decide su quale giornata agire, guardando quote, registro e
   risultati: nessun comando chiede il numero e nessuno sa che giorno e'.
   Lo stato CHIUSA e' l'esistenza del file di archivio, non una colonna che
   potrebbe divergere dai fatti
-- `src/goalmodel/prediction/predict_round.py` — porta una giornata da aperta a predetta. Gestisce la
+- `backend/src/goalmodel/prediction/predict_round.py` — porta una giornata da aperta a predetta. Gestisce la
   giornata coperta a meta' (lo snapshot copre solo il turno imminente):
   registra quelle che puo', nomina quelle che restano, e al lancio dopo
   completa senza duplicare
-- `src/goalmodel/prediction/close_round.py` — porta una giornata da giocata a chiusa. Non chiude una
+- `backend/src/goalmodel/prediction/close_round.py` — porta una giornata da giocata a chiusa. Non chiude una
   giornata incompleta nemmeno se glielo si chiede con `--round`: un RPS
   archiviato su nove partite su dieci non sarebbe piu' correggibile. Scrive
   l'errore per singola partita e rifa' il cumulativo da zero dai file di
@@ -846,7 +846,7 @@ quando il calendario, coppe comprese, e' noto da mesi.
 ### Blocco B — giocatori e infortuni — PROVVISORIO
 
 `goalmodel evaluate --blocco giocatori`, 11 settembre 2026. Nove colonne
-da `src/goalmodel/features/players.py`: quota di minuti indisponibili, quota di
+da `backend/src/goalmodel/features/players.py`: quota di minuti indisponibili, quota di
 gol+assist indisponibili, numero di assenti, per lato e in differenza.
 
 **E' il primo blocco che supera la regola.** E va letto con la stessa
@@ -1050,7 +1050,7 @@ Vedi la sezione dedicata sopra. `+0.00008` con IC `[-0.00007, +0.00024]`:
 indistinguibile, con potenza sufficiente. Le nove colonne sono in
 `gbm.BLOCCHI_SCARTATI` e non entrano nel modello.
 
-`manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
+`backend/manual/derbies.csv` e' stato compilato durante il blocco (55 coppie, 11% delle
 partite) e **va rivisto**: non e' una fonte, e' un'opinione plausibile.
 
 #### Blocco B — giocatori e infortuni — FATTO, PROVVISORIO
@@ -1110,7 +1110,7 @@ quella in trasferta sulle sole in trasferta, piu' la differenza. Half-life 10,
 non tarata. Medie di lega della regressione di fine stagione calcolate **per
 sede**: in casa si segna di piu', e tirare la forma casalinga verso la media
 di tutte le partite la sporcherebbe. Costruite in memoria da
-`src/goalmodel/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
+`backend/src/goalmodel/experiments/forma_venue.py`, che riusa le funzioni di `form.py` senza
 toccarle e senza scrivere nessun parquet.
 
 **Non e' una copia di BASE**: in validazione la correlazione fra una colonna
@@ -1177,7 +1177,7 @@ di mercato che le pesa non contera'.
 
 #### Fuori dal piano
 
-`src/goalmodel/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
+`backend/src/goalmodel/features/team_strength.py` — Elo proprio calcolato dai risultati. Scende
 di priorita': M2, M3 e M4 sono gia' indistinguibili fra loro, e un quarto modo
 di misurare la forza della squadra non cambierebbe il quadro.
 
@@ -1197,7 +1197,7 @@ confrontano per prime. `--sensibilita` prova che la rete scatta: un solo bit
 spostato con `np.nextafter` fa fallire il ramo giusto. `--rigenera` solo dopo
 un cambiamento di produzione voluto e dichiarato.
 
-**Registro dei set — `src/goalmodel/features/sets.py`.** Ogni colonna appartiene a un set
+**Registro dei set — `backend/src/goalmodel/features/sets.py`.** Ogni colonna appartiene a un set
 con uno stato: `BASE` (congelato, 52 colonne scritte per esteso),
 `CONTESTO` (scartato), `GIOCATORI` (provvisorio), `FORMA_VENUE` (da misurare).
 I modelli sperimentali dichiarano i set (`M5Set(sets=["BASE", "GIOCATORI"])`);
@@ -1219,7 +1219,7 @@ giocatori e' stato ammesso nel registro, anche l'M4 della sezione di
 divergenza ha iniziato a vedere quelle colonne senza che nessuno lo
 decidesse.
 
-**Esperimenti — `src/goalmodel/experiments/`.** Leggono tutto, scrivono solo in
+**Esperimenti — `backend/src/goalmodel/experiments/`.** Leggono tutto, scrivono solo in
 `experiments/output/`, gitignorato tranne i `riassunto_*`.
 `experiments.proteggi_produzione()` sostituisce `to_parquet` e `to_csv` nel
 processo dell'esperimento e rifiuta qualsiasi scrittura in `data/processed/` o
@@ -1236,7 +1236,7 @@ produzione resta su M1. Nessuna promozione perche' "sembra meglio".
 
 ### Prevedere una giornata con M5 senza promuoverlo
 
-`src/goalmodel/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
+`backend/src/goalmodel/experiments/predici_gbm.py`. Riusa `predict.py` invariato — stesso
 calendario, stesse quote, stesse feature, stesse protezioni sul calcio
 d'inizio — passandogli `M5MediaSemi(["BASE"])` e `dry_run=True`. Stampa M5
 accanto a M1 con lo scarto per partita e non tocca il registro.
@@ -1448,7 +1448,7 @@ precondizioni opposte: predire vuole le quote e nessun risultato, chiudere
 vuole tutti i risultati. Una delle due era sempre fuori tempo. E "sabato
 mattina" individua la giornata giusta solo finche' il calendario e' regolare —
 un infrasettimanale, un rinvio, una partita spostata per la coppa, e non piu'.
-`src/goalmodel/prediction/weekly.py` resta come rimando: stampa i due comandi ed esce con codice 2.
+`backend/src/goalmodel/prediction/weekly.py` resta come rimando: stampa i due comandi ed esce con codice 2.
 
 **Nessun giorno della settimana compare nel codice.** Nota informativa, non un
 vincolo: football-data pubblica le quote il **venerdi' entro le 17:00 UK** per
@@ -1463,11 +1463,20 @@ lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 `backend/api/` e' una **vista**: espone solo GET, e un test fallisce all'avvio
 se una rotta dichiara un metodo diverso da GET/HEAD/OPTIONS.
 
-**Struttura del monorepo**: `src/` e' la pipeline (produzione), `backend/`
-l'API che la legge, `frontend/` la dashboard (React + TypeScript, Vite). La
-dipendenza e' a senso unico — `frontend` -> `backend` -> `src`, mai il
-contrario — ed e' il motivo per cui spostare l'API fuori da `src/` non ha
-richiesto di toccare un solo modulo di produzione.
+**Struttura del monorepo**: `backend/src/goalmodel/` e' la pipeline
+(produzione), `backend/api/` e `backend/auth/` l'API che la legge, `frontend/`
+la dashboard (React + TypeScript, Vite). La dipendenza e' a senso unico —
+`frontend` -> `backend.api` -> `goalmodel`, mai il contrario.
+
+**Dal 6 novembre 2026 `src/`, `scripts/` e `manual/` stanno dentro `backend/`.**
+La cartella e' cambiata, il pacchetto no: si chiama ancora `goalmodel`, resta
+installabile da solo (`pip install -e .` senza extra non porta FastAPI) e
+nessun `import` e' cambiato. Cambiati i percorsi: `config.ROOT` e' tre cartelle
+sopra `config.py` invece di due, `config.MANUAL` e' `backend/manual`,
+`pyproject.toml` cerca i pacchetti in `backend/src`, e le attivita' pianificate
+di Windows puntano a `backend\scripts\*.cmd`. Dopo un `git pull` che porta
+questo spostamento va rifatto `pip install -e . --no-deps`: l'installazione
+editable punta ancora al vecchio `src/`.
 
 Il frontend parla con l'API **solo via HTTP e solo in GET**: non importa nulla
 di Python e non conosce i percorsi dei file. I tipi in `frontend/src/api/types.ts`
@@ -1488,7 +1497,7 @@ si'.
 
 Garanzie verificate, non promesse: `backend/api/__init__.py` sostituisce
 `to_csv`/`to_parquet` e rifiuta ogni scrittura sotto `track_record/` e `data/`
-— lo stesso idioma di `src/experiments/` — e `tests/test_api.py` verifica che
+— lo stesso idioma di `goalmodel.experiments` — e `tests/test_api.py` verifica che
 nessuna rotta di scrittura esista e che `lightgbm` non finisca in
 `sys.modules`: **l'API non esegue mai modelli.**
 
@@ -1562,7 +1571,7 @@ archivia in `track_record/rounds/round_<stagione>_<NN>.csv`, con previsione,
 risultato ed errore di ogni singola partita. Poi rifa' il riepilogo cumulativo
 in `track_record/rounds/riepilogo.csv` e rigenera il report.
 
-**I risultati arrivano da una catena di fonti** (`src/risultati.py`, dal 21
+**I risultati arrivano da una catena di fonti** (`goalmodel/risultati.py`, dal 21
 settembre 2026): football-data per primo, poi Understat, poi FBref. Il motivo
 e' stato misurato: football-data aggiorna il file della stagione un paio di
 volte a settimana, e il lunedi' sera della giornata 5 non aveva ancora nessuno
@@ -1636,7 +1645,7 @@ presenti, e la vecchiaia dello snapshot viene comunque segnalata. I passi
 locali (dataset, feature, previsione) sono fatali: su dati incoerenti qualsiasi
 previsione sarebbe sbagliata in silenzio.
 
-**Il report va su file, non solo a schermo.** Lo scrive `src/goalmodel/reporting/report.py`, in
+**Il report va su file, non solo a schermo.** Lo scrive `backend/src/goalmodel/reporting/report.py`, in
 coda a entrambi i comandi: `track_record/report.html` a percorso fisso, piu'
 una copia d'archivio in
 `data/processed/reports/giornata_<stagione>_<NN>.html`. Una per giornata e non
@@ -1714,7 +1723,7 @@ invariata. **Il bug non si vede il venerdi'**, quando lo snapshot e' pieno: si
 vede solo quando il file c'e' ed e' vuoto, ed e' il motivo per cui era rimasto
 li'.
 
-**Ripiego manuale.** `manual/upcoming_odds.csv` resta come rete di sicurezza
+**Ripiego manuale.** `backend/manual/upcoming_odds.csv` resta come rete di sicurezza
 per le partite che lo snapshot non copre o quando il sito e' giu' (succede:
 risponde 503 su tutto il dominio). Stesse colonne, precedenza piu' bassa.
 Nel registro `odds_source` distingue le due provenienze — `B365-fixtures`
@@ -1760,7 +1769,7 @@ Cosa ne segue, in pratica:
 - Understat scarica una libreria TLS da GitHub al primo avvio. Dietro
   proxy fallisce: scaricarla dalle release di `bogdanfinn/tls-client`.
 - La copertura del join dev'essere sopra il 95%. Sotto, mancano voci in
-  `manual/team_name_map.json`.
+  `backend/manual/team_name_map.json`.
 - FBref non ha statistiche avanzate prima del 2017/18. Understat parte dal
   2014/15 ed e' la fonte primaria di xG e PPDA.
 
@@ -1769,7 +1778,7 @@ Cosa ne segue, in pratica:
 - Type hints, docstring in italiano che spiegano il **perche'**, non il cosa
 - Ogni modulo eseguibile con un `argparse`, raggiungibile sia come
   `python -m goalmodel.<percorso>` sia come sottocomando di `goalmodel`
-  (registrarlo in `src/goalmodel/cli.py`, una riga)
+  (registrarlo in `backend/src/goalmodel/cli.py`, una riga)
 - **I dati si scrivono con `storage.scrivi(livello, nome, df)` e si leggono da
   `data.py`, mai con `to_parquet`/`read_parquet`** (6 novembre 2026, ADR 0006).
   `storage` decide se il dato sta su file o in Postgres secondo
@@ -1796,7 +1805,7 @@ ricordato. La diagnosi completa dello stato attuale sta in
 
 ### DRY — un fatto, un posto solo
 
-- **Una costante condivisa sta in `src/goalmodel/config.py`**, non ricopiata. La chiave
+- **Una costante condivisa sta in `backend/src/goalmodel/config.py`**, non ricopiata. La chiave
   di join e' la regola non negoziabile n.5: se e' scritta in quattordici file,
   allargare ai Big 5 significa modificarne quattordici e **dimenticarne uno non
   da' errore** — da' un merge che perde righe in silenzio. Stessa cosa per
@@ -1830,7 +1839,7 @@ ricordato. La diagnosi completa dello stato attuale sta in
   nell'harness, il modello e' sbagliato, non l'harness.
 - **I (interfacce ristrette).** L'interfaccia dei modelli e' due metodi. Non
   aggiungerne un terzo per comodita' di un modello solo.
-- **D (dipendenza dalle astrazioni).** Un modulo di `src/` non importa uno
+- **D (dipendenza dalle astrazioni).** Un modulo di `goalmodel` non importa uno
   script della cartella di lavoro: la dipendenza deve andare verso il
   pacchetto, mai verso l'ambiente in cui il comando e' stato lanciato.
 
@@ -1927,7 +1936,7 @@ regole sotto sono quelle che mordono davvero.
 
 **Aggiornato l'8 settembre 2026.**
 
-- `manual/derbies.csv` — **C'E', MA VA RIVISTO.** 55 coppie compilate durante
+- `backend/manual/derbies.csv` — **C'E', MA VA RIVISTO.** 55 coppie compilate durante
   il blocco A perche' senza il file il derby non era misurabile: 5 `city`,
   42 `regional`, 8 `rivalry`, che agganciano 503 partite su 4580 (11.0%).
   **Non e' una fonte, e' un'opinione plausibile**: le coppie `regional` sono
@@ -1937,15 +1946,15 @@ regole sotto sono quelle che mordono davvero.
   `tuple(sorted([casa, trasferta]))`, e `context.py` funziona anche senza il
   file: in quel caso le due colonne del derby non vengono prodotte, invece di
   essere messe a zero — assente e falso non sono la stessa cosa
-- `manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
+- `backend/manual/coach_changes.csv` — **MANCANTE**. Colonne `league, season, team,
   date, coach_out, coach_in`. ~150 righe per la Serie A degli ultimi 10 anni
-- `manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
+- `backend/manual/upcoming_odds.csv` — FACOLTATIVO, e' solo il ripiego. Le quote
   arrivano da `goalmodel ingest --stage fixtures`. Serve compilarlo a mano
   soltanto per le partite che lo snapshot non copre o quando football-data e'
   irraggiungibile. Colonne `league, season, home_team, away_team, B365H,
   B365D, B365A, B365>2.5, B365<2.5`: servono **entrambi** i mercati, perche' i 
   gol attesi nascono dall'incrocio fra supremazia (1X2) e totale (over/under)
-- `manual/team_name_map.json` — GIA FATTO, 10 voci. Le ultime due
+- `backend/manual/team_name_map.json` — GIA FATTO, 10 voci. Le ultime due
   (`Hellas Verona`, `SPAL`) aggiunte a mano per agganciare `fbref_schedule`,
   che usa nomi diversi da quelli gia' mappati (`Hellas Verona FC`,
   `SPAL 2013`). Senza quelle due la giornata si agganciava solo all'89%  

@@ -35,14 +35,16 @@ from pathlib import Path
 # Vercel questo ramo non esiste.
 ROOT = Path(
     os.environ.get("AI_NAPLES_ROOT")
-    or (Path.cwd() if os.environ.get("VERCEL") else Path(__file__).resolve().parents[2])
+    # backend/src/goalmodel/config.py: la radice e' tre cartelle sopra (dal
+    # 6 novembre 2026, quando src/ e' entrata in backend/; prima erano due).
+    or (Path.cwd() if os.environ.get("VERCEL") else Path(__file__).resolve().parents[3])
 )
 
 DATA = ROOT / "data"
 RAW = DATA / "raw"
 INTERIM = DATA / "interim"
 PROCESSED = DATA / "processed"
-MANUAL = ROOT / "manual"
+MANUAL = ROOT / "backend" / "manual"
 
 # Il registro delle previsioni sta FUORI da data/, che e' in .gitignore.
 # E' l'unico dato irriproducibile del progetto: i parquet si riscaricano, le

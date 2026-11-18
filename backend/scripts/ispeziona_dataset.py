@@ -1,6 +1,8 @@
-import pandas as pd
+"""Uno sguardo rapido a matches_master. Legge da `data.py`: file o Postgres (ADR 0006)."""
 
-df = pd.read_parquet("data/interim/matches_master.parquet")
+from goalmodel import data
+
+df = data.load_master()
 
 print("FORMA:", df.shape)
 

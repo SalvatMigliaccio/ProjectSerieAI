@@ -39,11 +39,11 @@ ENV PATH="/opt/venv/bin:$PATH"
 # reaches it through a lazy import inside a route. Declaring the split in
 # pyproject means pip works it out instead of a human keeping a list current.
 COPY pyproject.toml README.md ./
-COPY src/goalmodel/__init__.py src/goalmodel/__init__.py
+COPY backend/src/goalmodel/__init__.py backend/src/goalmodel/__init__.py
 COPY backend/__init__.py backend/__init__.py
 RUN pip install --no-cache-dir ".[api,auth]"
 
-COPY src/ src/
+# backend/ porta con se' anche src/ (il pacchetto goalmodel) e manual/.
 COPY backend/ backend/
 RUN pip install --no-cache-dir --no-deps .
 
@@ -66,17 +66,16 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /srv
 COPY --chown=app:app backend/ backend/
-COPY --chown=app:app src/ src/
 # alembic.ini, WITHOUT WHICH THE DEPLOY CANNOT MIGRATE. It was missing from the
 # first version of this file, and the symptom was not subtle but it was late:
 # the stack came up healthy and `alembic -c alembic.ini upgrade head` - the very
 # next command in docs/DEPLOY.md - answered "No 'script_location' key found in
 # configuration", which reads like a broken config rather than an absent file.
 COPY --chown=app:app alembic.ini alembic.ini
-# manual/ is versioned and small: team name maps, derbies, coach changes. The
-# API reads them through the results chain, so they are baked in rather than
-# mounted - one less thing to get wrong on the server.
-COPY --chown=app:app manual/ manual/
+# backend/manual/ is versioned and small: team name maps, derbies, coach
+# changes. The API reads them through the results chain, so they are baked in
+# rather than mounted - one less thing to get wrong on the server. It arrives
+# with `COPY backend/` above.
 
 # The directories goalmodel expects, created here with the right owner. It also
 # creates them on import, but that has to stay best-effort: the mounts below

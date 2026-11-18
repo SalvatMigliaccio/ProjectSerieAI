@@ -2,7 +2,7 @@
 
 Questa cartella contiene **solo** l'API. La pipeline (ingestion, feature,
 modelli, i due comandi di giornata) e' il pacchetto `goalmodel`, sotto
-`src/goalmodel/`, ed e' produzione.
+`backend/src/goalmodel/`, ed e' produzione.
 
 La dipendenza e' a senso unico: `backend` importa `goalmodel`, mai il
 contrario. Sono due pacchetti installabili distinti e non uno dentro l'altro,

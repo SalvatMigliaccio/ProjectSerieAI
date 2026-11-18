@@ -310,7 +310,7 @@ goalmodel normalize --build            # costruisce matches_master.parquet
 ```
 
 `--build` fallisce se il join scende sotto la soglia: e' voluto, significa che
-mancano voci in `manual/team_name_map.json`.
+mancano voci in `backend/manual/team_name_map.json`.
 
 ---
 
@@ -327,7 +327,7 @@ goalmodel features-players             # blocco B: peso delle assenze
 `--coverage` va rilanciato dopo ogni ingestion: i bookmaker spariscono senza
 preavviso (Pinnacle si e' spento nel 2025/26 a meta' stagione).
 
-`context` legge `manual/derbies.csv` (colonne `home_team, away_team,
+`context` legge `backend/manual/derbies.csv` (colonne `home_team, away_team,
 intensity` con intensity in city/regional/rivalry, coppia NON ordinata). Se il
 file manca, le due colonne del derby non vengono prodotte e lo dice: non finge
 che nessuna partita sia un derby, che sarebbe un dato falso invece che assente.
@@ -357,7 +357,7 @@ Il default riaddestra 10 modelli su 114 giornate: e' il grosso dei 10 minuti.
 ## 7. Modelli: controlli e taratura
 
 **La taratura gira SEMPRE sulla validazione (2122, 2223), mai sul test.**
-Se ritari qualcosa, aggiorna il valore in `src/goalmodel/config.py` e rifai il punto 6.
+Se ritari qualcosa, aggiorna il valore in `backend/src/goalmodel/config.py` e rifai il punto 6.
 
 ```bash
 # Controlli di correttezza (secondi)
@@ -407,7 +407,7 @@ abbassare il costo, il risultato riportato usa sempre stride 1).
 
 ## 7bis. Esperimenti — fuori dal percorso di produzione
 
-Tutto quello che sta in `src/goalmodel/experiments/` legge i dati veri e scrive **solo**
+Tutto quello che sta in `backend/src/goalmodel/experiments/` legge i dati veri e scrive **solo**
 in `experiments/output/` (gitignorato tranne i `riassunto_*`). Una guardia a
 runtime rifiuta qualsiasi scrittura in `data/processed/` o `track_record/`,
 quindi un esperimento non puo' sporcare la produzione nemmeno per errore.
@@ -500,7 +500,7 @@ uscito.
 
 ## 7ter. API in sola lettura sul track record
 
-**Dove sta.** Monorepo: `backend/api/` contiene l'API, `src/goalmodel/` la
+**Dove sta.** Monorepo: `backend/api/` contiene l'API, `backend/src/goalmodel/` la
 pipeline. La dipendenza e' a senso unico — `backend` importa `goalmodel.config`,
 `goalmodel.schema`, `goalmodel.prediction.rounds`,
 `goalmodel.prediction.backtest_log`, `goalmodel.evaluation.evaluate`,
@@ -671,10 +671,10 @@ Per un deploy stabile, in ordine di parti mobili:
 ## 7quater. Scheduler di Windows
 
 ```bash
-scripts\predict_round.cmd     # venerdi' — M1 nel registro, M5 e marcatori
-scripts\close_round.cmd       # martedi'
-scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
-scripts\aggiorna_risultati.cmd  # ogni giorno 17:45 e 23:30 — risultati provvisori
+backend\scripts\predict_round.cmd     # venerdi' — M1 nel registro, M5 e marcatori
+backend\scripts\close_round.cmd       # martedi'
+backend\scripts\predict_m5.cmd        # solo M5, se serve lanciarlo a parte
+backend\scripts\aggiorna_risultati.cmd  # ogni giorno 17:45 e 23:30 — risultati provvisori
 ```
 
 **`aggiorna_risultati` porta in dashboard i risultati la sera stessa** (dal 12
@@ -720,11 +720,11 @@ i comandi con cui ricrearli altrove, o qui dopo una reinstallazione:
 
 ```powershell
 $repo = "D:\Progetti\AI_Naples"
-schtasks /create /tn "AI_Naples predict_round 1815"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 18:15 /f
-schtasks /create /tn "AI_Naples predict_round 1915"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 19:15 /f
-schtasks /create /tn "AI_Naples predict_round 2000"   /tr "$repo\scripts\predict_round.cmd" /sc weekly /d FRI /st 20:00 /f
-schtasks /create /tn "AI_Naples predict_round sabato" /tr "$repo\scripts\predict_round.cmd" /sc weekly /d SAT /st 09:00 /f
-schtasks /create /tn "AI_Naples close_round"          /tr "$repo\scripts\close_round.cmd"   /sc weekly /d TUE /st 09:00 /f
+schtasks /create /tn "AI_Naples predict_round 1815"   /tr "$repo\backend\scripts\predict_round.cmd" /sc weekly /d FRI /st 18:15 /f
+schtasks /create /tn "AI_Naples predict_round 1915"   /tr "$repo\backend\scripts\predict_round.cmd" /sc weekly /d FRI /st 19:15 /f
+schtasks /create /tn "AI_Naples predict_round 2000"   /tr "$repo\backend\scripts\predict_round.cmd" /sc weekly /d FRI /st 20:00 /f
+schtasks /create /tn "AI_Naples predict_round sabato" /tr "$repo\backend\scripts\predict_round.cmd" /sc weekly /d SAT /st 09:00 /f
+schtasks /create /tn "AI_Naples close_round"          /tr "$repo\backend\scripts\close_round.cmd"   /sc weekly /d TUE /st 09:00 /f
 ```
 
 `aggiorna_risultati` e' UN task con DUE orari, non due task: il 16 ottobre
@@ -735,7 +735,7 @@ task, non fra task diversi.
 ```powershell
 $t = @((New-ScheduledTaskTrigger -Daily -At 17:45), (New-ScheduledTaskTrigger -Daily -At 23:30))
 Register-ScheduledTask -TaskName "AI_Naples aggiorna_risultati" -Trigger $t `
-  -Action (New-ScheduledTaskAction -Execute "$repo\scripts\aggiorna_risultati.cmd")
+  -Action (New-ScheduledTaskAction -Execute "$repo\backend\scripts\aggiorna_risultati.cmd")
 ```
 
 Gli orari di `aggiorna_risultati` stanno lontani da quelli di `predict_round`
@@ -946,8 +946,8 @@ finti fino a `matches_master`. Dopo averlo usato, rilancia l'ingestion vera.
 | `track_record/report.html` | `*_round`, `report` | il report a percorso fisso. NON versionato: si rigenera |
 | `data/processed/reports/giornata_*.html` | `*_round`, `report` | archivio del report, uno per giornata |
 | **`frontend/openapi.json`** | `backend.api --export-openapi` | **il contratto per il frontend. Versionato: un test fallisce se diverge dall'app** |
-| `logs/scheduler_*.log` | `scripts\*.cmd` | un file al giorno, output completo dei comandi. NON versionato |
-| `logs/last_run.json` | `scripts\*.cmd` | esito dell'ultima esecuzione di ciascun comando, letto da `/api/status`. NON versionato |
+| `logs/scheduler_*.log` | `backend\scripts\*.cmd` | un file al giorno, output completo dei comandi. NON versionato |
+| `logs/last_run.json` | `backend\scripts\*.cmd` | esito dell'ultima esecuzione di ciascun comando, letto da `/api/status`. NON versionato |
 
 Tutto `data/` e' in `.gitignore`.
 

@@ -147,7 +147,7 @@ ainaples-admin = "backend.auth.cli:main"
 # Dichiararlo qui serve a una cosa sola: che `import backend` funzioni da
 # qualunque directory, esattamente come `import goalmodel`.
 [tool.setuptools.packages.find]
-where = ["src", "."]
+where = ["backend/src", "."]
 include = ["goalmodel*", "backend*"]
 
 # ---------------------------------------------------------------------------
@@ -177,7 +177,7 @@ filterwarnings = ["error::DeprecationWarning:goalmodel.*"]
 extend-exclude = [".claude", "frontend"]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["backend/src", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -211,20 +211,20 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # I test possono usare assert liberamente ed essere meno severi.
 "tests/*" = ["S", "E402"]
-"scripts/*" = ["T201"]
+"backend/scripts/*" = ["T201"]
 # S101 (assert) e' attivo ovunque da quando B3 e' chiuso: `python -O` li
 # cancella, e un'invariante che sparisce con una variabile d'ambiente non e'
 # un'invariante. Le due eccezioni sono funzioni che NON girano in produzione e
 # il cui unico scopo e' verificare la matematica del modulo: li' l'assert e'
 # la forma giusta, perche' e' il corpo del controllo e non una difesa.
-"src/goalmodel/models/baseline.py" = ["S101"]      # _demo()
-"src/goalmodel/models/dixon_coles.py" = ["S101"]   # _check_gradient()
+"backend/src/goalmodel/models/baseline.py" = ["S101"]      # _demo()
+"backend/src/goalmodel/models/dixon_coles.py" = ["S101"]   # _check_gradient()
 # S608 (SQL composto con f-string). In pg.py gli identificatori sono nomi di
 # tabella e di colonna, che i parametri di psycopg non coprono: passano tutti
 # da `pg._q`, che applica il quoting di Postgres (lo stesso di
 # `psycopg.sql.Identifier`). I VALORI sono sempre parametri. Ogni altro file
 # resta sotto la regola.
-"src/goalmodel/pg.py" = ["S608"]
+"backend/src/goalmodel/pg.py" = ["S608"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["goalmodel"]
@@ -234,7 +234,7 @@ known-first-party = ["goalmodel"]
 # ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.12"
-files = ["src/goalmodel"]
+files = ["backend/src/goalmodel"]
 ignore_missing_imports = true
 warn_unused_configs = true
 warn_redundant_casts = true

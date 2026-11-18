@@ -18,7 +18,7 @@ REM  "Last Run Result" column instead of a green 0 on a failed run.
 REM ---------------------------------------------------------------------------
 setlocal
 
-set "REPO=%~dp0.."
+set "REPO=%~dp0..\.."
 set "PY=%REPO%\.venv\Scripts\python.exe"
 set "TASK=%~1"
 if "%TASK%"=="" (
@@ -76,7 +76,7 @@ REM  never run — a silent failure of exactly the component whose job is to say
 REM  whether something failed.
 pushd "%REPO%"
 
-REM  SRC-LAYOUT: `goalmodel` sits under src/ and is importable only once the
+REM  SRC-LAYOUT: `goalmodel` sits under backend/src/ and is importable only once the
 REM  package is installed in the venv. Running from the repo root is no longer
 REM  enough, which is the one thing about the new layout that bites a machine
 REM  that used to work. Checked here so the log says what to run instead of

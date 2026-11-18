@@ -160,7 +160,7 @@ Caddy.
    | `AI_NAPLES_SMTP_*` | a real provider, `starttls` or `ssl` |
 
    Not needed: `AI_NAPLES_ROOT` (on Vercel the package uses the working
-   directory, see `src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`
+   directory, see `backend/src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`
    (one origin, no CORS).
 
 3. **Migrations**, from your machine against Neon — Vercel runs no command at

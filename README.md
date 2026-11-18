@@ -188,43 +188,46 @@ pyproject.toml            packaging, dipendenze vincolate, config di ruff/pytest
 requirements.lock         ambiente esatto, universale (Linux + Windows)
 .github/workflows/ci.yml  test su due sistemi operativi a ogni push
 docs/                     COMANDI.md, PROGETTO_SERIE_A.md, AUDIT_TECNICO.md, adr/
-src/goalmodel/            il pacchetto: la pipeline, da installare
-  config.py               percorsi, leghe, stagioni, iperparametri, JOIN_KEYS
-  cli.py                  entry point unico: `goalmodel <comando>`
-  schema.py               il contratto dei file su disco
-  data.py                 punto unico di accesso ai file, che verifica il contratto
-  ingest.py               scaricamento multi-fonte (4 fonti, 8 stage)
-  whoscored_patch.py      aggancio allo scraper localizzato
-  normalize.py            nomi squadra (assegnamento bipartito) + join
-  risultati.py            catena di fonti per il risultato vero
-  features/
-    form.py               medie mobili esponenziali leakage-safe
-    market.py             de-vigging (Shin + proporzionale) -> lambda impliciti
-    context.py            riposo, congestione, coppe, derby        [SCARTATO]
-    players.py            minuti e gol+assist indisponibili        [PROVVISORIO]
-    sets.py               registro dei set di feature, con stato
-    registry.py           quali blocchi esistono e come si costruiscono
-    dataset.py            l'assemblaggio: blocchi uniti + giornata agganciata
-  models/                 SOLO modelli: niente main, niente walk-forward
-    baseline.py           M0/M0b/M1/M1b/M2 + score_matrix condivisa
-    dixon_coles.py        M3, gradiente analitico
-    gbm.py                M4/M5/M6
-  evaluation/
-    evaluate.py           RPS, calibrazione, walk-forward, bootstrap a cluster
-    power_analysis.py     effetto minimo rilevabile
-    taratura.py           iperparametri, peso della miscela, half-life
-  prediction/
-    predict.py            inferenza + registro append-only
-    rounds.py             ciclo di vita della giornata
-    predict_round.py      aperta -> predetta
-    close_round.py        giocata -> chiusa
-    backtest_log.py       rilettura del registro, metriche reali
-  reporting/              calcolo e impaginazione, separati
-    sezioni.py            le cinque sezioni, come DataFrame
-    pagina.py             CSS, SVG scritto a mano, tabelle HTML
-    report.py             regia: sezioni -> pagina -> due file
-  experiments/            fuori produzione, guardia a runtime sulle scritture
-backend/                  API HTTP in sola lettura (FastAPI). Extra `api`
+backend/                  tutto il Python: la pipeline, l'API, gli script
+  src/goalmodel/          il pacchetto: la pipeline, da installare (nome invariato)
+    config.py               percorsi, leghe, stagioni, iperparametri, JOIN_KEYS
+    cli.py                  entry point unico: `goalmodel <comando>`
+    schema.py               il contratto dei file su disco
+    data.py                 punto unico di accesso ai file, che verifica il contratto
+    ingest.py               scaricamento multi-fonte (4 fonti, 8 stage)
+    whoscored_patch.py      aggancio allo scraper localizzato
+    normalize.py            nomi squadra (assegnamento bipartito) + join
+    risultati.py            catena di fonti per il risultato vero
+    features/
+      form.py               medie mobili esponenziali leakage-safe
+      market.py             de-vigging (Shin + proporzionale) -> lambda impliciti
+      context.py            riposo, congestione, coppe, derby        [SCARTATO]
+      players.py            minuti e gol+assist indisponibili        [PROVVISORIO]
+      sets.py               registro dei set di feature, con stato
+      registry.py           quali blocchi esistono e come si costruiscono
+      dataset.py            l'assemblaggio: blocchi uniti + giornata agganciata
+    models/                 SOLO modelli: niente main, niente walk-forward
+      baseline.py           M0/M0b/M1/M1b/M2 + score_matrix condivisa
+      dixon_coles.py        M3, gradiente analitico
+      gbm.py                M4/M5/M6
+    evaluation/
+      evaluate.py           RPS, calibrazione, walk-forward, bootstrap a cluster
+      power_analysis.py     effetto minimo rilevabile
+      taratura.py           iperparametri, peso della miscela, half-life
+    prediction/
+      predict.py            inferenza + registro append-only
+      rounds.py             ciclo di vita della giornata
+      predict_round.py      aperta -> predetta
+      close_round.py        giocata -> chiusa
+      backtest_log.py       rilettura del registro, metriche reali
+    reporting/              calcolo e impaginazione, separati
+      sezioni.py            le cinque sezioni, come DataFrame
+      pagina.py             CSS, SVG scritto a mano, tabelle HTML
+      report.py             regia: sezioni -> pagina -> due file
+    experiments/            fuori produzione, guardia a runtime sulle scritture
+  api/, auth/             API HTTP in sola lettura (FastAPI) e account. Extra `api`, `auth`
+  scripts/                script dello scheduler di Windows e utilita' di ispezione
+  manual/                 mappe e file compilati a mano (VERSIONATI)
   Dockerfile              l'immagine dell'API, sviluppo e produzione
 frontend/                 dashboard React + Vite
   openapi.json            il contratto con l'API, versionato
@@ -233,10 +236,8 @@ frontend/                 dashboard React + Vite
 docker/                   solo infrastruttura condivisa: Caddyfile, init Postgres
 compose.yaml              sviluppo: db, mail, api, frontend
 compose.prod.yaml         produzione: db, api, web (Caddy)
-scripts/                  utilita' di ispezione, fuori dal pacchetto
 tests/                    dati sintetici e test di regressione
 track_record/             registro previsioni + giornate archiviate (VERSIONATO)
-manual/                   mappe e file compilati a mano
 data/                     tutti i parquet (GITIGNORATO, si rigenera)
 ```
 
@@ -403,7 +404,7 @@ dopo un cambiamento di produzione voluto e dichiarato.
    pre-registrate" di `CLAUDE.md`.
 4. **Un comando nuovo si documenta in `COMANDI.md`**, non qui e non in
    `CLAUDE.md`.
-5. **Gli esperimenti vivono in `src/goalmodel/experiments/`** e chiamano
+5. **Gli esperimenti vivono in `backend/src/goalmodel/experiments/`** e chiamano
    `experiments.proteggi_produzione()` in testa. La guardia copre
    `to_parquet` e `to_csv` e **nient'altro**: l'elenco di cio' che non copre e'
    nel suo docstring, perche' una protezione sopravvalutata smette di far
@@ -422,7 +423,7 @@ dopo un cambiamento di produzione voluto e dichiarato.
 
 - Type hints ovunque.
 - Docstring in **italiano** che spiegano il **perche'**, non il cosa.
-- Un comando si registra in `src/goalmodel/cli.py`, una riga, e si lancia con
+- Un comando si registra in `backend/src/goalmodel/cli.py`, una riga, e si lancia con
   `goalmodel <comando>` — identico su Linux e Windows, da qualsiasi directory.
   Il bersaglio puo' essere un modulo o `modulo:funzione`. Non tutti i moduli
   hanno un `main()`: `models/` contiene solo modelli, e le loro CLI stanno in

@@ -4,6 +4,10 @@
 - **Data**: 22 settembre 2026
 - **Contesto**: audit tecnico (`docs/AUDIT_TECNICO.md`), 46 file Python, 13.906 righe
 - **Decide**: se spezzare il progetto in piu' repository adesso
+- **Nota del 6 novembre 2026**: `src/`, `scripts/` e `manual/` sono stati
+  spostati dentro `backend/`. Il repository resta uno, `goalmodel` resta un
+  pacchetto distinto con le sue dipendenze, nessun import e' cambiato. I
+  percorsi `src/...` citati sotto vanno letti come `backend/src/...`
 
 ---
 

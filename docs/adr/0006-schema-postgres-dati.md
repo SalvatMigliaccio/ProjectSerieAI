@@ -160,7 +160,7 @@ giornata restano file versionati** (`track_record/`), scritti solo da
 `predict_round` e `close_round` sulla macchina. Il report HTML resta un file.
 
 Restano file anche, per ora: le previsioni di M5 (`experiments/output/`), lo
-stato dello scheduler (`logs/last_run.json`), `manual/`. Non sono dati del
+stato dello scheduler (`logs/last_run.json`), `backend/manual/`. Non sono dati del
 modello e il deploy li porta gia' con se'; spostarli e' una decisione a parte.
 
 **Il calcolo resta locale.** Postgres toglie la dipendenza da `data/` a chi
