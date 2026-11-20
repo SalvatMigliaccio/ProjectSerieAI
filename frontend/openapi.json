@@ -1009,6 +1009,7 @@
           "auth"
         ],
         "summary": "Sign In",
+        "description": "200 with the identity, or 202 with `MfaPending` when the account has 2FA on.\n\nOn 202 there is no session: only the `ainaples_mfa` cookie, which\n`POST /api/auth/mfa/verify` turns into one with the emailed code.",
         "operationId": "sign_in_api_auth_sign_in_post",
         "requestBody": {
           "content": {
@@ -1027,6 +1028,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "second factor required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
                 }
               }
             }
@@ -1584,6 +1595,221 @@
                     "type": "integer"
                   },
                   "title": "Response Unlink Api Auth Identities  Provider  Unlink Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/pending": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Pending",
+        "description": "Which mailbox the code went to, for the code screen. 404 if nothing pending.\n\nThe sign-in with a password gets this in its 202; the Google sign-in\narrives by redirect and has to ask.",
+        "operationId": "pending_api_auth_mfa_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify",
+        "description": "The code turns the pending sign-in into a session: same cookies as a plain sign-in.",
+        "operationId": "verify_api_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/resend": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Resend",
+        "operationId": "resend_api_auth_mfa_resend_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/enable/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Enable Start",
+        "operationId": "enable_start_api_auth_mfa_enable_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "already on, or email unverified"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/enable/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Enable Confirm",
+        "operationId": "enable_confirm_api_auth_mfa_enable_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/disable/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Disable Start",
+        "operationId": "disable_start_api_auth_mfa_disable_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "already off"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/disable/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Disable Confirm",
+        "operationId": "disable_confirm_api_auth_mfa_disable_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
                 }
               }
             }
@@ -2742,6 +2968,21 @@
         ],
         "title": "ChangePayload"
       },
+      "CodePayload": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 6,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "CodePayload"
+      },
       "Count": {
         "properties": {
           "label": {
@@ -3260,6 +3501,11 @@
             },
             "type": "array",
             "title": "Providers"
+          },
+          "mfa_enabled": {
+            "type": "boolean",
+            "title": "Mfa Enabled",
+            "default": false
           }
         },
         "type": "object",
@@ -4615,6 +4861,25 @@
         ],
         "title": "Metrics",
         "description": "How the site is used, beyond the head-count of `summary`.\n\nEverything is read from rows that already exist — sessions, audit events,\npicks — and nothing is stored to compute it. A metric that needs a new\ntable to be counted is a decision, not a query."
+      },
+      "MfaPending": {
+        "properties": {
+          "mfa_required": {
+            "type": "boolean",
+            "title": "Mfa Required",
+            "default": true
+          },
+          "sent_to": {
+            "type": "string",
+            "title": "Sent To"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sent_to"
+        ],
+        "title": "MfaPending",
+        "description": "The first factor passed and a code is on its way: no session yet.\n\n`sent_to` is the address MASKED (`m•••o@gmail.com`), enough for the person\nto know which mailbox to open."
       },
       "MyPredictions": {
         "properties": {

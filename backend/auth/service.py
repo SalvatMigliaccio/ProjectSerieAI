@@ -46,6 +46,23 @@ class InvalidToken(Exception):
     """Expired, already spent, or nonexistent."""
 
 
+class MfaRequired(Exception):
+    """
+    The first factor passed, and the account has 2FA on: no session yet.
+
+    AN EXCEPTION AND NOT A RETURN VALUE, on purpose. Every caller that used to
+    get a session now gets this instead, and one that forgets to handle it
+    fails loudly — it cannot open a session by accident. The route catches it
+    and does NOT re-raise, so the request commits normally: whatever the first
+    factor wrote (the reset failure counter, a new Google link) is kept.
+    """
+
+    def __init__(self, user: User, via: str) -> None:
+        super().__init__("second factor required")
+        self.user = user
+        self.via = via
+
+
 # ---------------------------------------------------------------------------
 # Audit
 # ---------------------------------------------------------------------------
@@ -248,6 +265,11 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
 
     user.failed_attempts = 0
     user.locked_until = None
+    if user.mfa_enabled():
+        # The password was right: the counter resets (it counts wrong
+        # passwords, not unfinished sign-ins). The `sign_in ok` row is written
+        # only when the code is, by the route that completes it.
+        raise MfaRequired(user, "password")
     record_event(db, "sign_in", "ok", user_id=user.id, ip=ip, user_agent=user_agent)
     # Before the session opens, so the first access token already carries the
     # role's permissions.
@@ -269,6 +291,22 @@ def _count_failure(db: Session, user: User, cfg: Settings,
     # The counter is the point: it is what the lockout counts, so it has to
     # outlive the exception the caller raises next.
     keep_on_refusal(db)
+
+
+def complete_sign_in(db: Session, user: User, cfg: Settings, *, via: str,
+                     ip: str | None = None, user_agent: str | None = None
+                     ) -> tuple[str, UserSession]:
+    """
+    The end of a sign-in whose second factor has just been verified.
+
+    The same three steps as the single-factor path, in the same order: the
+    audit row, the superadmin bootstrap before the session (so the first
+    access token carries the role), the session.
+    """
+    record_event(db, "sign_in", "ok", user_id=user.id, ip=ip, user_agent=user_agent,
+                 details={"via": via, "mfa": "email"})
+    apply_bootstrap(db, user, cfg)
+    return open_session(db, user, cfg, ip=ip, user_agent=user_agent)
 
 
 def open_session(db: Session, user: User, cfg: Settings, *, ip: str | None = None,

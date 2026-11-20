@@ -44,6 +44,11 @@ export const COOKIE: Cookie[] = [
     scopo: "solo durante l'accesso con Google: lega il ritorno da Google al browser che l'ha iniziato, contro le richieste contraffatte",
   },
   {
+    nome: "ainaples_mfa",
+    durata: "30 minuti, e si cancella quando inserisci il codice",
+    scopo: "solo se hai attivato la verifica in due passaggi: lega il codice ricevuto per email al browser da cui stai entrando",
+  },
+  {
     nome: "ainaples_reauth",
     durata: "5 minuti",
     scopo: "solo per gli account senza password: conferma di aver appena verificato la tua identità con Google prima di eliminare l'account",

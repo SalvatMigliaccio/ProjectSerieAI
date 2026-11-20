@@ -25,10 +25,12 @@ import * as authApi from "../api/auth";
 import type { ActivityRow, LinkedIdentity, SessionRow } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import {
+  CodeField,
   FormAlert,
   FormSuccess,
   PasswordField,
   SubmitButton,
+  codeError,
   newPasswordError,
   requiredError,
   serverError,
@@ -129,7 +131,7 @@ const SEZIONI: { id: Sezione; path: string; label: string; lead: string; icon: R
     id: "sicurezza",
     path: "/account/sicurezza",
     label: "Sicurezza",
-    lead: "Password, accesso con Google e cancellazione dell'account.",
+    lead: "Password, verifica in due passaggi, accesso con Google e cancellazione dell'account.",
     icon: ICONA_SICUREZZA,
   },
   {
@@ -631,6 +633,121 @@ function SezioneGoogle({ haPassword }: { haPassword: boolean }) {
   );
 }
 
+/**
+ * La verifica in due passaggi via email (ADR 0008, step 3): facoltativa.
+ *
+ * ACCENDERLA E SPEGNERLA CHIEDONO ENTRAMBI UN CODICE. Accenderla, perche'
+ * prima che l'account dipenda da quella casella bisogna sapere che i messaggi
+ * arrivano. Spegnerla, perche' altrimenti un cookie rubato la toglierebbe con
+ * un clic, cioe' proprio nel caso per cui esiste.
+ *
+ * Il limite e' detto in pagina, non nascosto: chi controlla la casella email
+ * supera entrambi i passaggi, perche' anche il reset della password passa da li'.
+ */
+function SezioneDueFattori() {
+  const { user, adopt } = useAuth();
+  const attiva = user?.mfa_enabled === true;
+  const azione: "enable" | "disable" = attiva ? "disable" : "enable";
+  const [inviatoA, setInviatoA] = useState<string | null>(null);
+  const [code, setCode] = useState("");
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+  const [esito, setEsito] = useState<string | null>(null);
+
+  const v = useValidation({ code: codeError(code) }, { code });
+
+  function annulla() {
+    setInviatoA(null);
+    setCode("");
+    setErrore(null);
+    v.reset();
+  }
+
+  async function chiediCodice() {
+    setErrore(null);
+    setEsito(null);
+    setInCorso(true);
+    try {
+      const p = await authApi.mfaStart(azione);
+      setInviatoA(p.sent_to);
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a mandare il codice. Riprova."));
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  async function conferma(event: FormEvent) {
+    event.preventDefault();
+    setErrore(null);
+    if (!v.check()) return;
+    setInCorso(true);
+    try {
+      const identity = await authApi.mfaConfirm(azione, code.replace(/\D/g, ""));
+      adopt(identity);
+      annulla();
+      setEsito(identity.mfa_enabled
+        ? "Verifica in due passaggi attiva. Dal prossimo accesso ti chiederemo il codice."
+        : "Verifica in due passaggi disattivata.");
+    } catch (e) {
+      setErrore(serverError(e, "Codice non accettato. Riprova."));
+      setCode("");
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <section className="profilo__blocco" aria-labelledby="mfa-titolo">
+      <h2 id="mfa-titolo">Verifica in due passaggi</h2>
+      <p className="profilo__hint">
+        {attiva
+          ? "Attiva: dopo la password (o dopo Google) ti chiediamo un codice di 6 cifre che arriva per email."
+          : "Dopo la password (o dopo Google) ti chiediamo anche un codice di 6 cifre che arriva per email. Chi ruba la tua password, da sola, non entra."}
+      </p>
+      <p className="profilo__hint">
+        Il codice arriva alla tua casella email, la stessa del recupero password:
+        protegge da una password rubata, non da qualcuno che ha accesso alla tua email.
+      </p>
+      <FormSuccess>{esito}</FormSuccess>
+      <FormAlert>{inviatoA ? null : errore}</FormAlert>
+
+      {!inviatoA ? (
+        <button className={attiva ? "btn btn--ghost" : "btn"} type="button"
+          onClick={() => void chiediCodice()} disabled={inCorso} aria-busy={inCorso || undefined}>
+          {inCorso && <span className="spinner" aria-hidden="true" />}
+          {attiva ? "Disattiva…" : "Attiva la verifica in due passaggi"}
+        </button>
+      ) : (
+        <form className="profilo__form" onSubmit={conferma} noValidate>
+          <CodeField
+            id="mfa-codice"
+            label={`Codice inviato a ${inviatoA}`}
+            value={code}
+            onChange={setCode}
+            onBlur={v.blur("code")}
+            error={v.error("code")}
+            inputRef={v.ref("code")}
+            autoFocus
+            hint="Vale 10 minuti."
+          />
+          <FormAlert>{errore}</FormAlert>
+          <div className="profilo__azioni">
+            <button className={attiva ? "btn btn--danger" : "btn"} type="submit"
+              disabled={inCorso} aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              {attiva ? "Conferma e disattiva" : "Conferma e attiva"}
+            </button>
+            <button className="btn btn--ghost" type="button" onClick={annulla} disabled={inCorso}>
+              Annulla
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 function SezioneSicurezza() {
   const { user } = useAuth();
   // `undefined` da un'API piu' vecchia: si tratta come "ha la password", cioe'
@@ -639,6 +756,7 @@ function SezioneSicurezza() {
   return (
     <>
       {haPassword ? <CambioPassword /> : <SenzaPassword />}
+      <SezioneDueFattori />
       <SezioneGoogle haPassword={haPassword} />
       <aside className="profilo__consiglio" aria-label="Consiglio">
         <span className="profilo__consiglio-icon">{ICONA_SICUREZZA}</span>
@@ -885,6 +1003,10 @@ const EVENTI: Record<string, { ok: string; ko: string }> = {
   identity_unlinked: { ok: "Scollegato l'account Google", ko: "Scollegamento da Google non riuscito" },
   reauth: { ok: "Identità riconfermata con Google", ko: "Riconferma con Google non riuscita" },
   link: { ok: "Collegamento a Google", ko: "Collegamento a Google non riuscito" },
+  mfa_code_sent: { ok: "Inviato un codice di verifica", ko: "Invio del codice non riuscito" },
+  mfa_verify: { ok: "Codice di verifica confermato", ko: "Codice di verifica sbagliato o scaduto" },
+  mfa_enabled: { ok: "Verifica in due passaggi attivata", ko: "Attivazione della verifica non riuscita" },
+  mfa_disabled: { ok: "Verifica in due passaggi disattivata", ko: "Disattivazione della verifica non riuscita" },
 };
 
 function SezioneAttivita() {

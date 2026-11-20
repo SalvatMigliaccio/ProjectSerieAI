@@ -25,14 +25,16 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
-from . import access, identities, oauth, service
+from . import access, identities, mfa, oauth, service
 from .deps import (
     Cfg,
     CurrentSession,
     Db,
+    Mailer,
     clear_oauth_cookie,
     client_ip,
     set_access_cookie,
+    set_mfa_cookie,
     set_oauth_cookie,
     set_reauth_cookie,
     set_session_cookie,
@@ -48,6 +50,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 # Where each intent lands when it fails, unless the flow names a better page.
 SIGN_IN_PAGE = "/sign-in"
 SECURITY_PAGE = "/account/sicurezza"
+# Where a sign-in with 2FA on goes to type the emailed code (ADR 0008, step 3).
+CODE_PAGE = "/sign-in/codice"
 
 
 class Providers(BaseModel):
@@ -158,7 +162,7 @@ def start(provider: str, request: Request, db: Db, cfg: Cfg,
 
 
 @router.get("/oauth/{provider}/callback")
-def callback(provider: str, request: Request, db: Db, cfg: Cfg,
+def callback(provider: str, request: Request, db: Db, cfg: Cfg, sender: Mailer,
              code: str | None = None, state: str | None = None,
              error: str | None = None) -> RedirectResponse:
     """Google sends the browser back here. Every branch ends in a redirect."""
@@ -200,6 +204,13 @@ def callback(provider: str, request: Request, db: Db, cfg: Cfg,
     if flow.intent == "sign_in":
         try:
             token, row = identities.sign_in(db, claims, cfg=cfg, ip=ip, user_agent=ua)
+        except service.MfaRequired as pending:
+            # Google passed the first factor; the emailed code is the second.
+            challenge = mfa.issue(db, pending.user, "sign_in", pending.via, cfg=cfg,
+                                  sender=sender, ip=ip, user_agent=ua)
+            out = _to(cfg, CODE_PAGE, next=flow.next_path)
+            set_mfa_cookie(out, challenge, cfg)
+            return _finish(out, cfg)
         except service.AccessDenied as exc:
             return fail(exc.reason)
         out = _to(cfg, flow.next_path)

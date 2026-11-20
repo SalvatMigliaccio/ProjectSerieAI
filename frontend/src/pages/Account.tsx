@@ -24,12 +24,14 @@ import { Link, useLocation, useNavigate, useSearchParams } from "react-router-do
 import * as authApi from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import {
+  CodeField,
   EmailField,
   FormAlert,
   FormSuccess,
   MIN_PASSWORD,
   PasswordField,
   SubmitButton,
+  codeError,
   emailError,
   newPasswordError,
   requiredError,
@@ -265,7 +267,12 @@ export function SignIn() {
     if (!v.check()) return;
     setBusy(true);
     try {
-      await signIn(email.trim(), password);
+      const attesa = await signIn(email.trim(), password);
+      if (attesa) {
+        // La password era giusta, ma l'account vuole anche il codice.
+        navigate("/sign-in/codice", { state: { from, sentTo: attesa.sent_to } });
+        return;
+      }
       navigate(from, { replace: true });
     } catch (err) {
       setError(serverError(err, "Accesso non riuscito. Riprova."));
@@ -316,6 +323,142 @@ export function SignIn() {
       <Links>
         <span className="faint">Non hai un account?</span>
         <Link to="/sign-up">Creane uno</Link>
+      </Links>
+    </Shell>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const LOCK_ICON = (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+    <rect x="5" y="10.5" width="14" height="10" rx="2.2" />
+    <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2.5" strokeLinecap="round" />
+  </svg>
+);
+
+/**
+ * Il secondo passaggio dell'accesso: il codice arrivato per email (ADR 0008).
+ *
+ * CI SI ARRIVA DA DUE STRADE. Dalla password, con la casella mascherata nello
+ * `state` della navigazione; da Google, con un redirect del server che porta
+ * solo `?next=`: allora la casella si chiede a `/api/auth/mfa/pending`. Se non
+ * c'e' niente in attesa (scaduto, o pagina aperta a mano) lo si dice e si
+ * rimanda all'accesso, invece di mostrare un modulo che non puo' funzionare.
+ *
+ * Nessuna sessione esiste ancora: la crea il server quando il codice e' giusto,
+ * e qui si adotta l'identita' che restituisce, come dopo una verifica email.
+ */
+export function MfaCode() {
+  const { adopt } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [params] = useSearchParams();
+  const stato = location.state as { from?: string; sentTo?: string } | null;
+  // `next` arriva dal server (ritorno da Google), quindi e' gia' un percorso
+  // interno; il controllo resta, perche' chiunque puo' scrivere un URL.
+  const nextParam = params.get("next");
+  const dove = stato?.from
+    ?? (nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
+
+  const [sentTo, setSentTo] = useState<string | null>(stato?.sentTo ?? null);
+  const [scaduto, setScaduto] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [esito, setEsito] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [rinvio, setRinvio] = useState(false);
+
+  const v = useValidation({ code: codeError(code) }, { code });
+
+  useEffect(() => {
+    if (sentTo) return;
+    let annullato = false;
+    void authApi.mfaPending().then((p) => {
+      if (annullato) return;
+      if (p) setSentTo(p.sent_to);
+      else setScaduto(true);
+    });
+    return () => {
+      annullato = true;
+    };
+  }, [sentTo]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setEsito(null);
+    if (!v.check()) return;
+    setBusy(true);
+    try {
+      const identity = await authApi.verifyMfa(code.replace(/\D/g, ""));
+      adopt(identity);
+      navigate(dove, { replace: true });
+    } catch (err) {
+      setError(serverError(err, "Codice non accettato. Riprova."));
+      setCode("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function rinvia() {
+    setError(null);
+    setEsito(null);
+    setRinvio(true);
+    try {
+      const p = await authApi.resendMfa();
+      setSentTo(p.sent_to);
+      setCode("");
+      v.reset();
+      setEsito("Ti abbiamo mandato un nuovo codice. Quello di prima non vale più.");
+    } catch (err) {
+      setError(serverError(err, "Non riesco a mandare un nuovo codice. Riprova fra poco."));
+    } finally {
+      setRinvio(false);
+    }
+  }
+
+  if (scaduto) {
+    return (
+      <Shell icon={LOCK_ICON} title="Richiesta scaduta"
+        lead="Il codice si chiede subito dopo la password, e vale per poco tempo. Accedi di nuovo per riceverne uno.">
+        <Link className="btn btn--block" to="/sign-in">Torna all'accesso</Link>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell
+      icon={LOCK_ICON}
+      title="Controlla la posta"
+      lead={sentTo ? (
+        <>Abbiamo mandato un codice di 6 cifre a <strong>{sentTo}</strong>. Scrivilo qui per entrare.</>
+      ) : "Un attimo…"}
+    >
+      <FormSuccess>{esito}</FormSuccess>
+      <form onSubmit={submit} noValidate>
+        <CodeField
+          id="code"
+          label="Codice di verifica"
+          value={code}
+          onChange={setCode}
+          onBlur={v.blur("code")}
+          error={v.error("code")}
+          inputRef={v.ref("code")}
+          autoFocus
+          hint="Vale 10 minuti. Non lo trovi? Guarda nello spam o nelle promozioni."
+        />
+        <FormAlert>{error}</FormAlert>
+        <SubmitButton busy={busy} busyText="Verifica…">
+          Entra
+        </SubmitButton>
+      </form>
+      <Links>
+        <button type="button" className="link-button" onClick={() => void rinvia()} disabled={rinvio}>
+          {rinvio ? "Invio…" : "Mandami un nuovo codice"}
+        </button>
+        <Link to="/sign-in">Annulla</Link>
       </Links>
     </Shell>
   );

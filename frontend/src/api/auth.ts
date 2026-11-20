@@ -25,6 +25,18 @@ export interface Identity {
   /** ADR 0008. Optional: an API older than Google sign-in omits them. */
   has_password?: boolean;
   providers?: string[];
+  /** Verifica in due passaggi attiva (ADR 0008, step 3). */
+  mfa_enabled?: boolean;
+}
+
+/** L'accesso ha superato il primo passaggio e aspetta il codice: nessuna sessione ancora. */
+export interface MfaPending {
+  mfa_required: true;
+  sent_to: string;
+}
+
+export function isMfaPending(x: Identity | MfaPending): x is MfaPending {
+  return (x as MfaPending).mfa_required === true;
 }
 
 /** Message shapes the API returns on 4xx. */
@@ -110,8 +122,9 @@ export async function me(): Promise<Identity | null> {
 export const signUp = (email: string, password: string) =>
   post<{ detail: string }>("/api/auth/signup", { email, password });
 
+/** 200 con l'identita', oppure 202 con `MfaPending` se l'account ha la verifica in due passaggi. */
 export const signIn = (email: string, password: string) =>
-  post<Identity>("/api/auth/sign-in", { email, password });
+  post<Identity | MfaPending>("/api/auth/sign-in", { email, password });
 
 export const signOut = () => post<void>("/api/auth/sign-out");
 
@@ -275,3 +288,26 @@ export const identities = () => getJson<LinkedIdentity[]>("/api/auth/identities"
 export const unlinkProvider = (provider: string) =>
   post<{ unlinked: number }>(`/api/auth/identities/${encodeURIComponent(provider)}/unlink`,
     undefined, { renew: true });
+
+// --- Verifica in due passaggi (ADR 0008, step 3) ---------------------------------
+
+/** Per la schermata del codice: a quale casella e' andato. `null` se non c'e' niente in attesa. */
+export async function mfaPending(): Promise<MfaPending | null> {
+  try {
+    const r = await fetch(`${baseUrl()}/api/auth/mfa/pending`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+    return r.ok ? ((await r.json()) as MfaPending) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const verifyMfa = (code: string) => post<Identity>("/api/auth/mfa/verify", { code });
+export const resendMfa = () => post<MfaPending>("/api/auth/mfa/resend");
+
+export const mfaStart = (azione: "enable" | "disable") =>
+  post<MfaPending>(`/api/auth/mfa/${azione}/start`, undefined, { renew: true });
+export const mfaConfirm = (azione: "enable" | "disable", code: string) =>
+  post<Identity>(`/api/auth/mfa/${azione}/confirm`, { code }, { renew: true });

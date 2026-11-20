@@ -131,6 +131,15 @@ class Settings(BaseSettings):
     reauth_minutes: int = Field(default=5, ge=1, le=15)
     reauth_cookie_name: str = "ainaples_reauth"
 
+    # --- second factor by email (ADR 0008, step 3) ---------------------------
+    # The code is a six-digit number: a million values. What makes guessing
+    # hopeless is not the size but the two caps together — a few attempts per
+    # code, and a new code only after the first factor again (or a resend,
+    # limited per account). Ten minutes: long enough for a slow mailbox.
+    mfa_code_minutes: int = Field(default=10, ge=3, le=30)
+    mfa_max_attempts: int = Field(default=5, ge=3, le=10)
+    mfa_cookie_name: str = "ainaples_mfa"
+
     @property
     def google_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret.get_secret_value())

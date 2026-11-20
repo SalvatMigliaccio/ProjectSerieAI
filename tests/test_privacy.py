@@ -55,7 +55,8 @@ def test_the_cookie_policy_names_exactly_the_cookies_the_backend_sets() -> None:
     cfg = _defaults()
     named = set(re.findall(r'nome:\s*"([^"]+)"', _published()))
     assert named == {cfg.cookie_name, cfg.access_cookie_name,
-                     cfg.oauth_cookie_name, cfg.reauth_cookie_name}, (
+                     cfg.oauth_cookie_name, cfg.reauth_cookie_name,
+                     cfg.mfa_cookie_name}, (
         "the cookie policy and backend/auth/settings.py disagree: update "
         "frontend/src/legal/dati.ts (and AGGIORNATA_IL) together with the code")
 
@@ -71,6 +72,9 @@ def test_the_published_cookie_durations_match_the_settings() -> None:
         "the Google sign-in cookie lifetime on the cookie page is not oauth_flow_minutes"
     assert f'durata: "{cfg.reauth_minutes} minuti"' in text, \
         "the re-confirmation cookie lifetime on the cookie page is not reauth_minutes"
+    from backend.auth.deps import MFA_COOKIE_MINUTES
+    assert f'durata: "{MFA_COOKIE_MINUTES} minuti' in text, \
+        "the 2FA cookie lifetime on the cookie page is not deps.MFA_COOKIE_MINUTES"
 
 
 @pytest.mark.parametrize("published, setting", [
@@ -111,7 +115,7 @@ def test_no_flow_sets_a_cookie_the_policy_does_not_declare(client, db) -> None: 
     """Signup to deletion, every Set-Cookie on the way."""
     cfg = _defaults()
     declared = {cfg.cookie_name, cfg.access_cookie_name,
-                cfg.oauth_cookie_name, cfg.reauth_cookie_name}
+                cfg.oauth_cookie_name, cfg.reauth_cookie_name, cfg.mfa_cookie_name}
     email = "cookie-policy@example.com"
     seen: set[str] = set()
 

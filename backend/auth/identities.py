@@ -128,6 +128,10 @@ def sign_in(db: Session, claims: Claims, *, cfg: Settings | None = None,
             service.record_event(db, "identity_linked", "ok", user_id=user.id, ip=ip,
                                  user_agent=user_agent, details={**via, "auto": True})
 
+    if user.mfa_enabled():
+        # Google is the FIRST factor here, not a way around the second
+        # (ADR 0008). A link made just above stays: the route commits.
+        raise service.MfaRequired(user, p)
     service.record_event(db, "sign_in", "ok", user_id=user.id, ip=ip,
                          user_agent=user_agent, details=via)
     # Same as the password path: before the session, so the first access token

@@ -152,7 +152,13 @@ admin_action_limiter = RateLimiter(limit=60, window_seconds=300)
 # on our client id and fills the audit log with refusals.
 oauth_limiter = RateLimiter(limit=30, window_seconds=300)
 
+# The emailed second factor (ADR 0008, step 3). Per address on verify, on top
+# of the per-code attempt cap; per ACCOUNT on resend, because every resend is
+# an email to a real person and a fresh code to guess.
+mfa_limiter = RateLimiter(limit=30, window_seconds=300)
+mfa_resend_limiter = RateLimiter(limit=5, window_seconds=3600)
+
 ALL_LIMITERS = (sign_in_limiter, signup_limiter, reset_limiter, api_limiter,
                 refresh_limiter, token_limiter, password_change_limiter,
                 session_admin_limiter, prediction_limiter, admin_action_limiter,
-                oauth_limiter)
+                oauth_limiter, mfa_limiter, mfa_resend_limiter)

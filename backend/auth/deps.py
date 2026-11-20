@@ -295,3 +295,19 @@ def set_reauth_cookie(response: Response, token: str, cfg: Settings) -> None:
 
 def clear_reauth_cookie(response: Response, cfg: Settings) -> None:
     _drop(response, cfg, cfg.reauth_cookie_name, REAUTH_PATH)
+
+
+# The pending second factor (ADR 0008, step 3): only the 2FA routes read it.
+# It lives as long as a resend chain may (`mfa.RESEND_WINDOW`), not as long as
+# one code: "send again" after the first code expired must still find it.
+MFA_PATH = "/api/auth/mfa"
+MFA_COOKIE_MINUTES = 30
+
+
+def set_mfa_cookie(response: Response, token: str, cfg: Settings) -> None:
+    _cookie(response, cfg, cfg.mfa_cookie_name, token, MFA_PATH,
+            max_age=MFA_COOKIE_MINUTES * 60)
+
+
+def clear_mfa_cookie(response: Response, cfg: Settings) -> None:
+    _drop(response, cfg, cfg.mfa_cookie_name, MFA_PATH)

@@ -1,6 +1,6 @@
 # ADR 0008 — Accesso con Google (e poi Apple), secondo fattore via email
 
-- **Stato**: accettata. Step 1 (schema) e step 2 (Google) implementati il 20 novembre 2026; step 3-5 da fare
+- **Stato**: accettata. Step 1 (schema), 2 (Google) e 3 (secondo fattore) implementati il 20 novembre 2026; step 5 da fare, step 4 (Apple) rimandato
 - **Data**: 20 novembre 2026
 - **Contesto**: oggi si entra solo con email e password (`backend/auth/`, ADR 0003)
 - **Decide**: come un account si lega a un fornitore esterno, cosa succede a un
@@ -14,7 +14,7 @@
 |---|---|---|
 | 1 | schema: `user_identities`, `mfa_challenges`, `password_hash` facoltativo | **fatto** |
 | 2 | accesso con Google (OpenID Connect, codice + PKCE, lato server) | **fatto** |
-| 3 | secondo fattore via email, facoltativo | da fare |
+| 3 | secondo fattore via email, facoltativo | **fatto** |
 | 4 | accesso con Apple | **rimandato**: servono account Apple Developer e un dominio HTTPS |
 | 5 | informativa privacy (Google come destinatario), `openapi.json`, `COMANDI.md` | da fare |
 
@@ -159,3 +159,47 @@ Google. Servira' anche per Apple (ES256).
 con una chiave RSA generata nel test. Controllo per mutazione: togliendo il
 controllo dello `state` o il rifiuto degli account `pending`, i test
 corrispondenti falliscono.
+
+## Step 3 — com'e' fatto il secondo fattore
+
+| file | cosa |
+|---|---|
+| `backend/auth/mfa.py` | emissione, verifica, rinvio del codice; attivazione e disattivazione |
+| `backend/auth/mfa_routes.py` | `/api/auth/mfa/`: `pending`, `verify`, `resend`; `enable/start`, `enable/confirm`, `disable/start`, `disable/confirm` |
+| `service.MfaRequired` | l'eccezione che `service.sign_in` e `identities.sign_in` sollevano al posto di aprire la sessione |
+| `frontend/src/pages/Account.tsx` (`MfaCode`) | la schermata `/#/sign-in/codice` |
+| `frontend/src/pages/Profile.tsx` (`SezioneDueFattori`) | attivare e disattivare, in Sicurezza |
+
+**Un'eccezione, non un valore di ritorno.** Chi chiama `service.sign_in` su un
+account con la 2FA attiva riceve `MfaRequired`, non una sessione: un chiamante
+che se ne dimentica fallisce, non apre una sessione per sbaglio. La rotta la
+cattura senza rilanciarla, quindi la richiesta fa commit: quello che il primo
+fattore ha scritto (il contatore azzerato, un collegamento a Google appena
+fatto) resta.
+
+**L'accesso con password risponde 202** con `{"mfa_required": true, "sent_to":
+"m•••o@gmail.com"}` e il solo cookie `ainaples_mfa`. L'accesso con Google
+rimanda a `/#/sign-in/codice?next=...`, e la pagina chiede la casella a
+`GET /api/auth/mfa/pending`.
+
+**I limiti, insieme.** 5 tentativi per codice (`AI_NAPLES_MFA_MAX_ATTEMPTS`),
+10 minuti di validita' (`AI_NAPLES_MFA_CODE_MINUTES`), un solo codice vivo per
+utente e scopo, rinvio limitato a 5 l'ora per account e a 30 minuti dal primo
+codice, 30 richieste ogni 5 minuti per indirizzo su verifica e rinvio. Un
+codice sbagliato costa il tentativo anche se la richiesta fallisce
+(`keep_on_refusal`, come per la password).
+
+**Spegnerla chiede un codice**, come accenderla: un cookie rubato non deve
+poter togliere la protezione che esiste per i cookie rubati.
+
+**Il codice non e' nell'oggetto dell'email**: l'oggetto si legge nelle
+notifiche di un telefono bloccato.
+
+**Cookie nuovo, dichiarato**: `ainaples_mfa`, 30 minuti, solo su
+`/api/auth/mfa`.
+
+**Verifica**: `tests/test_auth_mfa.py`, 18 test. Per mutazione: togliendo il
+blocco dopo la password, il tetto ai tentativi, o il blocco dopo Google, falliscono
+i test corrispondenti. Provato dal vivo il 20 novembre 2026 sullo stack Docker
+con Mailpit: attivazione, accesso in due passaggi, rinvio che invalida il
+codice vecchio, account di prova cancellato.

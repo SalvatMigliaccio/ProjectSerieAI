@@ -36,7 +36,8 @@ const RINNOVO_MS = 10 * 60 * 1000;
 interface AuthValue {
   phase: Phase;
   user: Identity | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** `null` se l'accesso e' completo, l'attesa del codice se serve il secondo passaggio. */
+  signIn: (email: string, password: string) => Promise<authApi.MfaPending | null>;
   signOut: () => Promise<void>;
   /** Erase the account (GDPR art. 17). Throws on a wrong password, and then
    *  the user stays signed in: only a success clears the local state. */
@@ -118,9 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [phase]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const identity = await authApi.signIn(email, password);
-    setUser(identity);
+    const risposta = await authApi.signIn(email, password);
+    // Con la verifica in due passaggi la password non basta: nessuna sessione
+    // finche' il codice non e' confermato, e lo stato resta "anonimo".
+    if (authApi.isMfaPending(risposta)) return risposta;
+    setUser(risposta);
     setPhase("authenticated");
+    return null;
   }, []);
 
   const signOut = useCallback(async () => {

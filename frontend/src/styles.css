@@ -2341,6 +2341,13 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   background: var(--mint-wash);
 }
 
+/* Il codice di verifica (ADR 0008): cifre larghe e distanziate, monospazio,
+   cosi' si confronta a colpo d'occhio con quello dell'email. */
+.field__code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1.375rem; letter-spacing: 0.35em; text-align: center;
+}
+
 /* Accesso con Google (ADR 0008): il pulsante e la riga "oppure" che lo separa
    dal modulo con la password. Fantasma e non pieno: l'azione principale della
    schermata resta il pulsante del modulo. */

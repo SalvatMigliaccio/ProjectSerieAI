@@ -7,6 +7,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import {
   ForgotPassword,
   ResetPassword,
+  MfaCode,
   SignIn,
   SignUp,
   VerifyEmail,
@@ -25,6 +26,7 @@ const TITOLI: Record<string, string> = {
   "/": "MatchPoint — previsioni Serie A",
   "/dashboard": "Dashboard · MatchPoint",
   "/sign-in": "Accedi · MatchPoint",
+  "/sign-in/codice": "Codice di verifica · MatchPoint",
   "/sign-up": "Crea un account · MatchPoint",
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
@@ -102,6 +104,7 @@ export function App() {
           {/* L'amministrazione sta nella dashboard; il vecchio indirizzo ci porta. */}
           <Route path="/admin/*" element={<Navigate to="/dashboard/admin" replace />} />
           <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/sign-in/codice" element={<MfaCode />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />

@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
-from . import access, service
+from . import access, mfa, service
 from .deps import (
     Cfg,
     CurrentSession,
@@ -32,6 +32,7 @@ from .deps import (
     clear_session_cookie,
     client_ip,
     set_access_cookie,
+    set_mfa_cookie,
     set_session_cookie,
 )
 from .models import User
@@ -117,6 +118,19 @@ class Identity(BaseModel):
     # only provider. Defaults keep older clients working.
     has_password: bool = True
     providers: list[str] = Field(default_factory=list)
+    mfa_enabled: bool = False
+
+
+class MfaPending(BaseModel):
+    """
+    The first factor passed and a code is on its way: no session yet.
+
+    `sent_to` is the address MASKED (`m•••o@gmail.com`), enough for the person
+    to know which mailbox to open.
+    """
+
+    mfa_required: bool = True
+    sent_to: str
 
 
 def _identity(user: User) -> Identity:
@@ -130,6 +144,7 @@ def _identity(user: User) -> Identity:
         email_verified_at=user.email_verified_at.isoformat() if user.email_verified_at else None,
         has_password=user.has_password(),
         providers=sorted(i.provider for i in user.identities),
+        mfa_enabled=user.mfa_enabled(),
     )
 
 
@@ -230,15 +245,28 @@ def verify_email(payload: TokenOnly, response: Response, request: Request,
 
 # --- sign in and out --------------------------------------------------------
 
-@router.post("/sign-in")
+@router.post("/sign-in", responses={202: {"model": MfaPending,
+                                           "description": "second factor required"}})
 def sign_in(payload: Credentials, response: Response, request: Request,
-            db: Db,
-            cfg: Cfg) -> Identity:
+            db: Db, cfg: Cfg, sender: Mailer) -> Identity:
+    """
+    200 with the identity, or 202 with `MfaPending` when the account has 2FA on.
+
+    On 202 there is no session: only the `ainaples_mfa` cookie, which
+    `POST /api/auth/mfa/verify` turns into one with the emailed code.
+    """
     _limit(sign_in_limiter, request, "sign-in")
+    ip, ua = client_ip(request), request.headers.get("user-agent")
     try:
         token, row = service.sign_in(db, payload.email, payload.password, cfg=cfg,
-                                   ip=client_ip(request),
-                                   user_agent=request.headers.get("user-agent"))
+                                   ip=ip, user_agent=ua)
+    except service.MfaRequired as pending:
+        challenge = mfa.issue(db, pending.user, "sign_in", pending.via, cfg=cfg,
+                              sender=sender, ip=ip, user_agent=ua)
+        out = JSONResponse(MfaPending(sent_to=mfa.mask(pending.user.email)).model_dump(),
+                           status_code=status.HTTP_202_ACCEPTED)
+        set_mfa_cookie(out, challenge, cfg)
+        return out
     except service.AccessDenied as exc:
         # 401 for every reason, with the message the service chose. The service
         # is what decides how vague to be; the route does not second-guess it.
