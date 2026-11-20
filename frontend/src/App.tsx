@@ -20,6 +20,7 @@ import { DashboardShell } from "./pages/dashboard/Shell";
 import { Squadra } from "./pages/dashboard/Squadra";
 import { Stagione } from "./pages/dashboard/Stagione";
 import { Hero } from "./pages/Hero";
+import { CookiePolicy, Privacy } from "./pages/Legal";
 import { Profile } from "./pages/Profile";
 
 const TITOLI: Record<string, string> = {
@@ -27,6 +28,8 @@ const TITOLI: Record<string, string> = {
   "/dashboard": "Dashboard · MatchPoint",
   "/sign-in": "Accedi · MatchPoint",
   "/sign-in/codice": "Codice di verifica · MatchPoint",
+  "/privacy": "Informativa privacy · MatchPoint",
+  "/cookie": "Cookie policy · MatchPoint",
   "/sign-up": "Crea un account · MatchPoint",
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
@@ -109,6 +112,9 @@ export function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Pubbliche per legge: l'informativa si legge PRIMA di registrarsi. */}
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/cookie" element={<CookiePolicy />} />
 
           {/* DIETRO L'ACCESSO, dal 9 ottobre 2026. Dalla fase 4 era aperta,
               con lo storico pubblico come vetrina; ora la dashboard si vede

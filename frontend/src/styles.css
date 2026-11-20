@@ -3776,3 +3776,25 @@ td > .adm-badge:first-child, .adm-user-head__badges > .adm-badge:first-child { m
 .adm-linkbtn { padding: 0; border: 0; background: none; color: var(--mint); font: inherit; cursor: pointer; }
 .adm-linkbtn:hover { text-decoration: underline; }
 p.adm-card { margin-top: var(--s5); }
+
+
+/* Informativa privacy e cookie policy (SPEC_PRIVACY_COOKIE R1, R2). Testo da
+   leggere, non da scorrere: riga stretta, tabelle che scorrono in orizzontale
+   su telefono invece di schiacciarsi in colonne illeggibili. */
+.legale { padding: var(--s6) 0 var(--s7, 64px); }
+.legale__testo { max-width: 860px; }
+.legale__eyebrow { color: var(--muted); font-size: 0.8125rem; margin: 0 0 var(--s2); }
+.legale__lead { color: var(--muted); font-size: 1.0625rem; line-height: 1.6; margin: 0 0 var(--s6); }
+.legale h2 { margin: var(--s6) 0 var(--s3); font-size: 1.25rem; }
+.legale p, .legale li { line-height: 1.65; }
+.legale ul { padding-left: var(--s5); }
+.legale li + li { margin-top: var(--s2); }
+.legale a { color: var(--mint); }
+.legale a:hover { text-decoration: underline; }
+.legale__tabella { overflow-x: auto; margin: 0 0 var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.legale table { width: 100%; border-collapse: collapse; font-size: 0.875rem; min-width: 560px; }
+.legale th, .legale td { text-align: left; vertical-align: top; padding: var(--s3); border-bottom: 1px solid var(--line); }
+.legale th { background: var(--bg-2); font-weight: 600; }
+.legale tr:last-child td { border-bottom: 0; }
+.legale code { font-size: 0.8125rem; }
+.legale__nota { text-align: left; color: var(--muted); margin-top: var(--s3); }

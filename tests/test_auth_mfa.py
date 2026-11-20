@@ -289,3 +289,48 @@ def test_the_address_is_masked(email, masked) -> None:
 
 def test_codes_keep_leading_zeros() -> None:
     assert all(len(mfa.new_code()) == 6 for _ in range(200))
+
+
+# --- the cookie policy holds on the new flows (SPEC_PRIVACY_COOKIE R6, T9) ---------
+
+def test_google_and_2fa_set_no_cookie_the_policy_does_not_declare(client, db, post, google) -> None:  # noqa: F811
+    """
+    The privacy test walks signup to deletion; this walks what ADR 0008 added.
+
+    A cookie appearing here and not in `legal/dati.ts` makes the cookie policy
+    false without anything else noticing.
+    """
+    from tests.test_privacy import _published
+
+    declared = set(re.findall(r'nome:\s*"([^"]+)"', _published()))
+    seen: set[str] = set()
+
+    def names(r) -> set[str]:
+        return {h.split("=", 1)[0].strip() for h in r.headers.get_list("set-cookie")}
+
+    _account(client, db, post, "politica@gmail.com")
+    seen |= names(client.post("/api/auth/mfa/enable/start"))
+    seen |= names(client.post("/api/auth/mfa/enable/confirm",
+                              json={"code": _code(post, "politica@gmail.com")}))
+    seen |= names(client.post("/api/auth/sign-out"))
+
+    google.claims = {"sub": "g-pol", "email": "politica@gmail.com", "email_verified": True}
+    start = client.get("/api/auth/oauth/google/start")
+    seen |= names(start)
+    state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+    seen |= names(client.get("/api/auth/oauth/google/callback", params={"code": "c", "state": state}))
+    seen |= names(client.post("/api/auth/mfa/resend"))
+    seen |= names(client.post("/api/auth/mfa/verify", json={"code": _code(post, "politica@gmail.com")}))
+    seen |= names(client.post("/api/auth/mfa/disable/start"))
+    seen |= names(client.post("/api/auth/mfa/disable/confirm",
+                              json={"code": _code(post, "politica@gmail.com")}))
+
+    start = client.get("/api/auth/oauth/google/start", params={"intent": "reauth"})
+    seen |= names(start)
+    state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
+    seen |= names(client.get("/api/auth/oauth/google/callback", params={"code": "c", "state": state}))
+
+    assert {"ainaples_oauth", "ainaples_mfa", "ainaples_reauth"} <= seen, \
+        "the walk did not reach every new cookie: it would pass vacuously"
+    assert seen <= declared, (
+        f"cookies set but not declared in frontend/src/legal/dati.ts: {sorted(seen - declared)}")

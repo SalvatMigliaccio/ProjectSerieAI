@@ -91,6 +91,30 @@ def test_the_published_retention_periods_match_the_settings(published: str, sett
         f"purge applies {setting}={getattr(_defaults(), setting)}: one of the two is wrong")
 
 
+def test_the_policy_pages_are_published_and_reachable() -> None:
+    """
+    R1-R3 (ADR 0005, T1 and T3, done 20 November 2026).
+
+    The pages must exist, be routed, be linked from the footer of every page
+    and from signup, and take their facts from `legal/dati.ts` rather than
+    restating them: a period typed into the page would escape every check above.
+    """
+    src = ROOT / "frontend" / "src"
+    app = (src / "App.tsx").read_text(encoding="utf-8")
+    assert 'path="/privacy"' in app and 'path="/cookie"' in app, "policy routes missing"
+    footer = (src / "components" / "Layout.tsx").read_text(encoding="utf-8")
+    assert 'to="/privacy"' in footer and 'to="/cookie"' in footer, "footer links missing"
+    signup = (src / "pages" / "Account.tsx").read_text(encoding="utf-8")
+    assert 'to="/privacy"' in signup, "the signup form must link the privacy policy"
+
+    page = (src / "pages" / "Legal.tsx").read_text(encoding="utf-8")
+    for name in ("COOKIE", "CONSERVAZIONE_GIORNI", "TRATTAMENTI", "DESTINATARI", "TITOLARE",
+                 "AGGIORNATA_IL", "ETA_MINIMA"):
+        assert name in page, f"Legal.tsx does not read {name} from legal/dati.ts"
+    typed = re.findall(r"\b\d+ (?:giorni|mesi|minuti|ore)\b", page)
+    assert not typed, f"durations written by hand in Legal.tsx, move them to legal/dati.ts: {typed}"
+
+
 def test_the_page_shell_loads_nothing_from_another_origin() -> None:
     """
     No banner is needed only while every cookie is technical.

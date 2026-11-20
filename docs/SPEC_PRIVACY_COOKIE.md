@@ -1,7 +1,9 @@
 # Spec — informativa privacy, cookie policy, diritti dell'interessato
 
-Stato: **implementata in parte; T1 e T3 sospesi** il 27 ottobre 2026, vedi
-`docs/adr/0005-privacy-cookie.md`.
+Stato: **implementata** il 20 novembre 2026 (T1 e T3, sospesi dal 27 ottobre,
+ripresi e chiusi), vedi `docs/adr/0005-privacy-cookie.md`. Pagine: `#/privacy`,
+`#/cookie`, in `frontend/src/pages/Legal.tsx`, che legge ogni fatto da
+`frontend/src/legal/dati.ts`.
 
 Questa spec dice **cosa** deve essere vero quando il lavoro e' finito e come lo
 si verifica. Il testo legale definitivo non e' qui: e' un deliverable (vedi T1).
@@ -23,27 +25,54 @@ codice cambia, cambia prima questa tabella e poi il testo.
 | dato | dove | finalita' | base giuridica | conservazione |
 |---|---|---|---|---|
 | email, hash password, stato, date | `users` | account e accesso | art. 6.1.b (contratto) | fino alla cancellazione |
-| segreto TOTP | `users.totp_secret` | secondo fattore, se attivato | art. 6.1.b | fino alla disattivazione o cancellazione |
+| account Google collegato: identificativo (`sub`), email al momento del collegamento, date | `user_identities` | accesso con Google, se scelto | art. 6.1.b | fino allo scollegamento o alla cancellazione |
+| verifica in due passaggi: metodo e data di attivazione | `users.mfa_method`, `mfa_enabled_at` | secondo fattore, se attivato | art. 6.1.b | fino alla disattivazione o cancellazione |
+| codici di verifica (solo HMAC), tentativi, IP, user agent | `mfa_challenges` | secondo fattore; rilevare tentativi di indovinare il codice | art. 6.1.b e 6.1.f (sicurezza) | **30 giorni** dalla scadenza, come i token email |
+| segreto TOTP | `users.totp_secret` | riservata a un'app di autenticazione futura: **oggi sempre vuota** | art. 6.1.b | — |
 | squadra preferita | `users.favorite_team` | personalizzazione | art. 6.1.b | fino alla cancellazione |
 | pronostici personali | `user_predictions` | funzione "I miei pronostici" | art. 6.1.b | fino alla cancellazione |
 | IP, user agent, scadenza | `sessions` | sessioni attive, revoca | art. 6.1.f (sicurezza) | **12 mesi** dalla scadenza o revoca |
 | IP, user agent, esito, tipo | `auth_events` | rilevare abusi e accessi illeciti | art. 6.1.f (sicurezza) | **12 mesi** |
 | token di verifica e reset (hash) | `email_tokens` | attivazione, reset password | art. 6.1.b | **30 giorni** dalla scadenza |
+
+`users.password_hash` e' vuoto per chi si e' registrato con Google e non ha mai
+impostato una password (ADR 0008).
 | account mai verificato | `users.status = pending` | — | art. 6.1.b | **30 giorni**, poi cancellato |
-| log delle richieste HTTP | Vercel | esercizio della piattaforma | art. 6.1.f | secondo i termini di Vercel |
+| log delle richieste HTTP | server (VPS) | esercizio del servizio | art. 6.1.f | rotazione dei log del server |
 
 Cose che il sistema **non** fa, e l'informativa lo dice esplicitamente:
 nessuna profilazione, nessun marketing, nessuna decisione automatizzata
 sull'utente (art. 22: le previsioni riguardano le partite, non le persone),
 nessuna cessione a terzi, nessun dato di categoria particolare.
 
+**Dati ricevuti da terzi (art. 14) — l'accesso con Google**, dal 20 novembre
+2026 (ADR 0008). Solo per chi lo sceglie. Da Google arrivano **tre** dati, e
+nient'altro, perche' lo scope richiesto e' `openid email`: l'identificativo
+dell'account Google (`sub`), l'indirizzo email e se Google lo considera
+verificato. **Non** arrivano nome, foto, contatti, ne' alcun accesso ad altri
+servizi Google (nessun token di accesso viene conservato).
+
+Google per l'accesso **non** e' un nostro responsabile: e' un **titolare
+autonomo** del proprio trattamento, e da quel momento sa che la persona entra
+in MatchPoint. L'informativa lo deve dire e rimandare alla privacy policy di
+Google. Non e' un trasferimento nostro verso Google: e' il browser della persona
+che parla con Google; il nostro server invia a Google solo il codice monouso e
+le credenziali del client, e riceve il token con i tre dati sopra.
+
 **Fornitori (responsabili ex art. 28)** e trasferimenti:
+
+Scelte del 20 novembre 2026: **VPS nell'UE con Docker** (`compose.prod.yaml`:
+sito, API e Postgres sullo stesso server) e **Gmail SMTP** per le email.
+Vercel e Neon, citati nella prima stesura, non sono piu' nel piano.
 
 | fornitore | ruolo | sede dei dati | strumento per l'extra-UE |
 |---|---|---|---|
-| Vercel Inc. | hosting di frontend e API | USA | DPF / SCC — **da verificare** |
-| Neon (Databricks) | Postgres | regione AWS — **da verificare** | se fuori UE: DPF / SCC |
-| provider SMTP | invio email transazionali | **da decidere** | dipende dal provider |
+| fornitore del VPS (**da scegliere**, purche' nell'UE) | hosting di sito, API e database | UE | non serve |
+| Google, servizio Gmail (SMTP) | invio email transazionali, compresi i **codici di verifica in due passaggi** | anche USA | EU-US Data Privacy Framework |
+
+L'informativa nomina il VPS per **categoria** ("fornitore del server, UE"),
+come l'art. 13.1.e consente. Quando il fornitore e' scelto, se si vuole
+nominarlo basta cambiare `DESTINATARI` in `legal/dati.ts`.
 
 ## 3. Cookie e archiviazione locale — verificato
 
@@ -51,10 +80,18 @@ nessuna cessione a terzi, nessun dato di categoria particolare.
 |---|---|---|---|
 | `ainaples_session` | tecnico, HttpOnly, SameSite=Lax | sessione del browser | refresh token (ADR 0003) |
 | `ainaples_access` | tecnico, HttpOnly, SameSite=Lax | durata del token di accesso | autenticazione delle richieste |
+| `ainaples_oauth` | tecnico, HttpOnly, SameSite=Lax, solo `/api/auth/oauth` | 10 minuti, cancellato al ritorno da Google | lega il ritorno da Google al browser che l'ha iniziato (anti-CSRF) |
+| `ainaples_mfa` | tecnico, HttpOnly, SameSite=Lax, solo `/api/auth/mfa` | 30 minuti, cancellato all'inserimento del codice | lega il codice di verifica al browser che l'ha chiesto |
+| `ainaples_reauth` | tecnico, HttpOnly, SameSite=Lax, solo `/api/me/account` | 5 minuti | solo account senza password: riconferma con Google prima della cancellazione |
 | `localStorage.aiNaplesApiBase` | tecnico | persistente | **solo in sviluppo**, mai impostato in produzione |
 
 Niente analytics, niente pixel, niente font da CDN (sono self-hosted con
 `@fontsource`), niente script di terze parti.
+
+**L'accesso con Google non cambia questa conclusione.** Il pulsante e' un
+semplice link: nessuno script di Google viene caricato nelle nostre pagine, e i
+cookie che Google imposta li imposta sul proprio dominio, quando la persona ci
+va. I tre cookie nuovi sono tecnici, stretti per percorso e per durata.
 
 **Conseguenza: nessun banner di consenso.** Per i soli cookie tecnici le linee
 guida del Garante (10 giugno 2021) chiedono l'informativa, non il consenso. Un
@@ -100,8 +137,14 @@ continuando a usare l'account, ed e' falso.
 ### R4 — Cancellazione dell'account
 - `POST /api/me/account/delete` (POST e non DELETE: CORS ammette solo GET e
   POST, e `/api/me/` e' gia' fra i prefissi scrivibili, `WRITABLE_PREFIX`);
-- richiede la password attuale. (Il TOTP oggi e' solo una colonna, nessun
-  flusso lo usa: quando arrivera', la cancellazione dovra' chiederlo.)
+- richiede la password attuale. **Un account senza password** (creato con
+  Google) conferma invece rientrando con Google: il ritorno lascia
+  `ainaples_reauth`, firmato, valido 5 minuti, legato a utente **e** sessione
+  (ADR 0008);
+- **non chiede anche il codice di verifica in due passaggi**, ed e' una scelta:
+  il caso da cui la cancellazione si difende e' chi ha in mano una sessione
+  (portatile sbloccato, cookie rubato), e quel caso e' gia' fermato dalla
+  password o dal rientro con Google, che la sessione da sola non da'.
 - cancella la riga `users`; sessioni, token, ruoli e pronostici spariscono per
   `ON DELETE CASCADE`, gia' presente; `auth_events` resta con `user_id = NULL`,
   come il modello prevede, e sparisce alla scadenza dei 12 mesi;
@@ -146,26 +189,44 @@ costo senza ricavo. Va scritto nell'informativa come si chiede.
   tenuto, ma e' un documento interno, non una pagina: la tabella della
   sezione 2 ne e' gia' quasi tutto il contenuto.
 
-## 7. Punti aperti, da chiudere prima di pubblicare
+## 7. Punti aperti — chiusi il 20 novembre 2026
 
-1. **Recapito del titolare**: indirizzo postale o PEC. L'email gmail da sola e'
-   debole come recapito.
-2. **Provider SMTP di produzione**: chi e', dove sta.
-3. **Regione di Neon e delle funzioni Vercel**: da leggere nelle dashboard.
+Erano la ragione della sospensione di T1 e T3. Le risposte:
+
+- **recapito del titolare**: **solo email**, scelta del titolare. E' l'indirizzo
+  gia' pubblico nel piede del sito; un recapito postale o PEC si aggiunge in
+  `TITOLARE` (`legal/dati.ts`) quando ci sara';
+- **provider SMTP**: **Gmail SMTP**;
+- **hosting**: **VPS nell'UE**, fornitore da scegliere; nessun trasferimento
+  extra-UE per l'hosting.
+
+Restano veri due avvisi:
+
+0. **L'accesso con Google e' chiuso a chi non e' "utente di test" finche' manca
+   l'informativa.** Nella Google Cloud Console la schermata di consenso OAuth
+   in modalita' *Testing* ammette solo gli indirizzi elencati li'; per
+   pubblicarla Google chiede l'URL di un'informativa privacy e della home.
+   E' un motivo in piu', concreto, per chiudere T1 e T3.
+
+1. se il VPS scelto non fosse nell'UE, la riga dei destinatari diventa falsa:
+   va cambiata **prima** del deploy;
+2. se le email passeranno da un altro provider, idem.
 
 ## 8. Piano
 
 | # | compito | dipende da | verifica |
 |---|---|---|---|
-| T1 | testo di informativa e cookie policy, in `frontend/src/legal/` | 7.1-7.3 | rilettura — **sospeso** (ADR 0005) |
+| T1 | testo di informativa e cookie policy, `frontend/src/pages/Legal.tsx` | 7 | rilettura — **fatto** (20 novembre 2026) |
 | T2 | `dati.ts` con cookie e periodi; test di coerenza con `settings.py` | — | R6 — **fatto** |
-| T3 | rotte `#/privacy`, `#/cookie`, titoli in `TITOLI`, link nel footer e in `SignUp` | T1 | R3 — **sospeso** (ADR 0005) |
+| T3 | rotte `#/privacy`, `#/cookie`, titoli in `TITOLI`, link nel footer e in `SignUp` | T1 | R3 — **fatto**; `test_the_policy_pages_are_published_and_reachable` |
 | T4 | test sui `Set-Cookie` e su `index.html` | — | R6 — **fatto** |
 | T5 | `POST /api/me/account/delete` + test (cascate, evento, cookie cancellati, password errata rifiutata) | — | R4 — **fatto** |
 | T6 | blocco "Elimina account" in `Profile.tsx` | T5 | R4 — **fatto** |
 | T7 | `cli purge` + periodi in `settings.py` + test | — | R5 — **fatto** |
 | T8 | voce in `COMANDI.md` per `purge`, rimando a questa spec in `CLAUDE.md` | T7 | — **fatto** |
+| T9 | inventario, cookie e cancellazione aggiornati per Google e la verifica in due passaggi; guardia sui cookie estesa a quei flussi | ADR 0008 | R6 — **fatto** (20 novembre 2026) |
 
-T1 e T3 sono sospesi in attesa dei punti aperti della sezione 7: il perche',
-cosa comporta e quando si riprende stanno in `docs/adr/0005-privacy-cookie.md`. **Il `purge` va messo nello scheduler**: finche' non gira, i
+T1 e T3 erano sospesi in attesa dei punti della sezione 7, ora chiusi: la
+storia sta in `docs/adr/0005-privacy-cookie.md`. Resta valido il consiglio
+della spec: prima di pubblicare, una rilettura di chi se ne occupa di mestiere. **Il `purge` va messo nello scheduler**: finche' non gira, i
 periodi dell'informativa sono una promessa non mantenuta.

@@ -40,6 +40,7 @@ import {
 } from "../components/Form";
 import { GoogleSignIn } from "../components/GoogleButton";
 import { Colophon, Masthead } from "../components/Layout";
+import { ETA_MINIMA } from "../legal/dati";
 
 /**
  * Cosa si ottiene entrando, accanto al modulo.
@@ -561,6 +562,14 @@ export function SignUp() {
           Crea l'account
         </SubmitButton>
       </form>
+      {/* SPEC R3: una frase e un link, NON una casella "acconsento". La base
+          giuridica e' il contratto: chiedere un consenso farebbe credere che
+          lo si possa revocare continuando a usare l'account. Vale anche per
+          "Registrati con Google", che sta sopra. */}
+      <p className="field__aside legale__nota">
+        Creando un account dichiari di avere almeno {ETA_MINIMA} anni e di aver letto
+        l'<Link to="/privacy">informativa privacy</Link>.
+      </p>
 
       <Links>
         <span className="faint">Hai già un account?</span>

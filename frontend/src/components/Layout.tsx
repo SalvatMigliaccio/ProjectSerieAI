@@ -3,6 +3,7 @@ import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { baseUrl } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import { TITOLARE } from "../legal/dati";
 import { scorrimento } from "../lib/motion";
 
 /**
@@ -297,7 +298,8 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 }
 
 const REPOSITORY = "https://github.com/SalvatMigliaccio/ProjectSerieAI";
-const CONTATTO = "salvatore.migliaccio998@gmail.com";
+// Il recapito vive in legal/dati.ts, con il titolare: una copia sola.
+const CONTATTO = TITOLARE.email;
 
 /**
  * Il piede della pagina.
@@ -360,6 +362,9 @@ export function Colophon({
           {/* `mailto:` e non un modulo: non c'e' un server che possa ricevere
               un invio, e un modulo che non spedisce e' peggio di nessun modulo. */}
           <a href={`mailto:${CONTATTO}`}>{CONTATTO}</a>
+          {/* SPEC_PRIVACY_COOKIE R3: raggiungibili da ogni pagina che ha il piede. */}
+          <Link to="/privacy">Privacy</Link>
+          <Link to="/cookie">Cookie</Link>
         </div>
 
         <div className="colophon__col colophon__col--stato">

@@ -1,6 +1,6 @@
 # ADR 0008 — Accesso con Google (e poi Apple), secondo fattore via email
 
-- **Stato**: accettata. Step 1 (schema), 2 (Google) e 3 (secondo fattore) implementati il 20 novembre 2026; step 5 da fare, step 4 (Apple) rimandato
+- **Stato**: accettata. Step 1, 2, 3 e 5 implementati il 20 novembre 2026; step 4 (Apple) rimandato
 - **Data**: 20 novembre 2026
 - **Contesto**: oggi si entra solo con email e password (`backend/auth/`, ADR 0003)
 - **Decide**: come un account si lega a un fornitore esterno, cosa succede a un
@@ -16,7 +16,7 @@
 | 2 | accesso con Google (OpenID Connect, codice + PKCE, lato server) | **fatto** |
 | 3 | secondo fattore via email, facoltativo | **fatto** |
 | 4 | accesso con Apple | **rimandato**: servono account Apple Developer e un dominio HTTPS |
-| 5 | informativa privacy (Google come destinatario), `openapi.json`, `COMANDI.md` | da fare |
+| 5 | informativa privacy (Google come fonte, art. 14), cookie nuovi, `openapi.json`, `COMANDI.md` | **fatto**; con esso chiusi T1 e T3 dell'ADR 0005 |
 
 ## Le decisioni
 
