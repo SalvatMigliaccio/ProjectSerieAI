@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from .models import AuthEvent, EmailToken, User, UserSession, now
+from .models import AuthEvent, EmailToken, MfaChallenge, User, UserSession, now
 from .settings import Settings, settings
 
 
@@ -38,7 +38,7 @@ class Rule:
 
 
 def rules(cfg: Settings, at: dt.datetime) -> list[Rule]:
-    """The four periods of the privacy policy, as WHERE clauses."""
+    """The four periods of the privacy policy, as WHERE clauses (one period may cover two tables)."""
     days = dt.timedelta(days=1)
     return [
         Rule("auth_events", AuthEvent,
@@ -51,6 +51,10 @@ def rules(cfg: Settings, at: dt.datetime) -> list[Rule]:
              < at - cfg.session_retention_days * days),
         Rule("email_tokens", EmailToken,
              EmailToken.expires_at < at - cfg.token_retention_days * days),
+        # Emailed sign-in codes are emailed tokens to the reader of the policy,
+        # and keep the same published period: no new promise to write.
+        Rule("mfa_challenges", MfaChallenge,
+             MfaChallenge.expires_at < at - cfg.token_retention_days * days),
         Rule("pending_users", User,
              (User.status == "pending")
              & (User.created_at < at - cfg.pending_account_days * days)),

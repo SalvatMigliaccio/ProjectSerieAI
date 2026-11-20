@@ -65,7 +65,12 @@ class User(Base):
     # accounts and the user can no longer sign in because they do not remember
     # which spelling they used.
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL for an account created through Google or Apple that never set a
+    # password (ADR 0008). Not an empty string: `verify("", ...)` would be a
+    # corrupt hash logged as a data defect, while NULL says plainly "this
+    # account has no password", and the service refuses it as such. The way to
+    # add one is the reset flow, which proves control of the address.
+    password_hash: Mapped[str | None] = mapped_column(Text)
 
     # pending -> has not verified the address; active -> may sign in;
     # suspended -> blocked by an admin; deleted -> soft-deleted, because audit
@@ -74,9 +79,16 @@ class User(Base):
 
     email_verified_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
 
-    # MFA groundwork: the column exists, the flow does not yet. Adding it later
-    # would mean migrating a table holding real accounts.
+    # Reserved for an authenticator-app second factor, not used yet. Today the
+    # only method is `email` (ADR 0008); the column stays so that adding TOTP
+    # later is a flow, not a migration of a table holding real accounts.
     totp_secret: Mapped[str | None] = mapped_column(Text)
+
+    # Second factor: NULL = off. One column for the method rather than a
+    # boolean, because "on" has to say WHICH factor, and the day TOTP arrives a
+    # boolean would need a second column that can disagree with the first.
+    mfa_method: Mapped[str | None] = mapped_column(String(16))
+    mfa_enabled_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
 
     # The team the user follows, as the track record names it ("Napoli").
     # A plain string and not a foreign key: teams are not a table here, they
@@ -108,14 +120,123 @@ class User(Base):
             "status IN ('pending', 'active', 'suspended', 'deleted')",
             name="ck_users_status",
         ),
+        CheckConstraint("mfa_method IN ('email', 'totp')", name="ck_users_mfa_method"),
+        # Both or neither: a method without a date, or a date without a
+        # method, is an account whose 2FA state nobody can read with certainty.
+        CheckConstraint("(mfa_method IS NULL) = (mfa_enabled_at IS NULL)",
+                        name="ck_users_mfa_consistent"),
+        # A TOTP method with no secret would let anyone through a check that
+        # has nothing to compare against.
+        CheckConstraint("mfa_method IS DISTINCT FROM 'totp' OR totp_secret IS NOT NULL",
+                        name="ck_users_totp_has_secret"),
         # The admin panel searches by partial email. Without this index that is
         # a sequential scan on every keystroke.
         Index("ix_users_email_trgm", "email", postgresql_using="gin",
               postgresql_ops={"email": "gin_trgm_ops"}),
     )
 
+    identities: Mapped[list[UserIdentity]] = relationship(
+        back_populates="user", lazy="selectin")
+
     def is_active(self) -> bool:
         return self.status == "active"
+
+    def has_password(self) -> bool:
+        return self.password_hash is not None
+
+    def mfa_enabled(self) -> bool:
+        return self.mfa_method is not None
+
+
+class UserIdentity(Base):
+    """
+    An external sign-in provider linked to an account (Google today, Apple next).
+
+    THE KEY IS `(provider, subject)`, NEVER THE EMAIL. `sub` is the id the
+    provider guarantees never changes and never gets reassigned; an address
+    can change at the provider, and with Apple it can be a private relay that
+    looks nothing like the real one. Signing someone in because an email
+    matched is how one person ends up inside another person's account.
+
+    The email is kept only as it was at link time, to show on the account page
+    which Google account is connected. It is not used to find anyone.
+    """
+
+    __tablename__ = "user_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Google's `sub` is up to 255 ASCII characters; Apple's is shorter.
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(CITEXT)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    user: Mapped[User] = relationship(back_populates="identities")
+
+    __table_args__ = (
+        CheckConstraint("provider IN ('google', 'apple')", name="ck_user_identities_provider"),
+        UniqueConstraint("provider", "subject", name="uq_user_identities_subject"),
+        # One Google account per user. Two would make "unlink Google" ambiguous
+        # and give a second, forgotten key to the same door.
+        UniqueConstraint("user_id", "provider", name="uq_user_identities_user_provider"),
+    )
+
+
+class MfaChallenge(Base):
+    """
+    A sign-in halfway through: first factor passed, second factor pending.
+
+    NOT A ROW IN `email_tokens`, and the reason is concrete: there the token
+    hash is UNIQUE, and a six-digit code is not unique — two users receiving
+    the same code in the same ten minutes would make the second insert fail.
+    And a challenge needs what an emailed link does not: an attempt counter.
+
+    TWO SECRETS, BOTH HASHED. `challenge_hash` is the digest of a random token
+    kept in a short-lived cookie: it binds the code to the browser that passed
+    the first factor, so a code read over someone's shoulder is useless from
+    another device. `code_hash` is an HMAC keyed with the server secret, not a
+    plain SHA-256: there are only a million six-digit codes, and an unkeyed
+    hash in a database dump is reversed by trying them all.
+    """
+
+    __tablename__ = "mfa_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # What the challenge completes: a sign-in (by password or provider), or
+    # the confirmation that turns 2FA on or off from the account page.
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    # How the first factor was passed, recorded in the audit event once the
+    # second one is too: `password`, `google`, `apple`.
+    via: Mapped[str] = mapped_column(String(16), nullable=False)
+    challenge_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    expires_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    ip: Mapped[str | None] = mapped_column(INET)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("purpose IN ('sign_in', 'enable', 'disable')",
+                        name="ck_mfa_challenges_purpose"),
+        CheckConstraint("via IN ('password', 'google', 'apple', 'session')",
+                        name="ck_mfa_challenges_via"),
+        CheckConstraint("attempts >= 0", name="ck_mfa_challenges_attempts"),
+    )
+
+    def is_spendable(self, at: dt.datetime, max_attempts: int) -> bool:
+        return self.used_at is None and at < self.expires_at and self.attempts < max_attempts
 
 
 class Role(Base):

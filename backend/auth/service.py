@@ -217,6 +217,18 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
         keep_on_refusal(db)
         raise AccessDenied("too many failed attempts: try again in a few minutes", "locked")
 
+    if not user.has_password():
+        # An account created through Google or Apple. Same answer and same
+        # time as a wrong password: "this address exists but has no password"
+        # would tell a stranger both that it is registered and how to reach
+        # it. Not counted towards the lockout: there is nothing to guess, and
+        # locking would only shut the real owner out of the reset flow.
+        pwd.dummy_verify()
+        record_event(db, "sign_in", "ko", user_id=user.id, ip=ip,
+                     user_agent=user_agent, details={"cause": "no_password"})
+        keep_on_refusal(db)
+        raise AccessDenied("invalid credentials", "no_password")
+
     if not pwd.verify(user.password_hash, clear):
         _count_failure(db, user, cfg, ip, user_agent)
         raise AccessDenied("invalid credentials", "wrong_password")
@@ -504,6 +516,12 @@ def reset_password(db: Session, token: str, new: str, *, ip: str | None = None,
 def change_password(db: Session, user: User, current: str, new: str, *,
                     current_session: uuid.UUID | None = None) -> None:
     """Change from inside the account area: the current password is required."""
+    if not user.has_password():
+        # Nothing to check `current` against. Setting a first password goes
+        # through the reset link, which proves control of the address; a
+        # session alone does not (ADR 0008).
+        raise AccessDenied("this account has no password yet: set one with "
+                           "'forgot password'", "no_password")
     if not pwd.verify(user.password_hash, current):
         record_event(db, "change_password", "ko", user_id=user.id,
                      details={"cause": "wrong_current"})
@@ -538,6 +556,12 @@ def delete_account(db: Session, user: User, password: str, *,
     The audit row of the deletion carries no address and no id: once the
     account is gone, nothing here should still name it.
     """
+    if not user.has_password():
+        # Confirming with the provider instead arrives with the Google sign-in
+        # (ADR 0008, step 2). Until then such accounts cannot exist, and if one
+        # did, refusing is the only answer that does not delete on a session.
+        raise AccessDenied("confirm the deletion by signing in with your provider",
+                           "no_password")
     if not pwd.verify(user.password_hash, password):
         record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
                      user_agent=user_agent, details={"cause": "wrong_password"})

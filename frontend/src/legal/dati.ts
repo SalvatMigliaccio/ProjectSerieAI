@@ -46,7 +46,7 @@ export const CONSERVAZIONE_GIORNI = {
   registroAccessi: 365,
   /** Sessioni, contati da quando hanno smesso di essere utilizzabili. */
   sessioni: 365,
-  /** Token di verifica e di reset, contati dalla scadenza. */
+  /** Token di verifica e di reset e codici di accesso via email, contati dalla scadenza. */
   tokenEmail: 30,
   /** Account mai confermati via email. */
   accountNonConfermati: 30,

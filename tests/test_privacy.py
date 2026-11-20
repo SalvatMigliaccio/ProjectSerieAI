@@ -21,7 +21,16 @@ from pathlib import Path
 
 import pytest
 from backend.auth import retention, service
-from backend.auth.models import AuthEvent, EmailToken, User, UserPrediction, UserSession, now
+from backend.auth.models import (
+    AuthEvent,
+    EmailToken,
+    MfaChallenge,
+    User,
+    UserIdentity,
+    UserPrediction,
+    UserSession,
+    now,
+)
 from backend.auth.settings import Settings
 from sqlalchemy import select
 from tests.test_auth_http import GOOD, _register_and_verify, _token, client, post  # noqa: F401
@@ -145,7 +154,7 @@ def test_deleting_the_account_removes_it_and_what_it_owns(client, db) -> None:  
         "both cookies must be cleared on the way out"
 
     assert db.get(User, uid) is None
-    for model in (UserSession, EmailToken, UserPrediction):
+    for model in (UserSession, EmailToken, UserPrediction, UserIdentity, MfaChallenge):
         assert db.scalars(select(model).where(model.user_id == uid)).all() == [], \
             f"{model.__tablename__} kept rows of a deleted account"
     assert db.scalars(select(AuthEvent).where(AuthEvent.user_id == uid)).all() == [], \
