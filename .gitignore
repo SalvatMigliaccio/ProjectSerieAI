@@ -59,4 +59,4 @@ backend/auth/migrations/__pycache__/
 .env.produzione
 
 #JSON Google OAuth credentials
-.google_client.json
+google_client.json
