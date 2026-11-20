@@ -847,6 +847,40 @@ foreach ($n in "predict_round 1815", "predict_round 1915", "predict_round 2000",
 schtasks /change /tn "AI_Naples close_round" /tr "$repo\backend\scripts\accoda.cmd close_round"
 ```
 
+**Fatto il 20 novembre 2026 su questa macchina**: i sei task di predict e
+close (compreso "predict_round domenica") chiamano `accoda.cmd`.
+
+**Docker e il worker si accendono solo quando si usa il sito**, non
+all'accesso a Windows:
+
+```powershell
+backend\scripts\avvia_app.cmd     # Docker, i container del sito, il worker, il browser
+backend\scriptserma_app.cmd     # worker, container, Docker (-LasciaDocker per tenerlo)
+```
+
+"AI_Naples worker" e' un'attivita' senza trigger: la avvia `avvia_app`. La
+voce di Docker in "Esecuzione automatica" e' stata tolta. Con tutto spento le
+previsioni pianificate girano lo stesso: `accoda.cmd` non trova il database
+(10 secondi di timeout) e lancia il comando direttamente. `ferma_app` chiede
+conferma se il worker sta eseguendo un comando, e non tocca un predict_round
+partito direttamente dallo scheduler.
+
+**Se nessuno lo eseguirebbe, lo esegue lo scheduler.** `--accoda` esce con
+**10** quando il database non risponde (Docker spento) o nessun worker ha
+battuto negli ultimi due minuti; `accoda.cmd` allora lancia `run_task.cmd`
+direttamente, cioe' il comportamento di prima. Una previsione del venerdi' non
+deve dipendere da Docker acceso. Verificato tutti e due i rami: con il worker
+vivo il job passa dalla coda, con il worker fermo parte il run diretto. Le
+decisioni di `--accoda` stanno in `logs\accoda.log`.
+
+Un job dura al massimo **un'ora**, come i vecchi task: un predict_round
+bloccato deve morire prima dell'orario successivo, che altrimenti troverebbe
+"gia' attivo" e salterebbe.
+
+Il database e' quello di `AI_NAPLES_DATABASE_URL` nel `.env`. Se un giorno il
+sito userà un database remoto, l'URL va in `.env.produzione` (ignorato da
+git): il worker lo legge al posto del `.env`.
+
 Se c'e' gia' un job attivo, `--accoda` non ne aggiunge un secondo ed esce
 con 0: per un task pianificato e' il comportamento giusto. Resta fuori dalla
 coda `aggiorna_risultati`, che non tocca il registro: i suoi orari stanno gia'

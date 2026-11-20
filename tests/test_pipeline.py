@@ -151,8 +151,33 @@ def test_una_prova_non_finisce_in_last_run(boss, db, worker_in_test, monkeypatch
 
 def test_lo_scheduler_accoda_e_non_raddoppia(boss, db, worker_in_test) -> None:
     """`worker --accoda`: il venerdi' passa dalla coda, e con un job attivo non ne aggiunge."""
+    worker.poll_once("pc-test", "host", dt.datetime.now(dt.UTC), 30)   # un worker vivo
     assert worker.accoda("predict_round") == 0
     stato = boss.get("/api/admin/pipeline").json()
     assert stato["active"]["command"] == "predict_round" and stato["active"]["requested_by"] is None
     assert worker.accoda("close_round") == 0
     assert db.query(PipelineJob).count() == 1
+
+
+def test_senza_worker_vivo_lo_scheduler_esegue_da_se(boss, db, worker_in_test) -> None:
+    """Nessun worker online: --accoda non mette in coda e chiede l'esecuzione diretta."""
+    from backend.auth.models import PipelineWorker
+    db.query(PipelineWorker).delete()
+    db.commit()
+    assert worker.accoda("predict_round") == worker.NOT_HANDED_OFF
+    assert db.query(PipelineJob).count() == 0
+
+
+def test_con_il_database_spento_lo_scheduler_esegue_da_se(monkeypatch) -> None:
+    """Docker spento: niente coda, e il venerdi' la previsione parte lo stesso."""
+    import contextlib
+
+    from sqlalchemy.exc import OperationalError
+
+    @contextlib.contextmanager
+    def giu():
+        raise OperationalError("connect", {}, Exception("connection refused"))
+        yield
+
+    monkeypatch.setattr(worker, "session_scope", giu)
+    assert worker.accoda("predict_round") == worker.NOT_HANDED_OFF

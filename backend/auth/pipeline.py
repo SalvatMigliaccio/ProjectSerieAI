@@ -153,6 +153,16 @@ def beat(db: Session, name: str, host: str, started: dt.datetime, poll_seconds: 
         {"n": name, "h": host, "s": started, "p": poll_seconds})
 
 
+def online(worker: PipelineWorker, at: dt.datetime) -> bool:
+    """Polled within three of its own intervals (two minutes at least)."""
+    window = max(dt.timedelta(seconds=worker.poll_seconds * ONLINE_POLLS), ONLINE_FLOOR)
+    return at - worker.last_seen_at <= window
+
+
+def any_online(db: Session, at: dt.datetime) -> bool:
+    return any(online(w, at) for w in db.scalars(select(PipelineWorker)))
+
+
 def is_stale(job: PipelineJob, at: dt.datetime) -> bool:
     return (job.status == "running" and job.heartbeat_at is not None
             and at - job.heartbeat_at > STALE_AFTER)
@@ -237,11 +247,10 @@ def _state(db: Session, actor: User) -> PipelineState:
     at = now()
     workers = []
     for w in db.scalars(select(PipelineWorker).order_by(PipelineWorker.last_seen_at.desc())):
-        window = max(dt.timedelta(seconds=w.poll_seconds * ONLINE_POLLS), ONLINE_FLOOR)
         workers.append(WorkerRow(
             name=w.name, host=w.host, started_at=w.started_at.isoformat(),
             last_seen_at=w.last_seen_at.isoformat(), poll_seconds=w.poll_seconds,
-            online=at - w.last_seen_at <= window))
+            online=online(w, at)))
     jobs = db.scalars(select(PipelineJob).order_by(PipelineJob.requested_at.desc())
                       .limit(20)).all()
     active = next((j for j in jobs if j.status in ("queued", "running")), None)

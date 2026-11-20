@@ -36,6 +36,11 @@ def engine() -> Engine:
         max_overflow=10,
         pool_recycle=1800,
         future=True,
+        # Ten seconds, not psycopg's default of about two minutes. Measured on
+        # 20 November 2026 with the database down: every request, and every
+        # poll of the pipeline worker, hung 130 s before failing. A refusal
+        # should arrive as an error the caller can report, not as a hang.
+        connect_args={"connect_timeout": 10},
     )
 
 

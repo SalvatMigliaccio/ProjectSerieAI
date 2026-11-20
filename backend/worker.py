@@ -46,6 +46,7 @@ import subprocess
 import sys
 import threading
 import time
+from pathlib import Path
 
 from goalmodel import config
 
@@ -59,7 +60,40 @@ ROOT = config.ROOT
 LOG_DIR = ROOT / "logs"
 TAIL_LINES = 400
 PUSH_EVERY = 5.0          # seconds between two writes of the output tail
-TIMEOUT = dt.timedelta(hours=4)
+# One hour, as the scheduled tasks had (`-ExecutionTimeLimit 1h`). A hung
+# predict_round must die before the next Friday slot: while it is the active
+# job, the 19:15 and 20:00 runs would only find "already active" and skip.
+TIMEOUT = dt.timedelta(hours=1)
+
+
+# The site's database (Neon) on the owner's PC, where `.env` points at the
+# local Docker Postgres used for development. Git ignores it.
+PRODUCTION_ENV = ROOT / ".env.produzione"
+PRODUCTION_KEYS = ("AI_NAPLES_DATABASE_URL", "GOALMODEL_")
+
+
+def load_production_env(path: Path = PRODUCTION_ENV) -> bool:
+    """
+    Put the production database URL (and `GOALMODEL_*`) in the environment.
+
+    WHY. The worker must queue and claim jobs in THE SITE'S database: a worker
+    reading the local `.env` would poll a Docker Postgres that the panel on
+    Vercel never writes to, and every button would wait forever. Environment
+    variables beat `.env` in `backend.auth.settings` and in `goalmodel.pg`,
+    and the child processes inherit them, so `predict_round` writes the
+    registry in the same database the site reads.
+
+    Called before the first database access, because `settings()` is cached.
+    """
+    if not path.exists():
+        return False
+    with path.open(encoding="utf-8") as fh:
+        for line in fh:
+            key, sep, value = line.strip().partition("=")
+            key = key.strip()
+            if sep and key.startswith(PRODUCTION_KEYS):
+                os.environ[key] = value.strip().strip('"').strip("'")
+    return True
 
 
 def _child_env() -> dict[str, str]:
@@ -177,21 +211,42 @@ def poll_once(name: str, host: str, started: dt.datetime, poll: int) -> bool:
     return True
 
 
+# Exit code of `--accoda` when the job was NOT handed to a worker. The
+# scheduler script then runs the command itself, as it always did.
+NOT_HANDED_OFF = 10
+
+
 def accoda(command: str) -> int:
     """
-    Queue `command` with no requester: it is the scheduler asking.
+    Queue `command` for the worker, as the scheduler. 0 if handed off.
 
-    Exit 0 also when another job is already active: for a scheduled task that
-    is not a failure, the queue is doing its job. Said in the log.
+    NOT_HANDED_OFF (10) when nobody would run it: the database does not answer
+    (Docker off), or no worker polled recently (worker stopped). Before the
+    queue existed `predict_round` needed no database at all; a scheduled
+    Friday run must not start depending on one. `accoda.cmd` reads the 10 and
+    runs the command directly, which is exactly the old behaviour.
+
+    0 also when another job is already active: the queue is doing its job, and
+    the command is idempotent anyway. Said in the log.
     """
-    with session_scope() as db:
-        try:
-            job = pipeline.enqueue(db, None, command, {})
-        except pipeline.AlreadyActive:
-            log.info("%s not queued: another job is already queued or running", command)
+    from sqlalchemy.exc import SQLAlchemyError
+
+    try:
+        with session_scope() as db:
+            if not pipeline.any_online(db, dt.datetime.now(dt.UTC)):
+                log.warning("%s not queued: no worker online. Run it directly.", command)
+                return NOT_HANDED_OFF
+            try:
+                job = pipeline.enqueue(db, None, command, {})
+            except pipeline.AlreadyActive:
+                log.info("%s not queued: another job is already queued or running", command)
+                return 0
+            log.info("queued %s as job %s", command, job.id)
             return 0
-        log.info("queued %s as job %s", command, job.id)
-    return 0
+    except (SQLAlchemyError, OSError) as exc:
+        log.warning("%s not queued: database unreachable (%s). Run it directly.",
+                    command, type(exc).__name__)
+        return NOT_HANDED_OFF
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -204,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="queue this command (as the scheduler) and exit")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-7s %(message)s")
+    if load_production_env():
+        log.info("database from %s (the site's), not from .env", PRODUCTION_ENV.name)
 
     if args.accoda:
         return accoda(args.accoda)
