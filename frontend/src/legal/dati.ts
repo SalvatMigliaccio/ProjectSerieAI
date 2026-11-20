@@ -15,7 +15,7 @@
  */
 
 /** Data dell'ultima modifica sostanziale dell'informativa, ISO. */
-export const AGGIORNATA_IL = "2026-10-27";
+export const AGGIORNATA_IL = "2026-11-20";
 
 /** Eta' minima per creare un account: il contenuto riguarda le scommesse. */
 export const ETA_MINIMA = 18;
@@ -37,6 +37,16 @@ export const COOKIE: Cookie[] = [
     nome: "ainaples_access",
     durata: "15 minuti",
     scopo: "autentica le richieste ai dati riservati agli utenti registrati",
+  },
+  {
+    nome: "ainaples_oauth",
+    durata: "10 minuti, e si cancella al ritorno da Google",
+    scopo: "solo durante l'accesso con Google: lega il ritorno da Google al browser che l'ha iniziato, contro le richieste contraffatte",
+  },
+  {
+    nome: "ainaples_reauth",
+    durata: "5 minuti",
+    scopo: "solo per gli account senza password: conferma di aver appena verificato la tua identità con Google prima di eliminare l'account",
   },
 ];
 

@@ -1352,6 +1352,255 @@
         }
       }
     },
+    "/api/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Providers",
+        "operationId": "providers_api_auth_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Providers"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start",
+        "description": "Send the browser to Google, carrying a fresh signed flow in a cookie.\n\n`link` and `reauth` need a signed-in session, recorded in the flow: the\ncallback will insist on finding the same one.",
+        "operationId": "start_api_auth_oauth__provider__start_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "intent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "sign_in",
+              "title": "Intent"
+            }
+          },
+          {
+            "name": "next",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Callback",
+        "description": "Google sends the browser back here. Every branch ends in a redirect.",
+        "operationId": "callback_api_auth_oauth__provider__callback_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/identities": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Linked",
+        "operationId": "linked_api_auth_identities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LinkedIdentity"
+                  },
+                  "type": "array",
+                  "title": "Response Linked Api Auth Identities Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/identities/{provider}/unlink": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Unlink",
+        "description": "409 when it is the account's last way in; `unlinked: 0` when it was not linked.",
+        "operationId": "unlink_api_auth_identities__provider__unlink_post",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Unlink Api Auth Identities  Provider  Unlink Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/account/delete": {
       "post": {
         "tags": [
@@ -2581,16 +2830,19 @@
       "DeletePayload": {
         "properties": {
           "password": {
-            "type": "string",
-            "maxLength": 1024,
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Password"
           }
         },
         "type": "object",
-        "required": [
-          "password"
-        ],
         "title": "DeletePayload"
       },
       "EmailOnly": {
@@ -2996,6 +3248,18 @@
               }
             ],
             "title": "Email Verified At"
+          },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password",
+            "default": true
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
           }
         },
         "type": "object",
@@ -3211,6 +3475,47 @@
           "command"
         ],
         "title": "LaunchPayload"
+      },
+      "LinkedIdentity": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "linked_at": {
+            "type": "string",
+            "title": "Linked At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "linked_at"
+        ],
+        "title": "LinkedIdentity",
+        "description": "One provider tied to this account, as its owner sees it.\n\nNo `subject`: it identifies the person at Google, and nothing on the page\nneeds it. The email is the one Google had at link time, shown so the owner\nrecognises WHICH Google account it is."
       },
       "MLMarket": {
         "properties": {
@@ -4893,6 +5198,25 @@
         },
         "type": "object",
         "title": "Preferences"
+      },
+      "Providers": {
+        "properties": {
+          "google": {
+            "type": "boolean",
+            "title": "Google"
+          },
+          "apple": {
+            "type": "boolean",
+            "title": "Apple"
+          }
+        },
+        "type": "object",
+        "required": [
+          "google",
+          "apple"
+        ],
+        "title": "Providers",
+        "description": "Which buttons the sign-in page should draw. Nothing secret: no client id."
       },
       "Reason": {
         "properties": {

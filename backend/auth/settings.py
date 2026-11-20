@@ -106,6 +106,35 @@ class Settings(BaseSettings):
     # Where the frontend lives: used to build the links inside emails.
     public_url: str = "http://127.0.0.1:5173"
 
+    # --- sign in with Google (ADR 0008) --------------------------------------
+    # From the Google Cloud Console, "OAuth client ID", type "Web application".
+    # Both empty = the button does not appear and the routes answer 404: an
+    # unconfigured provider is off, not half on.
+    #
+    # The redirect URI to register there is NOT configured here: it is
+    # `public_url` + `/api/auth/oauth/google/callback`, built in one place
+    # (`oauth.redirect_uri`) so the two cannot disagree. Google compares it
+    # character by character, and a mismatch is an error page at Google's end
+    # that never reaches this server's logs.
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+
+    # How long the browser has to come back from Google. Ten minutes covers a
+    # user who has to type a password and a code over there; past that the
+    # flow is stale and starts again.
+    oauth_flow_minutes: int = Field(default=10, ge=2, le=30)
+    oauth_cookie_name: str = "ainaples_oauth"
+
+    # After re-confirming with Google, how long the "you just proved it's you"
+    # mark lasts. It is what lets an account WITHOUT a password delete itself:
+    # short, because it stands in for typing a password.
+    reauth_minutes: int = Field(default=5, ge=1, le=15)
+    reauth_cookie_name: str = "ainaples_reauth"
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret.get_secret_value())
+
     # THE BOOTSTRAP SUPERADMIN, comma-separated addresses (18 November 2026).
     # An account whose address is listed here receives `superadmin` when it
     # signs in or verifies — ONLY if the address is verified. Without that
@@ -167,6 +196,11 @@ class Settings(BaseSettings):
             problems.append(
                 f"AI_NAPLES_PUBLIC_URL is http: verification and reset links "
                 f"would be emailed in the clear ({self.public_url})"
+            )
+        if bool(self.google_client_id) != bool(self.google_client_secret.get_secret_value()):
+            problems.append(
+                "Google sign-in is half configured: set both AI_NAPLES_GOOGLE_CLIENT_ID "
+                "and AI_NAPLES_GOOGLE_CLIENT_SECRET, or neither"
             )
         return problems
 

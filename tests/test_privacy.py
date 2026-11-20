@@ -54,7 +54,8 @@ def _published() -> str:
 def test_the_cookie_policy_names_exactly_the_cookies_the_backend_sets() -> None:
     cfg = _defaults()
     named = set(re.findall(r'nome:\s*"([^"]+)"', _published()))
-    assert named == {cfg.cookie_name, cfg.access_cookie_name}, (
+    assert named == {cfg.cookie_name, cfg.access_cookie_name,
+                     cfg.oauth_cookie_name, cfg.reauth_cookie_name}, (
         "the cookie policy and backend/auth/settings.py disagree: update "
         "frontend/src/legal/dati.ts (and AGGIORNATA_IL) together with the code")
 
@@ -66,6 +67,10 @@ def test_the_published_cookie_durations_match_the_settings() -> None:
         "the access cookie lifetime on the cookie page is not access_token_minutes"
     assert f"al massimo {cfg.session_max_hours} ore" in text, \
         "the session ceiling on the cookie page is not session_max_hours"
+    assert f'durata: "{cfg.oauth_flow_minutes} minuti' in text, \
+        "the Google sign-in cookie lifetime on the cookie page is not oauth_flow_minutes"
+    assert f'durata: "{cfg.reauth_minutes} minuti"' in text, \
+        "the re-confirmation cookie lifetime on the cookie page is not reauth_minutes"
 
 
 @pytest.mark.parametrize("published, setting", [
@@ -105,7 +110,8 @@ def _cookie_names(response) -> set[str]:
 def test_no_flow_sets_a_cookie_the_policy_does_not_declare(client, db) -> None:  # noqa: F811
     """Signup to deletion, every Set-Cookie on the way."""
     cfg = _defaults()
-    declared = {cfg.cookie_name, cfg.access_cookie_name}
+    declared = {cfg.cookie_name, cfg.access_cookie_name,
+                cfg.oauth_cookie_name, cfg.reauth_cookie_name}
     email = "cookie-policy@example.com"
     seen: set[str] = set()
 

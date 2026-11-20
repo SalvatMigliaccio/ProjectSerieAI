@@ -40,7 +40,7 @@ interface AuthValue {
   signOut: () => Promise<void>;
   /** Erase the account (GDPR art. 17). Throws on a wrong password, and then
    *  the user stays signed in: only a success clears the local state. */
-  deleteAccount: (password: string) => Promise<void>;
+  deleteAccount: (password?: string) => Promise<void>;
   /** Adopt an identity the server already returned, e.g. after verifying. */
   adopt: (user: Identity) => void;
   /** Re-ask the server. Used when a request comes back 401. */
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Unlike signOut, NOT optimistic: a refused deletion (wrong password, network
   // down) leaves the account in place, and an interface that showed the user
   // signed out would make them believe it was gone.
-  const deleteAccount = useCallback(async (password: string) => {
+  const deleteAccount = useCallback(async (password?: string) => {
     await meApi.deleteAccount(password);
     setUser(null);
     setPhase("anonymous");

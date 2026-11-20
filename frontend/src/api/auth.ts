@@ -22,6 +22,9 @@ export interface Identity {
   /** ISO 8601. Optional: an API older than the account page omits them. */
   created_at?: string | null;
   email_verified_at?: string | null;
+  /** ADR 0008. Optional: an API older than Google sign-in omits them. */
+  has_password?: boolean;
+  providers?: string[];
 }
 
 /** Message shapes the API returns on 4xx. */
@@ -199,3 +202,76 @@ export const changePassword =(currentPassword: string, newPassword: string) =>
     current_password: currentPassword,
     new_password: newPassword,
   }, { renew: true });
+
+// --- Accesso con Google (ADR 0008) ---------------------------------------------
+
+export interface Providers {
+  google: boolean;
+  apple: boolean;
+}
+
+/** Quali pulsanti disegnare. Un errore vale "nessuno": il modulo con la password resta. */
+export async function providers(): Promise<Providers> {
+  try {
+    const r = await fetch(`${baseUrl()}/api/auth/providers`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+    if (!r.ok) return { google: false, apple: false };
+    return (await r.json()) as Providers;
+  } catch {
+    return { google: false, apple: false };
+  }
+}
+
+export type OAuthIntent = "sign_in" | "link" | "reauth";
+
+/**
+ * L'indirizzo che fa partire il giro da Google. Si NAVIGA, non si fa fetch:
+ * il ritorno arriva come pagina intera, con i cookie gia' impostati dal server.
+ * Nessun token di Google passa mai da questo codice.
+ */
+export function oauthStartUrl(provider: "google", intent: OAuthIntent, next?: string): string {
+  const q = new URLSearchParams({ intent });
+  if (next) q.set("next", next);
+  return `${baseUrl()}/api/auth/oauth/${provider}/start?${q.toString()}`;
+}
+
+/**
+ * Il codice che il server mette in `?oauth_error=`, in una frase che dice cosa
+ * fare. Un codice sconosciuto ha comunque una frase: il server ne puo'
+ * aggiungere uno prima che qualcuno la scriva qui.
+ */
+export function oauthErrorMessage(code: string | null): string | null {
+  if (!code) return null;
+  const messaggi: Record<string, string> = {
+    cancelled: "Accesso con Google annullato.",
+    state: "L'accesso con Google è scaduto o è stato aperto in un'altra scheda. Riprova da qui.",
+    provider: "Google non ha risposto come previsto. Riprova fra qualche minuto.",
+    rate_limited: "Troppi tentativi. Aspetta qualche minuto e riprova.",
+    session: "La sessione è scaduta: accedi di nuovo e ripeti l'operazione.",
+    email_unverified: "L'email del tuo account Google non è verificata: verificala su Google, oppure registrati con email e password.",
+    link_pending: "Esiste già un account con questa email, ma non è ancora confermato. Usa «Password dimenticata» per attivarlo con una password tua, poi collega Google dal profilo.",
+    link_required: "Esiste già un account con questa email. Entra con la password e collega Google dal tuo profilo.",
+    inactive: "Questo account non è attivo.",
+    other_google: "Il tuo account è già collegato a un altro account Google.",
+    linked_elsewhere: "Questo account Google è già collegato a un altro utente.",
+    mismatch: "Hai confermato con un account Google diverso da quello collegato al profilo.",
+    not_configured: "L'accesso con Google non è disponibile.",
+  };
+  return messaggi[code] ?? "Accesso con Google non riuscito. Riprova.";
+}
+
+export interface LinkedIdentity {
+  provider: string;
+  email: string | null;
+  linked_at: string;
+  last_used_at: string | null;
+}
+
+export const identities = () => getJson<LinkedIdentity[]>("/api/auth/identities");
+
+/** 409 se e' l'unico modo di entrare: il messaggio del server lo dice. */
+export const unlinkProvider = (provider: string) =>
+  post<{ unlinked: number }>(`/api/auth/identities/${encodeURIComponent(provider)}/unlink`,
+    undefined, { renew: true });

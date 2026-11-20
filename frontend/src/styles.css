@@ -2341,6 +2341,18 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   background: var(--mint-wash);
 }
 
+/* Accesso con Google (ADR 0008): il pulsante e la riga "oppure" che lo separa
+   dal modulo con la password. Fantasma e non pieno: l'azione principale della
+   schermata resta il pulsante del modulo. */
+.btn--google { gap: var(--s3); }
+.auth-divider {
+  display: flex; align-items: center; gap: var(--s3);
+  margin: var(--s4) 0; color: var(--muted); font-size: 0.8125rem; max-width: none;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ""; flex: 1; border-top: 1px solid var(--line);
+}
+
 .account-links {
   margin-top: var(--s5);
   padding-top: var(--s4);

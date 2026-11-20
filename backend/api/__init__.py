@@ -399,9 +399,11 @@ def create_app() -> FastAPI:
     from backend.auth import admin as admin_routes
     from backend.auth import pipeline as pipeline_routes
     from backend.auth import me as me_routes
+    from backend.auth import oauth_routes
     from backend.auth import routes as auth_routes
 
     app.include_router(auth_routes.router)
+    app.include_router(oauth_routes.router)
     app.include_router(me_routes.router)
     app.include_router(admin_routes.router)
     app.include_router(pipeline_routes.router)

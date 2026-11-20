@@ -537,7 +537,8 @@ def change_password(db: Session, user: User, current: str, new: str, *,
                  details={"sessions_revoked": count})
 
 
-def delete_account(db: Session, user: User, password: str, *,
+def delete_account(db: Session, user: User, password: str | None, *,
+                   reauthenticated: bool = False,
                    ip: str | None = None, user_agent: str | None = None) -> None:
     """
     The right to erasure (GDPR art. 17), from the account page.
@@ -557,12 +558,17 @@ def delete_account(db: Session, user: User, password: str, *,
     account is gone, nothing here should still name it.
     """
     if not user.has_password():
-        # Confirming with the provider instead arrives with the Google sign-in
-        # (ADR 0008, step 2). Until then such accounts cannot exist, and if one
-        # did, refusing is the only answer that does not delete on a session.
-        raise AccessDenied("confirm the deletion by signing in with your provider",
-                           "no_password")
-    if not pwd.verify(user.password_hash, password):
+        # No password to type: the confirmation is a fresh round trip to the
+        # linked provider (`reauthenticated`, checked by the route against a
+        # short-lived signed cookie bound to this session — ADR 0008). A
+        # session alone never deletes.
+        if not reauthenticated:
+            record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
+                         user_agent=user_agent, details={"cause": "reauth_required"})
+            keep_on_refusal(db)
+            raise AccessDenied("confirm the deletion with your Google account first",
+                               "reauth_required")
+    elif not password or not pwd.verify(user.password_hash, password):
         record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
                      user_agent=user_agent, details={"cause": "wrong_password"})
         keep_on_refusal(db)

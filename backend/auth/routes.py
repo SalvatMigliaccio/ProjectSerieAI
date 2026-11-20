@@ -112,6 +112,11 @@ class Identity(BaseModel):
     # keeps working, and because an unverified account has no verification.
     created_at: str | None = None
     email_verified_at: str | None = None
+    # ADR 0008. What the account page needs to decide what to offer: an
+    # account without a password cannot "change" one, and cannot unlink its
+    # only provider. Defaults keep older clients working.
+    has_password: bool = True
+    providers: list[str] = Field(default_factory=list)
 
 
 def _identity(user: User) -> Identity:
@@ -123,6 +128,8 @@ def _identity(user: User) -> Identity:
         permissions=sorted(service.permissions_of(user)),
         created_at=user.created_at.isoformat() if user.created_at else None,
         email_verified_at=user.email_verified_at.isoformat() if user.email_verified_at else None,
+        has_password=user.has_password(),
+        providers=sorted(i.provider for i in user.identities),
     )
 
 

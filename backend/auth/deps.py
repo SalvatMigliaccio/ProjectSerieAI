@@ -266,3 +266,32 @@ def clear_session_cookie(response: Response, cfg: Settings) -> None:
     _drop(response, cfg, cfg.cookie_name, REFRESH_PATH)
     _drop(response, cfg, cfg.cookie_name, LEGACY_PATH)
     _drop(response, cfg, cfg.access_cookie_name, "/")
+
+
+# --- the two short-lived cookies of the external sign-in (ADR 0008) ----------
+
+# The flow cookie only ever needs to reach the callback; the reauth mark only
+# the account-deletion route. A narrow path is a cookie that most requests
+# never carry, so it cannot leak through them.
+OAUTH_PATH = "/api/auth/oauth"
+REAUTH_PATH = "/api/me/account"
+
+
+def set_oauth_cookie(response: Response, token: str, cfg: Settings) -> None:
+    """SameSite=Lax, like the others: Strict would not ride the redirect back from Google."""
+    _cookie(response, cfg, cfg.oauth_cookie_name, token, OAUTH_PATH,
+            max_age=cfg.oauth_flow_minutes * 60)
+
+
+def clear_oauth_cookie(response: Response, cfg: Settings) -> None:
+    """Spent after one callback, whatever the outcome: a flow is single use."""
+    _drop(response, cfg, cfg.oauth_cookie_name, OAUTH_PATH)
+
+
+def set_reauth_cookie(response: Response, token: str, cfg: Settings) -> None:
+    _cookie(response, cfg, cfg.reauth_cookie_name, token, REAUTH_PATH,
+            max_age=cfg.reauth_minutes * 60)
+
+
+def clear_reauth_cookie(response: Response, cfg: Settings) -> None:
+    _drop(response, cfg, cfg.reauth_cookie_name, REAUTH_PATH)

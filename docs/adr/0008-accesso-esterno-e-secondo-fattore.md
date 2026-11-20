@@ -1,6 +1,6 @@
 # ADR 0008 — Accesso con Google (e poi Apple), secondo fattore via email
 
-- **Stato**: accettata. Step 1 (schema) implementato il 20 novembre 2026; step 2-5 da fare
+- **Stato**: accettata. Step 1 (schema) e step 2 (Google) implementati il 20 novembre 2026; step 3-5 da fare
 - **Data**: 20 novembre 2026
 - **Contesto**: oggi si entra solo con email e password (`backend/auth/`, ADR 0003)
 - **Decide**: come un account si lega a un fornitore esterno, cosa succede a un
@@ -13,7 +13,7 @@
 | step | cosa | stato |
 |---|---|---|
 | 1 | schema: `user_identities`, `mfa_challenges`, `password_hash` facoltativo | **fatto** |
-| 2 | accesso con Google (OpenID Connect, codice + PKCE, lato server) | da fare |
+| 2 | accesso con Google (OpenID Connect, codice + PKCE, lato server) | **fatto** |
 | 3 | secondo fattore via email, facoltativo | da fare |
 | 4 | accesso con Apple | **rimandato**: servono account Apple Developer e un dominio HTTPS |
 | 5 | informativa privacy (Google come destinatario), `openapi.json`, `COMANDI.md` | da fare |
@@ -58,8 +58,8 @@ rifiutare come tale, non come hash corrotto.
 |---|---|
 | accesso con password | rifiutato con lo **stesso** messaggio e lo stesso tempo di una password sbagliata, e **non** conta per il blocco: non c'è niente da indovinare, e bloccare chiuderebbe fuori il proprietario dal reset |
 | cambio password | rifiutato: la prima password si imposta con "password dimenticata", che prova il controllo dell'indirizzo. Una sessione da sola no |
-| cancellazione account | oggi rifiutata; con lo step 2 si conferma rientrando con il fornitore |
-| scollegare l'ultimo fornitore | (step 2) rifiutato se l'account non ha password: resterebbe senza nessun modo di entrare |
+| cancellazione account | si riconferma con Google: il ritorno lascia un cookie firmato (`ainaples_reauth`, 5 minuti) legato a utente **e** sessione, che la rotta di cancellazione controlla |
+| scollegare l'ultimo fornitore | rifiutato (409) se l'account non ha password: resterebbe senza nessun modo di entrare |
 
 Il downgrade della migrazione si **ferma** se esiste un account senza password,
 invece di cancellarlo per poter rimettere il vincolo `NOT NULL`.
@@ -124,3 +124,38 @@ non serve una promessa nuova. `retention.purge` le include, e
   Il JavaScript non vede mai un token di Google.
 - **Apple non si prova su localhost**: Apple non accetta `localhost` come
   indirizzo di ritorno. Arriva con il dominio, sulle stesse tabelle.
+
+## Step 2 — com'e' fatto l'accesso con Google
+
+| file | cosa |
+|---|---|
+| `backend/auth/oauth.py` | il protocollo: URL di Google, scambio del codice, verifica del token, cookie del flusso firmato. Nessun accesso al database |
+| `backend/auth/identities.py` | le regole della sezione 2: chi entra, quando si collega, quando si rifiuta |
+| `backend/auth/oauth_routes.py` | `GET /api/auth/providers`, `/oauth/google/start`, `/oauth/google/callback`, `GET /identities`, `POST /identities/google/unlink` |
+| `frontend/src/components/GoogleButton.tsx` | il pulsante, visibile solo se il server dice che Google e' configurato |
+
+**Tre intenti, un solo giro.** `sign_in` (pagina di accesso e registrazione),
+`link` (profilo: collega Google a un account gia' aperto) e `reauth` (profilo,
+account senza password: riconferma prima di cancellare). `link` e `reauth`
+registrano nel flusso la sessione che li ha fatti partire, e al ritorno
+pretendono di trovare la stessa: un collegamento non deve atterrare su chi ha
+fatto l'accesso nel frattempo.
+
+**Il ritorno non risponde mai con una pagina d'errore.** E' una navigazione,
+non una chiamata: ogni esito e' un redirect al frontend, con i cookie oppure
+con `?oauth_error=<codice>`. I codici sono una lista chiusa, tradotta in
+`api/auth.ts` (`oauthErrorMessage`); il testo di Google non arriva mai alla
+pagina.
+
+**Due cookie nuovi, dichiarati nella cookie policy** (`legal/dati.ts`, e
+`test_privacy` li lega a `settings.py`): `ainaples_oauth` (10 minuti, solo su
+`/api/auth/oauth`, cancellato al ritorno) e `ainaples_reauth` (5 minuti, solo
+su `/api/me/account`).
+
+**Dipendenza**: `pyjwt[crypto]`, cioe' `cryptography`, per la firma RS256 di
+Google. Servira' anche per Apple (ES256).
+
+**Verifica**: `tests/test_auth_oauth.py`, 33 test con un Google finto che firma
+con una chiave RSA generata nel test. Controllo per mutazione: togliendo il
+controllo dello `state` o il rifiuto degli account `pending`, i test
+corrispondenti falliscono.

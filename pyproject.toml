@@ -128,7 +128,9 @@ auth = [
     # casa: la verifica di un JWT ha trappole note (`alg: none`, confusione
     # fra algoritmi, `exp` non obbligatorio) che la libreria chiude se le si
     # dice quali algoritmi e quali claim pretendere.
-    "pyjwt>=2.10,<3",
+    # `[crypto]` porta `cryptography`: serve a verificare la firma RS256 dei
+    # token di Google e, con Apple, a firmare in ES256 (ADR 0008).
+    "pyjwt[crypto]>=2.10,<3",
     "email-validator>=2.2,<3",
     "pydantic-settings>=2.7,<3",
 ]

@@ -36,6 +36,7 @@ import {
   serverError,
   useValidation,
 } from "../components/Form";
+import { GoogleSignIn } from "../components/GoogleButton";
 import { Colophon, Masthead } from "../components/Layout";
 
 /**
@@ -245,6 +246,9 @@ export function SignIn() {
   // not always the dashboard.
   const from = (location.state as { from?: string } | null)?.from ?? "/dashboard";
   const justReset = params.get("reset") === "1";
+  // Il ritorno da Google quando qualcosa non va: il server rimanda qui con un
+  // codice, mai con il testo di Google.
+  const oauthError = authApi.oauthErrorMessage(params.get("oauth_error"));
 
   const v = useValidation(
     { email: emailError(email), password: requiredError(password, "la password") },
@@ -278,6 +282,8 @@ export function SignIn() {
       {justReset && (
         <FormSuccess>Password aggiornata. Accedi con quella nuova.</FormSuccess>
       )}
+      <FormAlert>{oauthError}</FormAlert>
+      <GoogleSignIn next={from} />
       <form onSubmit={submit} noValidate>
         <EmailField
           id="email"
@@ -378,6 +384,7 @@ export function SignUp() {
       title="Crea un account"
       lead="Ti basta un indirizzo email: ti mandiamo un collegamento per attivarlo."
     >
+      <GoogleSignIn label="Registrati con Google" />
       <form onSubmit={submit} noValidate>
         <EmailField
           id="email"

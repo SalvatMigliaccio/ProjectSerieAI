@@ -19,10 +19,10 @@
  */
 
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import * as authApi from "../api/auth";
-import type { ActivityRow, SessionRow } from "../api/auth";
+import type { ActivityRow, LinkedIdentity, SessionRow } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import {
   FormAlert,
@@ -35,6 +35,7 @@ import {
   useValidation,
 } from "../components/Form";
 import { FavoritePicker } from "../components/FavoritePicker";
+import { GoogleLogo, useProviders } from "../components/GoogleButton";
 import { CONSERVAZIONE_GIORNI } from "../legal/dati";
 import { Colophon, Masthead } from "../components/Layout";
 import { ago, localDateTime } from "../lib/format";
@@ -128,7 +129,7 @@ const SEZIONI: { id: Sezione; path: string; label: string; lead: string; icon: R
     id: "sicurezza",
     path: "/account/sicurezza",
     label: "Sicurezza",
-    lead: "Cambia la password quando vuoi: serve quella attuale per confermare che sei tu.",
+    lead: "Password, accesso con Google e cancellazione dell'account.",
     icon: ICONA_SICUREZZA,
   },
   {
@@ -280,6 +281,27 @@ function SezioneProfilo({
   );
 }
 
+/**
+ * Un account creato con Google non ha una password da cambiare. La prima si
+ * imposta con "Password dimenticata": il collegamento via email prova che
+ * l'indirizzo e' tuo, e una sessione aperta da sola non lo prova (ADR 0008).
+ */
+function SenzaPassword() {
+  return (
+    <section className="profilo__blocco" aria-labelledby="password-titolo">
+      <h2 id="password-titolo">Password</h2>
+      <p className="profilo__hint">
+        Il tuo account non ha una password: entri con Google. Se vuoi poter entrare
+        anche con email e password, impostane una con il collegamento che ti mandiamo
+        per email.
+      </p>
+      <Link className="btn btn--ghost" to="/forgot-password">
+        Imposta una password
+      </Link>
+    </section>
+  );
+}
+
 function CambioPassword() {
   const [attuale, setAttuale] = useState("");
   const [nuova, setNuova] = useState("");
@@ -376,6 +398,69 @@ function periodo(giorni: number): string {
  * In fondo alla sezione Sicurezza e separato dal resto: e' l'unica azione
  * dell'account che non si annulla, e non deve stare dove si clicca per altro.
  */
+/**
+ * La cancellazione per un account SENZA password: al posto della password si
+ * riconferma con Google, e il ritorno porta `?reauth=google`. Il server non si
+ * fida di quel parametro: controlla un cookie firmato, legato a questa sessione
+ * e valido pochi minuti. Il parametro serve solo a mostrare il passo giusto.
+ */
+function EliminaSenzaPassword() {
+  const { deleteAccount } = useAuth();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const confermato = params.get("reauth") === "google";
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  async function elimina() {
+    setErrore(null);
+    setInCorso(true);
+    try {
+      await deleteAccount();
+      navigate("/account", { replace: true, state: { eliminato: true } });
+    } catch (e) {
+      setErrore(serverError(e, "Conferma scaduta o non valida: riconferma con Google."));
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <section className="profilo__blocco profilo__blocco--pericolo" aria-labelledby="elimina-titolo">
+      <h2 id="elimina-titolo">Elimina l'account</h2>
+      <p className="profilo__hint">
+        Cancella l'account e tutto ciò che è tuo: email, collegamento a Google, squadra
+        preferita, pronostici e sessioni. Non si può annullare. Restano soltanto i
+        registri di sicurezza degli accessi, senza alcun collegamento a te, per al
+        massimo {periodo(CONSERVAZIONE_GIORNI.registroAccessi)}.
+      </p>
+      {!confermato ? (
+        <a className="btn btn--ghost btn--danger-ghost btn--google"
+          href={authApi.oauthStartUrl("google", "reauth", "/account/sicurezza")}>
+          <GoogleLogo />
+          Conferma con Google per eliminare…
+        </a>
+      ) : (
+        <>
+          <FormSuccess>
+            Identità confermata. Hai pochi minuti per completare l'eliminazione.
+          </FormSuccess>
+          <FormAlert>{errore}</FormAlert>
+          <div className="profilo__azioni">
+            <button className="btn btn--danger" type="button" onClick={() => void elimina()}
+              disabled={inCorso} aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              {inCorso ? "Elimino…" : "Elimina definitivamente"}
+            </button>
+            <Link className="btn btn--ghost" to="/account/sicurezza" replace>
+              Annulla
+            </Link>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function EliminaAccount() {
   const { deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -453,10 +538,108 @@ function EliminaAccount() {
   );
 }
 
+/**
+ * L'account Google collegato: vederlo, collegarlo, scollegarlo (ADR 0008).
+ *
+ * Collegare e' una NAVIGAZIONE verso Google, come l'accesso; il ritorno porta
+ * `?linked=google` o `?oauth_error=`. Scollegare e' rifiutato dal server quando
+ * e' l'unico modo di entrare: qui lo si dice prima, invece di far premere un
+ * pulsante che risponde di no.
+ */
+function SezioneGoogle({ haPassword }: { haPassword: boolean }) {
+  const disponibili = useProviders();
+  const [params] = useSearchParams();
+  const [righe, setRighe] = useState<LinkedIdentity[] | null>(null);
+  const [errore, setErrore] = useState<string | null>(
+    authApi.oauthErrorMessage(params.get("oauth_error")));
+  const [esito, setEsito] = useState<string | null>(
+    params.get("linked") === "google" ? "Account Google collegato." : null);
+  const [inCorso, setInCorso] = useState(false);
+
+  const carica = useCallback(async () => {
+    try {
+      setRighe(await authApi.identities());
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a leggere gli account collegati."));
+    }
+  }, []);
+
+  useEffect(() => {
+    void carica();
+  }, [carica]);
+
+  const google = righe?.find((r) => r.provider === "google") ?? null;
+  // Niente sezione se Google non e' configurato e non c'e' niente di collegato:
+  // un pulsante che porta a un 404 sarebbe peggio di nessun pulsante.
+  if (righe !== null && !google && disponibili && !disponibili.google) return null;
+
+  async function scollega() {
+    setErrore(null);
+    setEsito(null);
+    setInCorso(true);
+    try {
+      await authApi.unlinkProvider("google");
+      setEsito("Account Google scollegato.");
+      await carica();
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a scollegare Google. Riprova."));
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  const dal = google ? soloData(google.linked_at) : null;
+  return (
+    <section className="profilo__blocco" aria-labelledby="google-titolo">
+      <h2 id="google-titolo">Accesso con Google</h2>
+      <FormAlert>{errore}</FormAlert>
+      <FormSuccess>{esito}</FormSuccess>
+      {righe === null ? (
+        !errore && <p className="state">Carico…</p>
+      ) : google ? (
+        <>
+          <p className="profilo__hint">
+            Collegato a <strong>{google.email ?? "un account Google"}</strong>
+            {dal ? <> dal {dal}</> : null}. Puoi entrare con il pulsante «Continua con Google».
+          </p>
+          {haPassword ? (
+            <button className="btn btn--ghost" type="button" onClick={() => void scollega()}
+              disabled={inCorso} aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              Scollega Google
+            </button>
+          ) : (
+            <p className="profilo__hint">
+              È l'unico modo con cui entri: per scollegarlo, prima{" "}
+              <Link to="/forgot-password">imposta una password</Link>.
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="profilo__hint">
+            Collega un account Google per entrare con un clic, senza digitare la password.
+          </p>
+          <a className="btn btn--ghost btn--google"
+            href={authApi.oauthStartUrl("google", "link", "/account/sicurezza")}>
+            <GoogleLogo />
+            Collega Google
+          </a>
+        </>
+      )}
+    </section>
+  );
+}
+
 function SezioneSicurezza() {
+  const { user } = useAuth();
+  // `undefined` da un'API piu' vecchia: si tratta come "ha la password", cioe'
+  // il comportamento di prima.
+  const haPassword = user?.has_password !== false;
   return (
     <>
-      <CambioPassword />
+      {haPassword ? <CambioPassword /> : <SenzaPassword />}
+      <SezioneGoogle haPassword={haPassword} />
       <aside className="profilo__consiglio" aria-label="Consiglio">
         <span className="profilo__consiglio-icon">{ICONA_SICUREZZA}</span>
         <p>
@@ -466,7 +649,7 @@ function SezioneSicurezza() {
           automatico.
         </p>
       </aside>
-      <EliminaAccount />
+      {haPassword ? <EliminaAccount /> : <EliminaSenzaPassword />}
     </>
   );
 }
@@ -698,6 +881,10 @@ const EVENTI: Record<string, { ok: string; ko: string }> = {
   reset_done: { ok: "Password reimpostata dal collegamento email", ko: "Reimpostazione non riuscita" },
   session_revoked: { ok: "Chiusa una sessione", ko: "Chiusura sessione non riuscita" },
   sessions_revoked: { ok: "Chiuse le altre sessioni", ko: "Chiusura sessioni non riuscita" },
+  identity_linked: { ok: "Collegato un account Google", ko: "Collegamento a Google non riuscito" },
+  identity_unlinked: { ok: "Scollegato l'account Google", ko: "Scollegamento da Google non riuscito" },
+  reauth: { ok: "Identità riconfermata con Google", ko: "Riconferma con Google non riuscita" },
+  link: { ok: "Collegamento a Google", ko: "Collegamento a Google non riuscito" },
 };
 
 function SezioneAttivita() {
