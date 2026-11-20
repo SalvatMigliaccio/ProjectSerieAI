@@ -121,7 +121,10 @@ def _landing(r) -> tuple[str, dict]:
     assert r.status_code == 303, r.text
     u = urlparse(r.headers["location"])
     assert f"{u.scheme}://{u.netloc}" == PUBLIC, "every outcome must land on the frontend"
-    return u.path, {k: v[0] for k, v in parse_qs(u.query).items()}
+    # HashRouter: the page and its query live in the fragment, as in the emails.
+    assert u.path == "/" and u.fragment.startswith("/"),         f"the page must be after '#', got {r.headers['location']}"
+    page = urlparse(u.fragment)
+    return page.path, {k: v[0] for k, v in parse_qs(page.query).items()}
 
 
 def _sign_in(client, google, sub="g-123", email="nuovo@gmail.com", verified=True, **kw):

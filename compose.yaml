@@ -104,7 +104,17 @@ services:
       AI_NAPLES_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-ainaples}:${POSTGRES_PASSWORD:?serve POSTGRES_PASSWORD, copia .env.example in .env}@db:5432/${POSTGRES_DB:-ainaples}
       AI_NAPLES_SECRET_KEY: ${AI_NAPLES_SECRET_KEY:?serve AI_NAPLES_SECRET_KEY, copia .env.example in .env}
       AI_NAPLES_COOKIE_SECURE: "0"
-      AI_NAPLES_PUBLIC_URL: http://localhost:${FRONTEND_PORT:-5173}
+      # Dal .env se c'e' (20 novembre 2026). Con l'accesso con Google non e' piu'
+      # solo l'indirizzo dei link nelle email: e' l'URI di ritorno che Google
+      # confronta carattere per carattere, e il browser deve stare sullo stesso
+      # host, o il cookie del flusso non torna indietro. localhost e 127.0.0.1
+      # per il browser sono due siti diversi.
+      AI_NAPLES_PUBLIC_URL: ${AI_NAPLES_PUBLIC_URL:-http://localhost:5173}
+      # Accesso con Google (ADR 0008): dal .env, vuote se non ci sono, e allora
+      # il pulsante non compare. L'URI di ritorno registrato su Google deve
+      # essere AI_NAPLES_PUBLIC_URL qui sopra + /api/auth/oauth/google/callback.
+      AI_NAPLES_GOOGLE_CLIENT_ID: ${AI_NAPLES_GOOGLE_CLIENT_ID:-}
+      AI_NAPLES_GOOGLE_CLIENT_SECRET: ${AI_NAPLES_GOOGLE_CLIENT_SECRET:-}
       AI_NAPLES_SMTP_HOST: mail
       AI_NAPLES_SMTP_PORT: "1025"
       AI_NAPLES_SMTP_SECURITY: none

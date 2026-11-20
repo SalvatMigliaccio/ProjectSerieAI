@@ -49,6 +49,8 @@ Write-Host "Sito: in esecuzione"
 Start-ScheduledTask -TaskName "AI_Naples worker"
 Write-Host "Worker: avviato"
 
-# 4. Il sito
-Start-Process "http://localhost:$porta/#/dashboard"
+# 4. Il sito, su 127.0.0.1 e non su localhost: deve essere lo stesso host di
+#    AI_NAPLES_PUBLIC_URL, o l'accesso con Google perde il cookie del flusso
+#    al ritorno (per il browser sono due siti diversi).
+Start-Process "http://127.0.0.1:$porta/#/dashboard"
 Write-Host "Fatto. Per spegnere tutto: backend\scripts\ferma_app.cmd"

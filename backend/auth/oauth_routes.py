@@ -87,8 +87,15 @@ def _limit(request: Request) -> bool:
 
 
 def _to(cfg: Settings, path: str, **params: str) -> RedirectResponse:
-    """A redirect to the frontend. 303: the browser follows it with a GET, always."""
-    target = f"{cfg.public_url.rstrip('/')}{oauth.safe_next(path)}"
+    """
+    A redirect to the frontend. 303: the browser follows it with a GET, always.
+
+    THE PAGE GOES AFTER `#`. The frontend uses a HashRouter (App.tsx), the same
+    shape as the emailed links (`mail.py`): `/#/dashboard`, not `/dashboard`.
+    A real path still serves the app, but the router reads an empty hash and
+    the `?oauth_error=` the page needed is lost.
+    """
+    target = f"{cfg.public_url.rstrip('/')}/#{oauth.safe_next(path)}"
     if params:
         target += ("&" if "?" in target else "?") + urlencode(params)
     out = RedirectResponse(target, status_code=status.HTTP_303_SEE_OTHER)
