@@ -140,6 +140,19 @@ class Settings(BaseSettings):
     mfa_max_attempts: int = Field(default=5, ge=3, le=10)
     mfa_cookie_name: str = "ainaples_mfa"
 
+    # --- second factor by authenticator app (TOTP) ---------------------------
+    # THE KEY THAT ENCRYPTS TOTP SECRETS AND HASHES RECOVERY CODES, separate
+    # from `secret_key` on purpose. Rotating `secret_key` is the emergency
+    # brake for every JWT (ADR 0003); if it also encrypted the TOTP secrets,
+    # pulling it would lock every app-2FA user out, recovery codes included.
+    # Empty = derived from `secret_key` (fine in development, flagged below).
+    # Losing or changing THIS key means every TOTP user has to set the app up
+    # again: back it up with the database.
+    mfa_key: SecretStr = SecretStr("")
+    # The name the authenticator app shows next to the code.
+    totp_issuer: str = "MatchPoint"
+    recovery_codes_count: int = Field(default=10, ge=5, le=20)
+
     @property
     def google_enabled(self) -> bool:
         return bool(self.google_client_id and self.google_client_secret.get_secret_value())
@@ -205,6 +218,12 @@ class Settings(BaseSettings):
             problems.append(
                 f"AI_NAPLES_PUBLIC_URL is http: verification and reset links "
                 f"would be emailed in the clear ({self.public_url})"
+            )
+        if not self.mfa_key.get_secret_value():
+            problems.append(
+                "AI_NAPLES_MFA_KEY is empty: TOTP secrets are encrypted with a key derived "
+                "from AI_NAPLES_SECRET_KEY, so rotating that key would lock every "
+                "authenticator-app user out. Set a separate one (32+ characters)."
             )
         if bool(self.google_client_id) != bool(self.google_client_secret.get_secret_value()):
             problems.append(

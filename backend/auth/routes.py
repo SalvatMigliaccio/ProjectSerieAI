@@ -119,18 +119,28 @@ class Identity(BaseModel):
     has_password: bool = True
     providers: list[str] = Field(default_factory=list)
     mfa_enabled: bool = False
+    mfa_method: str | None = None
 
 
 class MfaPending(BaseModel):
     """
     The first factor passed and a code is on its way: no session yet.
 
-    `sent_to` is the address MASKED (`m•••o@gmail.com`), enough for the person
-    to know which mailbox to open.
+    `method` says where the code comes from: `email` (then `sent_to` is the
+    address MASKED, `m•••o@gmail.com`, enough to know which mailbox to open) or
+    `totp` (the authenticator app; `sent_to` is null, nothing was sent).
     """
 
     mfa_required: bool = True
-    sent_to: str
+    method: str = "email"
+    sent_to: str | None = None
+
+
+def pending_for(user: User, purpose: str = "sign_in") -> MfaPending:
+    """What the code screen needs to know, without saying more than that."""
+    if mfa.uses_app(user, purpose):
+        return MfaPending(method="totp")
+    return MfaPending(method="email", sent_to=mfa.mask(user.email))
 
 
 def _identity(user: User) -> Identity:
@@ -145,6 +155,7 @@ def _identity(user: User) -> Identity:
         has_password=user.has_password(),
         providers=sorted(i.provider for i in user.identities),
         mfa_enabled=user.mfa_enabled(),
+        mfa_method=user.mfa_method,
     )
 
 
@@ -263,7 +274,7 @@ def sign_in(payload: Credentials, response: Response, request: Request,
     except service.MfaRequired as pending:
         challenge = mfa.issue(db, pending.user, "sign_in", pending.via, cfg=cfg,
                               sender=sender, ip=ip, user_agent=ua)
-        out = JSONResponse(MfaPending(sent_to=mfa.mask(pending.user.email)).model_dump(),
+        out = JSONResponse(pending_for(pending.user).model_dump(),
                            status_code=status.HTTP_202_ACCEPTED)
         set_mfa_cookie(out, challenge, cfg)
         return out

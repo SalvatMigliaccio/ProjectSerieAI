@@ -23,6 +23,7 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -89,6 +90,11 @@ class User(Base):
     # boolean would need a second column that can disagree with the first.
     mfa_method: Mapped[str | None] = mapped_column(String(16))
     mfa_enabled_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    # The 30-second step of the last TOTP code accepted. A code is valid for
+    # its whole window (and one step either side, for clock drift): without
+    # this, a code read over a shoulder works again for up to a minute and a
+    # half. Anything at or below it is refused.
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
 
     # The team the user follows, as the track record names it ("Napoli").
     # A plain string and not a foreign key: teams are not a table here, they
@@ -504,3 +510,31 @@ class PipelineWorker(Base):
     started_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
     last_seen_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
     poll_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MfaRecoveryCode(Base):
+    """
+    One-time recovery codes for the authenticator-app second factor.
+
+    THE ONLY WAY BACK FROM A LOST PHONE, by design. There is no fallback to
+    the emailed code: that would reopen exactly the weakness the app closes
+    (whoever holds the mailbox passes both steps).
+
+    Stored as an HMAC keyed with `mfa_key` and salted with the user id: the
+    codes are random enough that a slow hash buys nothing, and the key means a
+    database dump alone cannot test guesses. Shown once, at generation.
+    """
+
+    __tablename__ = "mfa_recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "code_hash", name="uq_mfa_recovery_codes_code"),
+    )

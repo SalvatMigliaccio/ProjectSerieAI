@@ -33,6 +33,7 @@ import {
   SubmitButton,
   codeError,
   emailError,
+  recoveryError,
   newPasswordError,
   requiredError,
   serverError,
@@ -271,7 +272,7 @@ export function SignIn() {
       const attesa = await signIn(email.trim(), password);
       if (attesa) {
         // La password era giusta, ma l'account vuole anche il codice.
-        navigate("/sign-in/codice", { state: { from, sentTo: attesa.sent_to } });
+        navigate("/sign-in/codice", { state: { from, attesa } });
         return;
       }
       navigate(from, { replace: true });
@@ -339,13 +340,18 @@ const LOCK_ICON = (
 );
 
 /**
- * Il secondo passaggio dell'accesso: il codice arrivato per email (ADR 0008).
+ * Il secondo passaggio dell'accesso (ADR 0008): il codice per email, oppure
+ * quello dell'app di autenticazione.
  *
- * CI SI ARRIVA DA DUE STRADE. Dalla password, con la casella mascherata nello
- * `state` della navigazione; da Google, con un redirect del server che porta
- * solo `?next=`: allora la casella si chiede a `/api/auth/mfa/pending`. Se non
+ * CI SI ARRIVA DA DUE STRADE. Dalla password, con l'attesa (metodo e casella)
+ * nello `state` della navigazione; da Google, con un redirect del server che
+ * porta solo `?next=`: allora la si chiede a `/api/auth/mfa/pending`. Se non
  * c'e' niente in attesa (scaduto, o pagina aperta a mano) lo si dice e si
  * rimanda all'accesso, invece di mostrare un modulo che non puo' funzionare.
+ *
+ * CON L'APP NON C'E' "RINVIA", e non c'e' un ripiego sull'email: riaprirebbe
+ * il punto debole che l'app chiude. Chi ha perso il telefono usa un codice di
+ * riserva, nello stesso campo.
  *
  * Nessuna sessione esiste ancora: la crea il server quando il codice e' giusto,
  * e qui si adotta l'identita' che restituisce, come dopo una verifica email.
@@ -355,35 +361,44 @@ export function MfaCode() {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
-  const stato = location.state as { from?: string; sentTo?: string } | null;
+  const stato = location.state as { from?: string; attesa?: authApi.MfaPending } | null;
   // `next` arriva dal server (ritorno da Google), quindi e' gia' un percorso
   // interno; il controllo resta, perche' chiunque puo' scrivere un URL.
   const nextParam = params.get("next");
   const dove = stato?.from
     ?? (nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard");
 
-  const [sentTo, setSentTo] = useState<string | null>(stato?.sentTo ?? null);
+  const [attesa, setAttesa] = useState<authApi.MfaPending | null>(stato?.attesa ?? null);
   const [scaduto, setScaduto] = useState(false);
+  const [riserva, setRiserva] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [esito, setEsito] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [rinvio, setRinvio] = useState(false);
 
-  const v = useValidation({ code: codeError(code) }, { code });
+  const app = attesa?.method === "totp";
+  const v = useValidation({ code: riserva ? recoveryError(code) : codeError(code) }, { code });
 
   useEffect(() => {
-    if (sentTo) return;
+    if (attesa) return;
     let annullato = false;
     void authApi.mfaPending().then((p) => {
       if (annullato) return;
-      if (p) setSentTo(p.sent_to);
+      if (p) setAttesa(p);
       else setScaduto(true);
     });
     return () => {
       annullato = true;
     };
-  }, [sentTo]);
+  }, [attesa]);
+
+  function cambiaModo() {
+    setRiserva((r) => !r);
+    setCode("");
+    setError(null);
+    v.reset();
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -392,7 +407,8 @@ export function MfaCode() {
     if (!v.check()) return;
     setBusy(true);
     try {
-      const identity = await authApi.verifyMfa(code.replace(/\D/g, ""));
+      const pulito = riserva ? code.trim() : code.replace(/\D/g, "");
+      const identity = await authApi.verifyMfa(pulito);
       adopt(identity);
       navigate(dove, { replace: true });
     } catch (err) {
@@ -408,8 +424,7 @@ export function MfaCode() {
     setEsito(null);
     setRinvio(true);
     try {
-      const p = await authApi.resendMfa();
-      setSentTo(p.sent_to);
+      setAttesa(await authApi.resendMfa());
       setCode("");
       v.reset();
       setEsito("Ti abbiamo mandato un nuovo codice. Quello di prima non vale più.");
@@ -423,32 +438,35 @@ export function MfaCode() {
   if (scaduto) {
     return (
       <Shell icon={LOCK_ICON} title="Richiesta scaduta"
-        lead="Il codice si chiede subito dopo la password, e vale per poco tempo. Accedi di nuovo per riceverne uno.">
+        lead="Il codice si chiede subito dopo la password, e vale per poco tempo. Accedi di nuovo per continuare.">
         <Link className="btn btn--block" to="/sign-in">Torna all'accesso</Link>
       </Shell>
     );
   }
 
+  const lead = !attesa ? "Un attimo…"
+    : riserva ? "Scrivi uno dei codici di riserva che hai salvato quando hai attivato l'app. Ognuno vale una volta sola."
+    : app ? "Apri l'app di autenticazione sul telefono e scrivi il codice di 6 cifre di MatchPoint."
+    : <>Abbiamo mandato un codice di 6 cifre a <strong>{attesa.sent_to}</strong>. Scrivilo qui per entrare.</>;
+
   return (
-    <Shell
-      icon={LOCK_ICON}
-      title="Controlla la posta"
-      lead={sentTo ? (
-        <>Abbiamo mandato un codice di 6 cifre a <strong>{sentTo}</strong>. Scrivilo qui per entrare.</>
-      ) : "Un attimo…"}
-    >
+    <Shell icon={LOCK_ICON} title={app ? "Verifica in due passaggi" : "Controlla la posta"} lead={lead}>
       <FormSuccess>{esito}</FormSuccess>
       <form onSubmit={submit} noValidate>
         <CodeField
+          key={riserva ? "riserva" : "codice"}
           id="code"
-          label="Codice di verifica"
+          label={riserva ? "Codice di riserva" : "Codice di verifica"}
+          recovery={riserva}
           value={code}
           onChange={setCode}
           onBlur={v.blur("code")}
           error={v.error("code")}
           inputRef={v.ref("code")}
           autoFocus
-          hint="Vale 10 minuti. Non lo trovi? Guarda nello spam o nelle promozioni."
+          hint={riserva ? "Lo trovi nel file o sul foglio in cui li hai salvati."
+            : app ? "Il codice cambia ogni 30 secondi: se sta per scadere, aspetta il prossimo."
+            : "Vale 10 minuti. Non lo trovi? Guarda nello spam o nelle promozioni."}
         />
         <FormAlert>{error}</FormAlert>
         <SubmitButton busy={busy} busyText="Verifica…">
@@ -456,9 +474,15 @@ export function MfaCode() {
         </SubmitButton>
       </form>
       <Links>
-        <button type="button" className="link-button" onClick={() => void rinvia()} disabled={rinvio}>
-          {rinvio ? "Invio…" : "Mandami un nuovo codice"}
-        </button>
+        {app ? (
+          <button type="button" className="link-button" onClick={cambiaModo}>
+            {riserva ? "Usa il codice dell'app" : "Non hai il telefono? Usa un codice di riserva"}
+          </button>
+        ) : (
+          <button type="button" className="link-button" onClick={() => void rinvia()} disabled={rinvio}>
+            {rinvio ? "Invio…" : "Mandami un nuovo codice"}
+          </button>
+        )}
         <Link to="/sign-in">Annulla</Link>
       </Links>
     </Shell>

@@ -1246,6 +1246,7 @@ for a real deployment:
 | `AI_NAPLES_ACCESS_TOKEN_MINUTES` | life of the access JWT, default 15, max 60: how long a revoked session still reaches the data routes (ADR 0003) |
 | `AI_NAPLES_SESSION_MAX_HOURS` | absolute life of a session (the refresh token), default 24 |
 | `AI_NAPLES_SUPERADMIN_EMAILS` | comma-separated addresses that become superadmin once verified. Empty: nobody does |
+| `AI_NAPLES_MFA_KEY` | encrypts authenticator-app (TOTP) secrets and recovery-code hashes. **Separate from `AI_NAPLES_SECRET_KEY`** so the JWT emergency rotation does not lock app users out. Required in production; back it up with the database: losing it means every app user re-enrols. ADR 0008 |
 | `AI_NAPLES_MFA_CODE_MINUTES`, `AI_NAPLES_MFA_MAX_ATTEMPTS` | the emailed 2FA code: validity (default 10) and attempts per code (default 5). ADR 0008 |
 | `AI_NAPLES_GOOGLE_CLIENT_ID`, `AI_NAPLES_GOOGLE_CLIENT_SECRET` | sign in with Google (ADR 0008). Both empty: no button, routes 404. In the Google Cloud Console the authorised redirect URI is `AI_NAPLES_PUBLIC_URL` + `/api/auth/oauth/google/callback`, character for character |
 

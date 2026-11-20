@@ -3798,3 +3798,30 @@ p.adm-card { margin-top: var(--s5); }
 .legale tr:last-child td { border-bottom: 0; }
 .legale code { font-size: 0.8125rem; }
 .legale__nota { text-align: left; color: var(--muted); margin-top: var(--s3); }
+
+
+/* App di autenticazione (TOTP): il QR su fondo bianco anche nel tema scuro,
+   perche' molte fotocamere non leggono un QR chiaro su scuro. */
+.totp__passi { padding-left: var(--s5); margin: 0 0 var(--s4); line-height: 1.6; color: var(--muted); }
+.totp__passi li + li { margin-top: var(--s2); }
+.totp__chiave {
+  display: block; margin-top: var(--s2); padding: var(--s2) var(--s3);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 0.9375rem; letter-spacing: 0.08em; word-break: break-all; color: var(--fg);
+}
+.totp__qr {
+  display: grid; place-items: center; width: 216px; height: 216px; margin: 0 0 var(--s4);
+  background: #fff; border-radius: var(--radius-sm); border: 1px solid var(--line);
+}
+
+/* I codici di riserva: si leggono, si copiano, si confrontano con il foglio. */
+.riserva { display: grid; gap: var(--s3); }
+.riserva h3 { margin: 0; font-size: 1rem; }
+.riserva__codici {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s2);
+  margin: 0; padding: var(--s3) var(--s3) var(--s3) var(--s6);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.riserva__codici code { font-size: 0.9375rem; letter-spacing: 0.06em; }
+.riserva__conferma { display: flex; align-items: center; gap: var(--s2); font-size: 0.875rem; }
+.riserva__poche { color: var(--ko); }

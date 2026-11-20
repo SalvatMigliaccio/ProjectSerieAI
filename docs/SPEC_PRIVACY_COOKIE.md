@@ -28,7 +28,7 @@ codice cambia, cambia prima questa tabella e poi il testo.
 | account Google collegato: identificativo (`sub`), email al momento del collegamento, date | `user_identities` | accesso con Google, se scelto | art. 6.1.b | fino allo scollegamento o alla cancellazione |
 | verifica in due passaggi: metodo e data di attivazione | `users.mfa_method`, `mfa_enabled_at` | secondo fattore, se attivato | art. 6.1.b | fino alla disattivazione o cancellazione |
 | codici di verifica (solo HMAC), tentativi, IP, user agent | `mfa_challenges` | secondo fattore; rilevare tentativi di indovinare il codice | art. 6.1.b e 6.1.f (sicurezza) | **30 giorni** dalla scadenza, come i token email |
-| segreto TOTP | `users.totp_secret` | riservata a un'app di autenticazione futura: **oggi sempre vuota** | art. 6.1.b | — |
+| app di autenticazione: segreto TOTP (**cifrato**, AES-GCM con `AI_NAPLES_MFA_KEY`), ultimo passo accettato, codici di riserva (solo HMAC) | `users.totp_secret`, `totp_last_step`, `mfa_recovery_codes` | secondo fattore con app, se scelto; accesso se si perde il telefono | art. 6.1.b | fino alla disattivazione dell'app o alla cancellazione: alla disattivazione si cancella tutto |
 | squadra preferita | `users.favorite_team` | personalizzazione | art. 6.1.b | fino alla cancellazione |
 | pronostici personali | `user_predictions` | funzione "I miei pronostici" | art. 6.1.b | fino alla cancellazione |
 | IP, user agent, scadenza | `sessions` | sessioni attive, revoca | art. 6.1.f (sicurezza) | **12 mesi** dalla scadenza o revoca |
@@ -82,7 +82,7 @@ nominarlo basta cambiare `DESTINATARI` in `legal/dati.ts`.
 | `ainaples_access` | tecnico, HttpOnly, SameSite=Lax | durata del token di accesso | autenticazione delle richieste |
 | `ainaples_oauth` | tecnico, HttpOnly, SameSite=Lax, solo `/api/auth/oauth` | 10 minuti, cancellato al ritorno da Google | lega il ritorno da Google al browser che l'ha iniziato (anti-CSRF) |
 | `ainaples_mfa` | tecnico, HttpOnly, SameSite=Lax, solo `/api/auth/mfa` | 30 minuti, cancellato all'inserimento del codice | lega il codice di verifica al browser che l'ha chiesto |
-| `ainaples_reauth` | tecnico, HttpOnly, SameSite=Lax, solo `/api/me/account` | 5 minuti | solo account senza password: riconferma con Google prima della cancellazione |
+| `ainaples_reauth` | tecnico, HttpOnly, SameSite=Lax, solo `/api` | 5 minuti | solo account senza password: riconferma con Google prima della cancellazione o dell'attivazione dell'app di autenticazione |
 | `localStorage.aiNaplesApiBase` | tecnico | persistente | **solo in sviluppo**, mai impostato in produzione |
 
 Niente analytics, niente pixel, niente font da CDN (sono self-hosted con

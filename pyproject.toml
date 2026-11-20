@@ -134,6 +134,10 @@ auth = [
     # Lo scambio del codice con Google (ADR 0008). Era solo in `dev`, per il
     # TestClient: i test passavano e l'immagine dell'API non partiva.
     "httpx>=0.27,<1",
+    # Verifica in due passaggi con app (ADR 0008, TOTP). pyotp per l'RFC 6238,
+    # segno per il QR code in SVG: puro Python, nessuna dipendenza nativa.
+    "pyotp>=2.9,<3",
+    "segno>=1.6,<2",
     "email-validator>=2.2,<3",
     "pydantic-settings>=2.7,<3",
 ]

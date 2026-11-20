@@ -23,7 +23,8 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from . import mfa, service
+from . import mfa, oauth, service, totp
+from . import password as pwd
 from .deps import (
     Cfg,
     CurrentSession,
@@ -35,8 +36,8 @@ from .deps import (
     set_session_cookie,
 )
 from .models import User, now
-from .ratelimit import mfa_limiter, mfa_resend_limiter
-from .routes import Identity, MfaPending, _identity, _issue_access, _limit
+from .ratelimit import mfa_limiter, mfa_resend_limiter, password_change_limiter
+from .routes import Identity, MfaPending, _identity, _issue_access, _limit, pending_for
 
 log = logging.getLogger("auth.mfa_routes")
 
@@ -81,7 +82,7 @@ def pending(request: Request, db: Db, cfg: Cfg) -> MfaPending:
     user = db.get(User, row.user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no sign-in waiting for a code")
-    return MfaPending(sent_to=mfa.mask(user.email))
+    return pending_for(user)
 
 
 @router.post("/verify")
@@ -119,7 +120,7 @@ def resend(request: Request, db: Db, cfg: Cfg, sender: Mailer) -> MfaPending:
                                      user_agent=request.headers.get("user-agent"))
     except mfa.CodeRefused as exc:
         raise _refused(exc) from exc
-    out = JSONResponse(MfaPending(sent_to=mfa.mask(user.email)).model_dump())
+    out = JSONResponse(pending_for(user).model_dump())
     set_mfa_cookie(out, new_token, cfg)
     return out
 
@@ -140,7 +141,7 @@ def _start(purpose: str, row, request: Request, db, cfg, sender) -> JSONResponse
     _resend_allowed(str(user.id))
     token = mfa.issue(db, user, purpose, "session", cfg=cfg, sender=sender,
                       ip=client_ip(request), user_agent=request.headers.get("user-agent"))
-    out = JSONResponse(MfaPending(sent_to=mfa.mask(user.email)).model_dump())
+    out = JSONResponse(pending_for(user, purpose).model_dump())
     set_mfa_cookie(out, token, cfg)
     return out
 
@@ -181,3 +182,141 @@ def disable_start(row: CurrentSession, request: Request, db: Db, cfg: Cfg,
 def disable_confirm(payload: CodePayload, row: CurrentSession, request: Request,
                     response: Response, db: Db, cfg: Cfg) -> Identity:
     return _confirm("disable", payload, row, request, response, db, cfg)
+
+
+# --- the authenticator app (TOTP) -------------------------------------------------
+
+class TotpSetup(BaseModel):
+    """
+    What the person needs to add the account to their app.
+
+    The secret is shown AND carried by the QR code: the camera does not always
+    cooperate, and typing it by hand is the fallback every app offers. It is
+    sent once, over the session, and stored only encrypted.
+    """
+
+    secret: str
+    otpauth_uri: str
+    qr: str
+
+
+class TotpConfirm(BaseModel):
+    code: str = Field(min_length=6, max_length=16)
+    # Required for an account that has one; an account without a password
+    # confirms with a fresh Google round trip instead (the reauth cookie).
+    password: str | None = Field(default=None, max_length=1024)
+
+
+class TotpEnabled(BaseModel):
+    identity: Identity
+    # Shown ONCE. The server keeps only their hashes.
+    recovery_codes: list[str]
+
+
+class MfaStatus(BaseModel):
+    method: str | None
+    enabled_at: str | None = None
+    recovery_codes_left: int | None = None
+
+
+@router.get("/status")
+def mfa_status(row: CurrentSession, db: Db) -> MfaStatus:
+    user = row.user
+    return MfaStatus(
+        method=user.mfa_method,
+        enabled_at=user.mfa_enabled_at.isoformat() if user.mfa_enabled_at else None,
+        recovery_codes_left=totp.recovery_codes_left(db, user) if user.mfa_method == "totp" else None,
+    )
+
+
+@router.post("/totp/setup", responses={409: {"description": "the app is already on"}})
+def totp_setup(row: CurrentSession, request: Request, db: Db, cfg: Cfg) -> TotpSetup:
+    """
+    A new secret for the app, not active yet: `/totp/confirm` activates it.
+
+    Calling it again replaces the pending secret, so a QR code shown and
+    abandoned never becomes valid.
+    """
+    _limit(mfa_limiter, request, "totp-setup")
+    user = row.user
+    if user.mfa_method == "totp":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "the authenticator app is already on: turn it off first")
+    secret = totp.new_secret()
+    user.totp_secret = totp.encrypt(secret, cfg)
+    user.totp_last_step = None
+    uri = totp.provisioning_uri(secret, user.email, cfg)
+    return TotpSetup(secret=totp.readable(secret), otpauth_uri=uri, qr=totp.qr_data_uri(uri))
+
+
+@router.post("/totp/confirm", responses={403: {"description": "identity not confirmed"}})
+def totp_confirm(payload: TotpConfirm, row: CurrentSession, request: Request,
+                 db: Db, cfg: Cfg) -> TotpEnabled:
+    """
+    Turn the app on: needs the code from the app AND proof that this is the owner.
+
+    WITHOUT THE SECOND CONDITION a stolen session could install its own app and
+    lock the real owner out of the account. The password is the proof; for an
+    account without one, a fresh Google confirmation (as for deletion).
+    """
+    _limit(mfa_limiter, request, "totp-confirm")
+    user = row.user
+    ip, ua = client_ip(request), request.headers.get("user-agent")
+    if user.mfa_method == "totp" or not user.totp_secret:
+        raise HTTPException(status.HTTP_409_CONFLICT, "start the setup again")
+
+    key = str(user.id)
+    if not password_change_limiter.allow(key):
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS,
+                            "too many requests: wait a few minutes before trying again",
+                            headers={"Retry-After": str(password_change_limiter.retry_after(key))})
+    if user.has_password():
+        proved = bool(payload.password) and pwd.verify(user.password_hash, payload.password)
+    else:
+        proved = oauth.reauth_valid(request.cookies.get(cfg.reauth_cookie_name),
+                                    row.user_id, row.id, cfg)
+    if not proved:
+        service.record_event(db, "mfa_enabled", "ko", user_id=user.id, ip=ip, user_agent=ua,
+                             details={"method": "totp", "cause": "identity_not_confirmed"})
+        service.keep_on_refusal(db)
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "the password is not correct" if user.has_password()
+                            else "confirm with your Google account first")
+
+    try:
+        pending_secret = totp.decrypt(user.totp_secret, cfg)
+    except totp.SecretUnreadable as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, "start the setup again") from exc
+    if not totp.check(user, mfa.normalise(payload.code), cfg, secret=pending_secret):
+        service.record_event(db, "mfa_enabled", "ko", user_id=user.id, ip=ip, user_agent=ua,
+                             details={"method": "totp", "cause": "wrong_code"})
+        service.keep_on_refusal(db)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "the code from the app is not right: check the phone's clock and retry")
+
+    mfa.enable_app(db, user, user.totp_secret, ip=ip, user_agent=ua)
+    codes = totp.new_recovery_codes(db, user, cfg)
+    return TotpEnabled(identity=_identity(user), recovery_codes=codes)
+
+
+@router.post("/totp/recovery-codes")
+def totp_new_recovery_codes(payload: CodePayload, row: CurrentSession, request: Request,
+                            db: Db, cfg: Cfg) -> TotpEnabled:
+    """
+    A fresh set of recovery codes; the old ones stop working.
+
+    Needs a code from the APP, not a recovery code: whoever holds one leftover
+    recovery code must not be able to mint ten more.
+    """
+    _limit(mfa_limiter, request, "totp-recovery")
+    user = row.user
+    if user.mfa_method != "totp":
+        raise HTTPException(status.HTTP_409_CONFLICT, "the authenticator app is not on")
+    if not totp.check(user, mfa.normalise(payload.code), cfg):
+        service.record_event(db, "mfa_recovery_codes", "ko", user_id=user.id,
+                             ip=client_ip(request), details={"cause": "wrong_code"})
+        service.keep_on_refusal(db)
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "the code from the app is not right")
+    codes = totp.new_recovery_codes(db, user, cfg)
+    service.record_event(db, "mfa_recovery_codes", "ok", user_id=user.id, ip=client_ip(request))
+    return TotpEnabled(identity=_identity(user), recovery_codes=codes)

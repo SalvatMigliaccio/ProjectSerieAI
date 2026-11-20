@@ -270,11 +270,12 @@ def clear_session_cookie(response: Response, cfg: Settings) -> None:
 
 # --- the two short-lived cookies of the external sign-in (ADR 0008) ----------
 
-# The flow cookie only ever needs to reach the callback; the reauth mark only
-# the account-deletion route. A narrow path is a cookie that most requests
-# never carry, so it cannot leak through them.
+# The flow cookie only ever needs to reach the callback. The reauth mark is read
+# by two routes in two prefixes — account deletion (`/api/me/account`) and
+# turning the authenticator app on (`/api/auth/mfa/totp`) — so its path is
+# `/api`: never sent with the pages or static files, and it lives 5 minutes.
 OAUTH_PATH = "/api/auth/oauth"
-REAUTH_PATH = "/api/me/account"
+REAUTH_PATH = "/api"
 
 
 def set_oauth_cookie(response: Response, token: str, cfg: Settings) -> None:

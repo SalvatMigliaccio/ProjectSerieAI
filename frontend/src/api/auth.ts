@@ -27,12 +27,17 @@ export interface Identity {
   providers?: string[];
   /** Verifica in due passaggi attiva (ADR 0008, step 3). */
   mfa_enabled?: boolean;
+  /** "email", "totp" (app di autenticazione) o null. */
+  mfa_method?: string | null;
 }
 
 /** L'accesso ha superato il primo passaggio e aspetta il codice: nessuna sessione ancora. */
 export interface MfaPending {
   mfa_required: true;
-  sent_to: string;
+  /** Da dove arriva il codice: per email, o dall'app di autenticazione. */
+  method?: "email" | "totp";
+  /** La casella mascherata, solo per `email`. */
+  sent_to: string | null;
 }
 
 export function isMfaPending(x: Identity | MfaPending): x is MfaPending {
@@ -311,3 +316,34 @@ export const mfaStart = (azione: "enable" | "disable") =>
   post<MfaPending>(`/api/auth/mfa/${azione}/start`, undefined, { renew: true });
 export const mfaConfirm = (azione: "enable" | "disable", code: string) =>
   post<Identity>(`/api/auth/mfa/${azione}/confirm`, { code }, { renew: true });
+
+// --- App di autenticazione (TOTP) -------------------------------------------------
+
+export interface MfaStatus {
+  method: string | null;
+  enabled_at: string | null;
+  recovery_codes_left: number | null;
+}
+
+export interface TotpSetup {
+  /** Il segreto a gruppi di 4, da scrivere a mano se la fotocamera non legge il QR. */
+  secret: string;
+  otpauth_uri: string;
+  /** Il QR code come immagine `data:image/svg+xml`. */
+  qr: string;
+}
+
+export interface TotpEnabled {
+  identity: Identity;
+  /** Mostrati UNA volta: il server ne tiene solo l'impronta. */
+  recovery_codes: string[];
+}
+
+export const mfaStatus = () => getJson<MfaStatus>("/api/auth/mfa/status");
+export const totpSetup = () =>
+  post<TotpSetup>("/api/auth/mfa/totp/setup", undefined, { renew: true });
+/** La password se l'account ce l'ha; senza, il server guarda la riconferma con Google. */
+export const totpConfirm = (code: string, password?: string) =>
+  post<TotpEnabled>("/api/auth/mfa/totp/confirm", { code, password }, { renew: true });
+export const totpNewRecoveryCodes = (code: string) =>
+  post<TotpEnabled>("/api/auth/mfa/totp/recovery-codes", { code }, { renew: true });

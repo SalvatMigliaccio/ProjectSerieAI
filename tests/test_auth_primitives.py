@@ -72,9 +72,16 @@ def test_a_sound_configuration_raises_no_false_alarm() -> None:
         smtp_host="smtp.provider.example",
         smtp_security="starttls",
         public_url="https://ainaples.example",
+        mfa_key=SecretStr("m" * 48),
     )
     assert good.production_problems() == []
     assert good.sender == "AI Naples <no-reply@ainaples.local>"
+
+
+def test_an_empty_mfa_key_is_a_production_problem() -> None:
+    """Rotating SECRET_KEY must not lock authenticator-app users out (ADR 0008)."""
+    cfg = Settings(_env_file=None, secret_key=SecretStr("x" * 64))
+    assert any("AI_NAPLES_MFA_KEY" in p for p in cfg.production_problems())
 
 
 def test_plaintext_smtp_to_a_remote_host_is_a_problem() -> None:

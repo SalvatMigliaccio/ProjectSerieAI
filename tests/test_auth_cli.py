@@ -58,7 +58,7 @@ def test_check_config_accepts_a_sound_setup(capsys) -> None:
     cli_mod.settings = lambda: Settings(
         _env_file=None, secret_key=SecretStr("x" * 64), cookie_secure=True,
         smtp_host="smtp.provider.example", smtp_security="starttls",
-        public_url="https://ainaples.example")
+        public_url="https://ainaples.example", mfa_key=SecretStr("m" * 48))
     try:
         assert cli_mod.check_config(None) == 0
     finally:

@@ -73,10 +73,16 @@ export const TRATTAMENTI: Trattamento[] = [
     quanto: "Fino a quando scolleghi Google o elimini l'account",
   },
   {
-    dati: "Se attivi la verifica in due passaggi: che è attiva e da quando; i codici inviati (solo in forma cifrata), i tentativi, indirizzo IP e browser",
+    dati: "Se attivi la verifica in due passaggi: con quale metodo e da quando; i codici inviati per email (solo in forma cifrata), i tentativi, indirizzo IP e browser",
     perche: "Chiederti il codice all'accesso e accorgerci se qualcuno prova a indovinarlo",
     base: "Contratto (art. 6.1.b) e sicurezza dell'account (legittimo interesse, art. 6.1.f)",
     quanto: "tokenEmail",
+  },
+  {
+    dati: "Se usi l'app di autenticazione: la chiave condivisa con l'app (cifrata) e i codici di riserva (solo in forma cifrata)",
+    perche: "Verificare il codice dell'app; farti entrare se perdi il telefono",
+    base: "Contratto (art. 6.1.b)",
+    quanto: "Fino a quando disattivi l'app o elimini l'account",
   },
   {
     dati: "Squadra preferita e i tuoi pronostici",
@@ -172,7 +178,7 @@ export const COOKIE: Cookie[] = [
   {
     nome: "ainaples_reauth",
     durata: "5 minuti",
-    scopo: "solo per gli account senza password: conferma di aver appena verificato la tua identità con Google prima di eliminare l'account",
+    scopo: "solo per gli account senza password: conferma di aver appena verificato la tua identità con Google prima di eliminare l'account o di attivare l'app di autenticazione",
   },
 ];
 

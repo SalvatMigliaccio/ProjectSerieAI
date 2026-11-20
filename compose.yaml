@@ -115,6 +115,9 @@ services:
       # essere AI_NAPLES_PUBLIC_URL qui sopra + /api/auth/oauth/google/callback.
       AI_NAPLES_GOOGLE_CLIENT_ID: ${AI_NAPLES_GOOGLE_CLIENT_ID:-}
       AI_NAPLES_GOOGLE_CLIENT_SECRET: ${AI_NAPLES_GOOGLE_CLIENT_SECRET:-}
+      # Cifra i segreti dell'app di autenticazione (TOTP). Vuota in sviluppo va
+      # bene: si ricava da AI_NAPLES_SECRET_KEY. In produzione e' obbligatoria.
+      AI_NAPLES_MFA_KEY: ${AI_NAPLES_MFA_KEY:-}
       AI_NAPLES_SMTP_HOST: mail
       AI_NAPLES_SMTP_PORT: "1025"
       AI_NAPLES_SMTP_SECURITY: none

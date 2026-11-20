@@ -1827,6 +1827,139 @@
         }
       }
     },
+    "/api/auth/mfa/status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Mfa Status",
+        "operationId": "mfa_status_api_auth_mfa_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp Setup",
+        "description": "A new secret for the app, not active yet: `/totp/confirm` activates it.\n\nCalling it again replaces the pending secret, so a QR code shown and\nabandoned never becomes valid.",
+        "operationId": "totp_setup_api_auth_mfa_totp_setup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpSetup"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "the app is already on"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp Confirm",
+        "description": "Turn the app on: needs the code from the app AND proof that this is the owner.\n\nWITHOUT THE SECOND CONDITION a stolen session could install its own app and\nlock the real owner out of the account. The password is the proof; for an\naccount without one, a fresh Google confirmation (as for deletion).",
+        "operationId": "totp_confirm_api_auth_mfa_totp_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnabled"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "identity not confirmed"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/recovery-codes": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp New Recovery Codes",
+        "description": "A fresh set of recovery codes; the old ones stop working.\n\nNeeds a code from the APP, not a recovery code: whoever holds one leftover\nrecovery code must not be able to mint ten more.",
+        "operationId": "totp_new_recovery_codes_api_auth_mfa_totp_recovery_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnabled"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/me/account/delete": {
       "post": {
         "tags": [
@@ -3506,6 +3639,17 @@
             "type": "boolean",
             "title": "Mfa Enabled",
             "default": false
+          },
+          "mfa_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Method"
           }
         },
         "type": "object",
@@ -4869,17 +5013,68 @@
             "title": "Mfa Required",
             "default": true
           },
-          "sent_to": {
+          "method": {
             "type": "string",
+            "title": "Method",
+            "default": "email"
+          },
+          "sent_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Sent To"
           }
         },
         "type": "object",
-        "required": [
-          "sent_to"
-        ],
         "title": "MfaPending",
-        "description": "The first factor passed and a code is on its way: no session yet.\n\n`sent_to` is the address MASKED (`m•••o@gmail.com`), enough for the person\nto know which mailbox to open."
+        "description": "The first factor passed and a code is on its way: no session yet.\n\n`method` says where the code comes from: `email` (then `sent_to` is the\naddress MASKED, `m•••o@gmail.com`, enough to know which mailbox to open) or\n`totp` (the authenticator app; `sent_to` is null, nothing was sent)."
+      },
+      "MfaStatus": {
+        "properties": {
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "enabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled At"
+          },
+          "recovery_codes_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Codes Left"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "title": "MfaStatus"
       },
       "MyPredictions": {
         "properties": {
@@ -6602,6 +6797,77 @@
           "token"
         ],
         "title": "TokenOnly"
+      },
+      "TotpConfirm": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 6,
+            "title": "Code"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "TotpConfirm"
+      },
+      "TotpEnabled": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/Identity"
+          },
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recovery Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identity",
+          "recovery_codes"
+        ],
+        "title": "TotpEnabled"
+      },
+      "TotpSetup": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "title": "Secret"
+          },
+          "otpauth_uri": {
+            "type": "string",
+            "title": "Otpauth Uri"
+          },
+          "qr": {
+            "type": "string",
+            "title": "Qr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "secret",
+          "otpauth_uri",
+          "qr"
+        ],
+        "title": "TotpSetup",
+        "description": "What the person needs to add the account to their app.\n\nThe secret is shown AND carried by the QR code: the camera does not always\ncooperate, and typing it by hand is the fallback every app offers. It is\nsent once, over the session, and stored only encrypted."
       },
       "TrackRecord": {
         "properties": {

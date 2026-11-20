@@ -1,6 +1,6 @@
 # ADR 0008 — Accesso con Google (e poi Apple), secondo fattore via email
 
-- **Stato**: accettata. Step 1, 2, 3 e 5 implementati il 20 novembre 2026; step 4 (Apple) rimandato
+- **Stato**: accettata. Step 1, 2, 3, 5 e 6 (app di autenticazione) implementati il 20 novembre 2026; step 4 (Apple) rimandato
 - **Data**: 20 novembre 2026
 - **Contesto**: oggi si entra solo con email e password (`backend/auth/`, ADR 0003)
 - **Decide**: come un account si lega a un fornitore esterno, cosa succede a un
@@ -16,6 +16,7 @@
 | 2 | accesso con Google (OpenID Connect, codice + PKCE, lato server) | **fatto** |
 | 3 | secondo fattore via email, facoltativo | **fatto** |
 | 4 | accesso con Apple | **rimandato**: servono account Apple Developer e un dominio HTTPS |
+| 6 | secondo fattore con **app di autenticazione (TOTP)** e codici di riserva | **fatto** |
 | 5 | informativa privacy (Google come fonte, art. 14), cookie nuovi, `openapi.json`, `COMANDI.md` | **fatto**; con esso chiusi T1 e T3 dell'ADR 0005 |
 
 ## Le decisioni
@@ -203,3 +204,46 @@ blocco dopo la password, il tetto ai tentativi, o il blocco dopo Google, fallisc
 i test corrispondenti. Provato dal vivo il 20 novembre 2026 sullo stack Docker
 con Mailpit: attivazione, accesso in due passaggi, rinvio che invalida il
 codice vecchio, account di prova cancellato.
+
+## Step 6 — l'app di autenticazione (TOTP)
+
+Chiude il limite scritto nella sezione 4: il codice per email arriva alla stessa
+casella del recupero password. Il codice dell'app sta sul telefono.
+
+| file | cosa |
+|---|---|
+| `backend/auth/totp.py` | segreto cifrato, verifica con blocco del riuso, codici di riserva |
+| `backend/auth/mfa.py` | `uses_app`: accesso e disattivazione chiedono l'app se l'account la usa; nessuna email |
+| `backend/auth/mfa_routes.py` | `GET /status`, `POST /totp/setup`, `/totp/confirm`, `/totp/recovery-codes` |
+| migrazione `c5e2a9f4b1d3` | `users.totp_last_step`, tabella `mfa_recovery_codes` |
+
+**Le quattro decisioni**, ciascuna contro un buco preciso:
+
+1. **Segreto cifrato** (AES-GCM) con `AI_NAPLES_MFA_KEY`, **separata** da
+   `SECRET_KEY`. Il segreto deve essere reversibile per verificare un codice, e in
+   chiaro un dump genererebbe codici validi. Chiave separata perche' ruotare
+   `SECRET_KEY` e' il freno d'emergenza dei JWT: se cifrasse anche i segreti
+   TOTP, chi ha l'app resterebbe chiuso fuori, codici di riserva compresi.
+   `production_problems()` segnala la chiave vuota. **Va salvata insieme al
+   database**: perderla vuol dire far riconfigurare l'app a tutti.
+2. **Un codice vale una volta.** `totp_last_step` ricorda il passo di 30 secondi
+   dell'ultimo codice accettato; tolleranza di un passo per lo sfasamento degli
+   orologi, non di piu'.
+3. **Codici di riserva, nessun ripiego sull'email.** Dieci, monouso, mostrati una
+   volta, conservati come HMAC. Rigenerarli chiede il codice dell'APP, non uno di
+   riserva: chi ne ha uno avanzato non deve poterne coniare dieci.
+4. **Attivarla chiede la password** (o la riconferma con Google per chi non ce
+   l'ha), oltre al codice dell'app. Senza, una sessione rubata installerebbe la
+   propria app e chiuderebbe fuori il proprietario. Per questo il cookie
+   `ainaples_reauth` ora vale su `/api` e non solo su `/api/me/account`.
+
+**Passare da email ad app** si fa direttamente (la conferma dell'app sostituisce
+il metodo); da app a email si spegne l'app (con il suo codice) e si accende
+l'email. Spegnere l'app cancella segreto, passo e codici di riserva.
+
+**Verifica**: `tests/test_auth_totp.py`, 17 test con un orologio spostato a mano.
+Per mutazione: togliendo il blocco del riuso, la richiesta della password, il
+"monouso" dei codici di riserva o la cifratura, falliscono i test
+corrispondenti. Provato dal vivo il 20 novembre 2026 sullo stack Docker:
+attivazione (403 senza password), accesso con l'app senza alcuna email, codice
+riusato rifiutato, codice di riserva accettato una volta, disattivazione.

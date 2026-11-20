@@ -33,7 +33,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from . import mail as mail_mod
-from . import service, tokens
+from . import service, tokens, totp
 from .mail import NotSent, Sender
 from .models import MfaChallenge, User, now
 from .settings import Settings, settings
@@ -41,6 +41,16 @@ from .settings import Settings, settings
 log = logging.getLogger("auth.mfa")
 
 PURPOSES = ("sign_in", "enable", "disable")
+
+
+def uses_app(user: User, purpose: str) -> bool:
+    """
+    True when this challenge is answered from the authenticator app, not by email.
+
+    Signing in and turning 2FA off ask for the factor the account HAS. Turning
+    the emailed factor on always goes by email: it is proving the mailbox.
+    """
+    return user.mfa_method == "totp" and purpose in ("sign_in", "disable")
 
 # A resend keeps the flow alive only this long after the FIRST code: past that,
 # start again from the password. Otherwise resending would be a way to keep a
@@ -95,6 +105,11 @@ def issue(db: Session, user: User, purpose: str, via: str, *,
     """
     Create a challenge, email its code, return the cookie token (cleartext).
 
+    With the authenticator app (`uses_app`) nothing is emailed: the challenge
+    still exists, because it is what binds the attempt to this browser and
+    counts the attempts, but its code comes from the phone. The stored code
+    hash is then random and never matches anything.
+
     `first_issued` carries the start of a resend chain, so the window counts
     from the first code and not from the latest one.
     """
@@ -112,14 +127,21 @@ def issue(db: Session, user: User, purpose: str, via: str, *,
 
     clear, hashed = tokens.generate()
     code = new_code()
+    app = uses_app(user, purpose)
     db.add(MfaChallenge(
         user_id=user.id, purpose=purpose, via=via, challenge_hash=hashed,
-        code_hash=_code_hash(cfg, hashed, code),
+        code_hash=secrets.token_hex(32) if app else _code_hash(cfg, hashed, code),
         expires_at=at + dt.timedelta(minutes=cfg.mfa_code_minutes),
         # `created_at` is the start of the chain, see `resend`.
         created_at=first_issued or at,
         ip=ip, user_agent=(user_agent or "")[:500] or None,
     ))
+    if app:
+        service.record_event(db, "mfa_challenge", "ok", user_id=user.id, ip=ip,
+                             user_agent=user_agent,
+                             details={"purpose": purpose, "via": via, "method": "totp"})
+        db.flush()
+        return clear
     try:
         sender.send(mail_mod.mfa_code_message(cfg, user.email, code, purpose))
         service.record_event(db, "mfa_code_sent", "ok", user_id=user.id, ip=ip,
@@ -173,9 +195,29 @@ def verify(db: Session, token: str | None, code: str, purpose: str, *,
         raise refuse("expired", "the code has expired or was tried too many times: "
                                 "ask for a new one", row.user_id)
 
-    expected = row.code_hash
-    given = _code_hash(cfg, row.challenge_hash, normalise(code))
-    if not hmac.compare_digest(expected, given):
+    user = db.get(User, row.user_id)
+    if user is None or not user.is_active():
+        raise refuse("inactive", "account is not active", row.user_id)
+
+    method = "totp" if uses_app(user, purpose) else "email"
+    recovery = False
+    if method == "totp":
+        try:
+            if totp.looks_like_recovery(code):
+                ok = recovery = totp.use_recovery_code(db, user, code, cfg)
+            else:
+                ok = totp.check(user, normalise(code), cfg)
+        except totp.SecretUnreadable:
+            # The key changed under a stored secret: not the user's fault, and
+            # no number of attempts will fix it. Recovery codes do not help
+            # either (same key). Logged loudly; the message says to ask.
+            log.error("TOTP secret of %s cannot be decrypted: check AI_NAPLES_MFA_KEY", user.id)
+            raise refuse("secret_unreadable", "the authenticator app cannot be checked "
+                         "right now: contact the administrator", user.id) from None
+    else:
+        ok = hmac.compare_digest(row.code_hash,
+                                 _code_hash(cfg, row.challenge_hash, normalise(code)))
+    if not ok:
         row.attempts += 1
         left = cfg.mfa_max_attempts - row.attempts
         if left <= 0:
@@ -185,11 +227,10 @@ def verify(db: Session, token: str | None, code: str, purpose: str, *,
                      else "wrong code: ask for a new one", row.user_id)
 
     row.used_at = at
-    user = db.get(User, row.user_id)
-    if user is None or not user.is_active():
-        raise refuse("inactive", "account is not active", row.user_id)
     service.record_event(db, "mfa_verify", "ok", user_id=user.id, ip=ip,
-                         user_agent=user_agent, details={"purpose": purpose, "via": row.via})
+                         user_agent=user_agent,
+                         details={"purpose": purpose, "via": row.via, "method": method,
+                                  **({"recovery_code": True} if recovery else {})})
     return user
 
 
@@ -212,6 +253,11 @@ def resend(db: Session, token: str | None, purpose: str, *,
     user = db.get(User, row.user_id)
     if user is None or not user.is_active():
         raise CodeRefused("account is not active", "inactive")
+    if uses_app(user, purpose):
+        # Nothing to resend: the code is on the phone. And no falling back to
+        # email, which would undo what the app is for.
+        raise CodeRefused("the code comes from your authenticator app; if you lost "
+                          "the phone, use a recovery code", "app_method")
     clear = issue(db, user, purpose, row.via, cfg=cfg, sender=sender, ip=ip,
                   user_agent=user_agent, first_issued=row.created_at)
     return clear, user
@@ -235,9 +281,24 @@ def enable(db: Session, user: User, *, ip: str | None = None,
                          user_agent=user_agent, details={"method": "email"})
 
 
+def enable_app(db: Session, user: User, encrypted_secret: str, *, ip: str | None = None,
+               user_agent: str | None = None) -> None:
+    """Switch the account to the authenticator app. The caller has checked identity and code."""
+    previous = user.mfa_method
+    user.totp_secret = encrypted_secret
+    user.mfa_method = "totp"
+    user.mfa_enabled_at = now()
+    service.record_event(db, "mfa_enabled", "ok", user_id=user.id, ip=ip,
+                         user_agent=user_agent, details={"method": "totp", "previous": previous})
+
+
 def disable(db: Session, user: User, *, ip: str | None = None,
             user_agent: str | None = None) -> None:
+    method = user.mfa_method
     user.mfa_method = None
     user.mfa_enabled_at = None
+    # Nothing of the app is kept once it is off: a secret left behind would be
+    # a second factor the user believes gone.
+    totp.clear(db, user)
     service.record_event(db, "mfa_disabled", "ok", user_id=user.id, ip=ip,
-                         user_agent=user_agent, details={"method": "email"})
+                         user_agent=user_agent, details={"method": method})

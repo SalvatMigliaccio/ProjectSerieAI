@@ -145,7 +145,7 @@ def test_the_password_alone_opens_no_session(client, db, post) -> None:
     _with_2fa(client, db, post, "due@example.com")
     r = client.post("/api/auth/sign-in", json={"email": "due@example.com", "password": GOOD})
     assert r.status_code == 202
-    assert r.json() == {"mfa_required": True, "sent_to": "d•••e@example.com"}
+    assert r.json() == {"mfa_required": True, "method": "email", "sent_to": "d•••e@example.com"}
     assert _cookies(r) == {"ainaples_mfa"}, "a session cookie before the code defeats 2FA"
     assert client.get("/api/auth/me").status_code == 401
 
