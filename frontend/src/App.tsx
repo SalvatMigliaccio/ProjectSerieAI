@@ -7,10 +7,12 @@ import { RequireAuth } from "./auth/RequireAuth";
 import {
   ForgotPassword,
   ResetPassword,
+  MfaCode,
   SignIn,
   SignUp,
   VerifyEmail,
 } from "./pages/Account";
+import { Amministrazione } from "./pages/dashboard/Amministrazione";
 import { Giornata } from "./pages/dashboard/Giornata";
 import { Modello } from "./pages/dashboard/Modello";
 import { Pronostici } from "./pages/dashboard/Pronostici";
@@ -18,12 +20,16 @@ import { DashboardShell } from "./pages/dashboard/Shell";
 import { Squadra } from "./pages/dashboard/Squadra";
 import { Stagione } from "./pages/dashboard/Stagione";
 import { Hero } from "./pages/Hero";
+import { CookiePolicy, Privacy } from "./pages/Legal";
 import { Profile } from "./pages/Profile";
 
 const TITOLI: Record<string, string> = {
   "/": "MatchPoint — previsioni Serie A",
   "/dashboard": "Dashboard · MatchPoint",
   "/sign-in": "Accedi · MatchPoint",
+  "/sign-in/codice": "Codice di verifica · MatchPoint",
+  "/privacy": "Informativa privacy · MatchPoint",
+  "/cookie": "Cookie policy · MatchPoint",
   "/sign-up": "Crea un account · MatchPoint",
   "/forgot-password": "Password dimenticata · MatchPoint",
   "/reset-password": "Nuova password · MatchPoint",
@@ -35,6 +41,11 @@ const TITOLI: Record<string, string> = {
   "/account": "Il tuo account · MatchPoint",
   "/account/sicurezza": "Sicurezza · Account · MatchPoint",
   "/account/sessioni": "Sessioni · Account · MatchPoint",
+  "/dashboard/admin": "Amministrazione · MatchPoint",
+  "/dashboard/admin/utenti": "Utenti · Amministrazione · MatchPoint",
+  "/dashboard/admin/registro": "Registro · Amministrazione · MatchPoint",
+  "/dashboard/admin/metriche": "Metriche · Amministrazione · MatchPoint",
+  "/dashboard/admin/pipeline": "Pipeline · Amministrazione · MatchPoint",
 };
 
 /**
@@ -93,11 +104,17 @@ export function App() {
           <Route path="/" element={<Hero />} />
 
           <Route path="/account/:sezione?" element={<Profile />} />
+          {/* L'amministrazione sta nella dashboard; il vecchio indirizzo ci porta. */}
+          <Route path="/admin/*" element={<Navigate to="/dashboard/admin" replace />} />
           <Route path="/sign-in" element={<SignIn />} />
+          <Route path="/sign-in/codice" element={<MfaCode />} />
           <Route path="/sign-up" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          {/* Pubbliche per legge: l'informativa si legge PRIMA di registrarsi. */}
+          <Route path="/privacy" element={<Privacy />} />
+          <Route path="/cookie" element={<CookiePolicy />} />
 
           {/* DIETRO L'ACCESSO, dal 9 ottobre 2026. Dalla fase 4 era aperta,
               con lo storico pubblico come vetrina; ora la dashboard si vede
@@ -117,6 +134,9 @@ export function App() {
             <Route path="squadra" element={<Squadra />} />
             <Route path="stagione" element={<Stagione />} />
             <Route path="modello" element={<Modello />} />
+            {/* Solo per chi ha `users:manage`: la schermata lo controlla da
+                se', e il server rifiuta comunque ogni chiamata. */}
+            <Route path="admin/:sezione?/:id?" element={<Amministrazione />} />
           </Route>
           {/* Il primo indirizzo dei pronostici, prima che entrassero nella
               dashboard: un link salvato continua a portare nel posto giusto. */}

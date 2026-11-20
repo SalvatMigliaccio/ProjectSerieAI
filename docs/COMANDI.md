@@ -797,6 +797,105 @@ Get-Content logs\last_run.json
 (0x41303) vuol dire "mai eseguito", `267009` (0x41301) "in esecuzione adesso",
 `0` finito bene. L'esito vero del comando sta in `last_run.json`.
 
+### Il worker: predict e close dalla dashboard (ADR 0007, fase 3)
+
+Dalla dashboard, **Amministrazione → Pipeline**, il superadmin lancia
+`predict_round` e `close_round`. Il pulsante non esegue niente: mette una
+richiesta in coda in Postgres (`pipeline_jobs`). La esegue il **worker**, un
+processo su questa macchina che controlla la coda ogni 30 secondi, lancia lo
+stesso modulo dello scheduler, manda l'output in diretta al pannello e scrive
+`logs\worker_YYYYMMDD.log` e `logs\last_run.json`.
+
+```powershell
+python -m backend.worker                     # gira finche' non lo fermi
+python -m backend.worker --once              # prende al massimo un job ed esce
+python -m backend.worker --accoda predict_round   # mette in coda, come lo scheduler
+```
+
+Il database della coda e' quello di `AI_NAPLES_DATABASE_URL`: **lo stesso del
+sito**, cioe' Neon in produzione, o i pulsanti del sito deployato metterebbero
+in coda richieste che nessun worker legge. Prima migrazione:
+`alembic -c alembic.ini upgrade head` (tabelle `pipeline_jobs`,
+`pipeline_workers`). Il worker legge anche le `GOALMODEL_*` dal `.env`, cosi'
+lanciato a mano non ricade su `parquet` per sbaglio.
+
+**Avvio automatico all'accesso**, una volta sola:
+
+```powershell
+$repo = "D:\Progetti\AI_Naples"
+schtasks /create /tn "AI_Naples worker" /tr "$repo\backend\scripts\worker.cmd" /sc onlogon /f
+Set-ScheduledTask -TaskName "AI_Naples worker" -Settings (New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable `
+  -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -MultipleInstances IgnoreNew `
+  -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1))
+schtasks /run /tn "AI_Naples worker"
+```
+
+`-ExecutionTimeLimit 0` perche' il worker non finisce mai: con il limite di
+un'ora degli altri task Windows lo ucciderebbe. `-RestartCount` lo riavvia se
+cade; al riavvio segna come falliti i job che aveva lasciato a meta'.
+
+**Poi i task del venerdi' e del martedi' passano dalla coda.** Due processi
+che scrivono gli stessi file insieme (uno pianificato e uno lanciato dal
+pannello) e' il caso che la coda esiste per impedire: in coda girano uno alla
+volta, e il pannello mostra anche quelli pianificati.
+
+```powershell
+foreach ($n in "predict_round 1815", "predict_round 1915", "predict_round 2000", "predict_round sabato") {
+  schtasks /change /tn "AI_Naples $n" /tr "$repo\backend\scripts\accoda.cmd predict_round"
+}
+schtasks /change /tn "AI_Naples close_round" /tr "$repo\backend\scripts\accoda.cmd close_round"
+```
+
+**Fatto il 20 novembre 2026 su questa macchina**: i sei task di predict e
+close (compreso "predict_round domenica") chiamano `accoda.cmd`.
+
+**Docker e il worker si accendono solo quando si usa il sito**, non
+all'accesso a Windows:
+
+```powershell
+backend\scripts\avvia_app.cmd     # Docker, i container del sito, il worker, il browser
+backend\scriptserma_app.cmd     # worker, container, Docker (-LasciaDocker per tenerlo)
+```
+
+"AI_Naples worker" e' un'attivita' senza trigger: la avvia `avvia_app`. La
+voce di Docker in "Esecuzione automatica" e' stata tolta. Con tutto spento le
+previsioni pianificate girano lo stesso: `accoda.cmd` non trova il database
+(10 secondi di timeout) e lancia il comando direttamente. `ferma_app` chiede
+conferma se il worker sta eseguendo un comando, e non tocca un predict_round
+partito direttamente dallo scheduler.
+
+**Se nessuno lo eseguirebbe, lo esegue lo scheduler.** `--accoda` esce con
+**10** quando il database non risponde (Docker spento) o nessun worker ha
+battuto negli ultimi due minuti; `accoda.cmd` allora lancia `run_task.cmd`
+direttamente, cioe' il comportamento di prima. Una previsione del venerdi' non
+deve dipendere da Docker acceso. Verificato tutti e due i rami: con il worker
+vivo il job passa dalla coda, con il worker fermo parte il run diretto. Le
+decisioni di `--accoda` stanno in `logs\accoda.log`.
+
+Un job dura al massimo **un'ora**, come i vecchi task: un predict_round
+bloccato deve morire prima dell'orario successivo, che altrimenti troverebbe
+"gia' attivo" e salterebbe.
+
+Il database e' quello di `AI_NAPLES_DATABASE_URL` nel `.env`. Se un giorno il
+sito userà un database remoto, l'URL va in `.env.produzione` (ignorato da
+git): il worker lo legge al posto del `.env`.
+
+Se c'e' gia' un job attivo, `--accoda` non ne aggiunge un secondo ed esce
+con 0: per un task pianificato e' il comportamento giusto. Resta fuori dalla
+coda `aggiorna_risultati`, che non tocca il registro: i suoi orari stanno gia'
+lontani da quelli di predict e close.
+
+Cosa il pannello **non** puo' fare, di proposito:
+- eseguire un comando fuori lista: `command` e' un nome che il worker traduce
+  in un argv fisso (`pipeline.argv_for`), e le opzioni sono solo `dry_run` e
+  `skip_ingest`;
+- fermare un job che sta girando: lo si ferma sulla macchina. Si puo' solo
+  togliere dalla coda un job in attesa, o segnare fallito un job il cui worker
+  tace da oltre 10 minuti;
+- scrivere una previsione: la scrive il comando, e il registro accetta solo
+  quelle con il calcio d'inizio davanti.
+
 ---
 
 ## 7quinquies. Frontend — React + TypeScript
@@ -892,7 +991,40 @@ non esce a 0.
 
 Le tabelle dei dati NON sono in Alembic e non vanno create a mano: le crea la
 prima scrittura, insieme agli schemi `raw`, `interim`, `processed` e al
-catalogo `goalmodel.catalogo`. Il registro delle previsioni resta su file.
+catalogo `goalmodel.catalogo`.
+
+### Il track record in Postgres (ADR 0007, fase 2)
+
+La stessa `GOALMODEL_STORAGE` decide anche dove stanno il registro delle
+previsioni e l'archivio delle giornate chiuse (`goalmodel/registro.py`): in
+`parquet` i CSV di `track_record/`, in `doppio` CSV e database, in `postgres`
+solo il database, schema `track_record`, tabelle `previsioni` e `giornate`.
+
+```bash
+goalmodel registro --importa    # i CSV di track_record/ -> Postgres, idempotente
+goalmodel registro --verifica   # catena delle impronte, e CSV contro Postgres
+goalmodel registro --stato      # quante previsioni e giornate ci sono
+```
+
+Cosa impone il database, anche al proprietario delle tabelle e anche contro
+un bug dell'applicazione: niente `UPDATE`, `DELETE`, `TRUNCATE`; l'ora della
+previsione e' quella del server; una previsione con il calcio d'inizio
+passato o sconosciuto e' rifiutata; ogni riga porta l'impronta della
+precedente, e `--verifica` trova una riga cambiata o tolta da chi ha spento i
+trigger.
+
+**L'import si fa una volta e poi si chiude da solo**: le righe storiche
+entrano con `origine = 'import'` solo finche' non esiste una previsione
+`live`. Ordine del passaggio:
+
+1. `goalmodel registro --importa` contro il database di produzione
+   (`AI_NAPLES_DATABASE_URL` di Neon), finche' esce con `verifica: ... coincidono`;
+2. una o due giornate in `doppio`, con `goalmodel registro --verifica` dopo
+   ognuna;
+3. `GOALMODEL_STORAGE=postgres` sulla macchina della pipeline **e** su Vercel.
+
+I CSV restano in git come archivio congelato dello storico. In `postgres` non
+si scrivono piu', e non vanno piu' committati dopo le giornate.
 
 ---
 
@@ -1049,9 +1181,12 @@ If port 5432 is already taken, set `POSTGRES_PORT` in your `.env` and update
 
 ### The first administrator
 
-Public signup only ever grants `customer`. `superadmin` is created from the
-machine, and there is no HTTP route that can grant it — a test walks the route
-table to keep it that way.
+Public signup only ever grants `customer`. `superadmin` comes from two places
+and never from a click: the variable `AI_NAPLES_SUPERADMIN_EMAILS` (the listed
+addresses get the role at sign-in or verification, **only once verified**), or
+the commands below. The admin panel (`/#/dashboard/admin`, in the dashboard sidebar) can grant and revoke `admin`
+and nothing else; `tests/test_admin.py` checks that `superadmin` is refused.
+Removing an address from the variable does not revoke the role: use `revoke`.
 
 ```bash
 python -m backend.auth.cli create-superadmin --email you@example.com
@@ -1110,6 +1245,10 @@ for a real deployment:
 | `AI_NAPLES_PUBLIC_URL` | builds the links inside emails — wrong value, dead links |
 | `AI_NAPLES_ACCESS_TOKEN_MINUTES` | life of the access JWT, default 15, max 60: how long a revoked session still reaches the data routes (ADR 0003) |
 | `AI_NAPLES_SESSION_MAX_HOURS` | absolute life of a session (the refresh token), default 24 |
+| `AI_NAPLES_SUPERADMIN_EMAILS` | comma-separated addresses that become superadmin once verified. Empty: nobody does |
+| `AI_NAPLES_MFA_KEY` | encrypts authenticator-app (TOTP) secrets and recovery-code hashes. **Separate from `AI_NAPLES_SECRET_KEY`** so the JWT emergency rotation does not lock app users out. Required in production; back it up with the database: losing it means every app user re-enrols. ADR 0008 |
+| `AI_NAPLES_MFA_CODE_MINUTES`, `AI_NAPLES_MFA_MAX_ATTEMPTS` | the emailed 2FA code: validity (default 10) and attempts per code (default 5). ADR 0008 |
+| `AI_NAPLES_GOOGLE_CLIENT_ID`, `AI_NAPLES_GOOGLE_CLIENT_SECRET` | sign in with Google (ADR 0008). Both empty: no button, routes 404. In the Google Cloud Console the authorised redirect URI is `AI_NAPLES_PUBLIC_URL` + `/api/auth/oauth/google/callback`, character for character |
 
 ### Migrations
 

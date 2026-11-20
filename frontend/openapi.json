@@ -1009,6 +1009,7 @@
           "auth"
         ],
         "summary": "Sign In",
+        "description": "200 with the identity, or 202 with `MfaPending` when the account has 2FA on.\n\nOn 202 there is no session: only the `ainaples_mfa` cookie, which\n`POST /api/auth/mfa/verify` turns into one with the emailed code.",
         "operationId": "sign_in_api_auth_sign_in_post",
         "requestBody": {
           "content": {
@@ -1027,6 +1028,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "second factor required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
                 }
               }
             }
@@ -1338,6 +1349,603 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/providers": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Providers",
+        "operationId": "providers_api_auth_providers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Providers"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}/start": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start",
+        "description": "Send the browser to Google, carrying a fresh signed flow in a cookie.\n\n`link` and `reauth` need a signed-in session, recorded in the flow: the\ncallback will insist on finding the same one.",
+        "operationId": "start_api_auth_oauth__provider__start_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "intent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "sign_in",
+              "title": "Intent"
+            }
+          },
+          {
+            "name": "next",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Callback",
+        "description": "Google sends the browser back here. Every branch ends in a redirect.",
+        "operationId": "callback_api_auth_oauth__provider__callback_get",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/identities": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Linked",
+        "operationId": "linked_api_auth_identities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LinkedIdentity"
+                  },
+                  "type": "array",
+                  "title": "Response Linked Api Auth Identities Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/identities/{provider}/unlink": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Unlink",
+        "description": "409 when it is the account's last way in; `unlinked: 0` when it was not linked.",
+        "operationId": "unlink_api_auth_identities__provider__unlink_post",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Unlink Api Auth Identities  Provider  Unlink Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/pending": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Pending",
+        "description": "Which mailbox the code went to, for the code screen. 404 if nothing pending.\n\nThe sign-in with a password gets this in its 202; the Google sign-in\narrives by redirect and has to ask.",
+        "operationId": "pending_api_auth_mfa_pending_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/verify": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Verify",
+        "description": "The code turns the pending sign-in into a session: same cookies as a plain sign-in.",
+        "operationId": "verify_api_auth_mfa_verify_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/resend": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Resend",
+        "operationId": "resend_api_auth_mfa_resend_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/enable/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Enable Start",
+        "operationId": "enable_start_api_auth_mfa_enable_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "already on, or email unverified"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/enable/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Enable Confirm",
+        "operationId": "enable_confirm_api_auth_mfa_enable_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/disable/start": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Disable Start",
+        "operationId": "disable_start_api_auth_mfa_disable_start_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaPending"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "already off"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/disable/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Disable Confirm",
+        "operationId": "disable_confirm_api_auth_mfa_disable_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/status": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Mfa Status",
+        "operationId": "mfa_status_api_auth_mfa_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MfaStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/setup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp Setup",
+        "description": "A new secret for the app, not active yet: `/totp/confirm` activates it.\n\nCalling it again replaces the pending secret, so a QR code shown and\nabandoned never becomes valid.",
+        "operationId": "totp_setup_api_auth_mfa_totp_setup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpSetup"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "the app is already on"
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/confirm": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp Confirm",
+        "description": "Turn the app on: needs the code from the app AND proof that this is the owner.\n\nWITHOUT THE SECOND CONDITION a stolen session could install its own app and\nlock the real owner out of the account. The password is the proof; for an\naccount without one, a fresh Google confirmation (as for deletion).",
+        "operationId": "totp_confirm_api_auth_mfa_totp_confirm_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TotpConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnabled"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "identity not confirmed"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/mfa/totp/recovery-codes": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Totp New Recovery Codes",
+        "description": "A fresh set of recovery codes; the old ones stop working.\n\nNeeds a code from the APP, not a recovery code: whoever holds one leftover\nrecovery code must not be able to mint ten more.",
+        "operationId": "totp_new_recovery_codes_api_auth_mfa_totp_recovery_codes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodePayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TotpEnabled"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -1671,6 +2279,644 @@
           }
         }
       }
+    },
+    "/api/admin/summary": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Summary",
+        "operationId": "summary_api_admin_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/backend__auth__admin__Summary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/metrics": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Metrics",
+        "operationId": "metrics_api_admin_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Metrics"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Users",
+        "description": "Newest first, filtered by partial address, status and role.\n\n`role=staff` means admin OR superadmin. The search uses the trigram index\non `users.email`, which is what makes a substring match cheap.",
+        "operationId": "users_api_admin_users_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 254
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(pending|active|suspended)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "role",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(admin|superadmin|customer|staff)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Role"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "User Detail",
+        "operationId": "user_detail_api_admin_users__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/audit": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Audit",
+        "description": "What staff did lately, and the deletions, newest first.",
+        "operationId": "audit_api_admin_audit_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EventRow"
+                  },
+                  "title": "Response Audit Api Admin Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/suspend": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Suspend",
+        "description": "Block the account and end every session it holds.\n\nWHAT IT DOES NOT DO AT ONCE, said plainly: an access token already issued\nkeeps reading the DATA routes until it lapses, at most\n`access_token_minutes` (ADR 0003). Account and admin routes stop at once,\nand the next refresh is refused.",
+        "operationId": "suspend_api_admin_users__user_id__suspend_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reason"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/reactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Reactivate",
+        "description": "Undo a suspension. Back to `active` only if the address was verified:\nreactivating must not become a way around verification.",
+        "operationId": "reactivate_api_admin_users__user_id__reactivate_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/unlock": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Unlock",
+        "description": "Lift the lock-out after too many wrong passwords, before it expires.",
+        "operationId": "unlock_api_admin_users__user_id__unlock_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/roles/{role}/grant": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Grant Role",
+        "operationId": "grant_role_api_admin_users__user_id__roles__role__grant_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users/{user_id}/roles/{role}/revoke": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Revoke Role",
+        "operationId": "revoke_role_api_admin_users__user_id__roles__role__revoke_post",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "role",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Role"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "State",
+        "operationId": "state_api_admin_pipeline_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Job Detail",
+        "operationId": "job_detail_api_admin_pipeline_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Launch",
+        "operationId": "launch_api_admin_pipeline_jobs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LaunchPayload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/pipeline/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Cancel",
+        "description": "Withdraw a queued job, or give up on a running one whose worker died.\n\nA LIVE running job is not cancellable from here: the command may be\nhalfway through writing, and killing it from a web page is exactly the\nkind of remote control this design avoids. Stop the worker on its machine.",
+        "operationId": "cancel_api_admin_pipeline_jobs__job_id__cancel_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PipelineState"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1855,6 +3101,39 @@
         ],
         "title": "ChangePayload"
       },
+      "CodePayload": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 6,
+            "title": "Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "CodePayload"
+      },
+      "Count": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "Count"
+      },
       "Credentials": {
         "properties": {
           "email": {
@@ -1876,19 +3155,68 @@
         ],
         "title": "Credentials"
       },
-      "DeletePayload": {
+      "DayCount": {
         "properties": {
-          "password": {
+          "day": {
             "type": "string",
-            "maxLength": 1024,
-            "minLength": 1,
-            "title": "Password"
+            "title": "Day"
+          },
+          "signups": {
+            "type": "integer",
+            "title": "Signups"
           }
         },
         "type": "object",
         "required": [
-          "password"
+          "day",
+          "signups"
         ],
+        "title": "DayCount"
+      },
+      "DaySeries": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "title": "Day"
+          },
+          "sign_ins": {
+            "type": "integer",
+            "title": "Sign Ins"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "sign_ins",
+          "failed",
+          "picks"
+        ],
+        "title": "DaySeries"
+      },
+      "DeletePayload": {
+        "properties": {
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
         "title": "DeletePayload"
       },
       "EmailOnly": {
@@ -1904,6 +3232,91 @@
           "email"
         ],
         "title": "EmailOnly"
+      },
+      "EventRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome"
+          },
+          "at": {
+            "type": "string",
+            "title": "At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "user_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Email"
+          },
+          "actor_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "outcome",
+          "at"
+        ],
+        "title": "EventRow",
+        "description": "An audit row as staff see it: WITH `details`, unlike the owner's view.\n\n`details` never holds credentials (`record_event` is written that way), and\nthe context it does hold — the cause of a refusal, who granted a role — is\nprecisely what an administrator needs. `actor_email` resolves the `by` id."
       },
       "ExpectedPoints": {
         "properties": {
@@ -2209,6 +3622,34 @@
               }
             ],
             "title": "Email Verified At"
+          },
+          "has_password": {
+            "type": "boolean",
+            "title": "Has Password",
+            "default": true
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "mfa_enabled": {
+            "type": "boolean",
+            "title": "Mfa Enabled",
+            "default": false
+          },
+          "mfa_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Method"
           }
         },
         "type": "object",
@@ -2221,6 +3662,122 @@
         ],
         "title": "Identity",
         "description": "What the frontend needs to draw the interface. Never anything secret."
+      },
+      "JobRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "requested_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By"
+          },
+          "requested_at": {
+            "type": "string",
+            "title": "Requested At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heartbeat At"
+          },
+          "worker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Worker"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale"
+          },
+          "log_tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log Tail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "command",
+          "options",
+          "status",
+          "requested_at",
+          "stale"
+        ],
+        "title": "JobRow"
       },
       "LastRun": {
         "properties": {
@@ -2289,6 +3846,66 @@
           "command"
         ],
         "title": "LastRun"
+      },
+      "LaunchPayload": {
+        "properties": {
+          "command": {
+            "type": "string",
+            "title": "Command"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "command"
+        ],
+        "title": "LaunchPayload"
+      },
+      "LinkedIdentity": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "linked_at": {
+            "type": "string",
+            "title": "Linked At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider",
+          "linked_at"
+        ],
+        "title": "LinkedIdentity",
+        "description": "One provider tied to this account, as its owner sees it.\n\nNo `subject`: it identifies the person at Google, and nothing on the page\nneeds it. The email is the one Google had at link time, shown so the owner\nrecognises WHICH Google account it is."
       },
       "MLMarket": {
         "properties": {
@@ -3258,10 +4875,211 @@
         "type": "object",
         "title": "MatchPoint"
       },
+      "Metrics": {
+        "properties": {
+          "active_24h": {
+            "type": "integer",
+            "title": "Active 24H"
+          },
+          "active_7d": {
+            "type": "integer",
+            "title": "Active 7D"
+          },
+          "active_30d": {
+            "type": "integer",
+            "title": "Active 30D"
+          },
+          "signups_30d": {
+            "type": "integer",
+            "title": "Signups 30D"
+          },
+          "verified_30d": {
+            "type": "integer",
+            "title": "Verified 30D"
+          },
+          "pending_stale": {
+            "type": "integer",
+            "title": "Pending Stale"
+          },
+          "failed_sign_ins_24h": {
+            "type": "integer",
+            "title": "Failed Sign Ins 24H"
+          },
+          "failed_sign_ins_7d": {
+            "type": "integer",
+            "title": "Failed Sign Ins 7D"
+          },
+          "failed_ips_24h": {
+            "type": "integer",
+            "title": "Failed Ips 24H"
+          },
+          "locked_now": {
+            "type": "integer",
+            "title": "Locked Now"
+          },
+          "failure_causes_7d": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Failure Causes 7D"
+          },
+          "users_with_favorite": {
+            "type": "integer",
+            "title": "Users With Favorite"
+          },
+          "favorite_teams": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Favorite Teams"
+          },
+          "pick_season": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pick Season"
+          },
+          "users_with_picks": {
+            "type": "integer",
+            "title": "Users With Picks"
+          },
+          "picks_total": {
+            "type": "integer",
+            "title": "Picks Total"
+          },
+          "picks_7d": {
+            "type": "integer",
+            "title": "Picks 7D"
+          },
+          "picks_by_market": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Picks By Market"
+          },
+          "picks_by_matchday": {
+            "items": {
+              "$ref": "#/components/schemas/Count"
+            },
+            "type": "array",
+            "title": "Picks By Matchday"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/DaySeries"
+            },
+            "type": "array",
+            "title": "Daily"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active_24h",
+          "active_7d",
+          "active_30d",
+          "signups_30d",
+          "verified_30d",
+          "pending_stale",
+          "failed_sign_ins_24h",
+          "failed_sign_ins_7d",
+          "failed_ips_24h",
+          "locked_now",
+          "failure_causes_7d",
+          "users_with_favorite",
+          "favorite_teams",
+          "pick_season",
+          "users_with_picks",
+          "picks_total",
+          "picks_7d",
+          "picks_by_market",
+          "picks_by_matchday",
+          "daily"
+        ],
+        "title": "Metrics",
+        "description": "How the site is used, beyond the head-count of `summary`.\n\nEverything is read from rows that already exist — sessions, audit events,\npicks — and nothing is stored to compute it. A metric that needs a new\ntable to be counted is a decision, not a query."
+      },
+      "MfaPending": {
+        "properties": {
+          "mfa_required": {
+            "type": "boolean",
+            "title": "Mfa Required",
+            "default": true
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "default": "email"
+          },
+          "sent_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent To"
+          }
+        },
+        "type": "object",
+        "title": "MfaPending",
+        "description": "The first factor passed and a code is on its way: no session yet.\n\n`method` says where the code comes from: `email` (then `sent_to` is the\naddress MASKED, `m•••o@gmail.com`, enough to know which mailbox to open) or\n`totp` (the authenticator app; `sent_to` is null, nothing was sent)."
+      },
+      "MfaStatus": {
+        "properties": {
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "enabled_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled At"
+          },
+          "recovery_codes_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Codes Left"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method"
+        ],
+        "title": "MfaStatus"
+      },
       "MyPredictions": {
         "properties": {
           "summary": {
-            "$ref": "#/components/schemas/Summary"
+            "$ref": "#/components/schemas/backend__auth__me__Summary"
           },
           "picks": {
             "items": {
@@ -3739,6 +5557,50 @@
         "title": "Picks",
         "description": "The canonical selections. No threshold field to move, by design.\n\n`most_probable` is the most likely market of each match, whatever it pays;\n`with_min_odds` is the most likely among those paying at least `min_odds`,\nwhich comes from `config.QUOTA_MINIMA_SELEZIONE` and not from the request.\nBoth are the rules the project has used since the first registered round."
       },
+      "PipelineState": {
+        "properties": {
+          "workers": {
+            "items": {
+              "$ref": "#/components/schemas/WorkerRow"
+            },
+            "type": "array",
+            "title": "Workers"
+          },
+          "any_online": {
+            "type": "boolean",
+            "title": "Any Online"
+          },
+          "active": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobRow"
+            },
+            "type": "array",
+            "title": "Jobs"
+          },
+          "can_launch": {
+            "type": "boolean",
+            "title": "Can Launch"
+          }
+        },
+        "type": "object",
+        "required": [
+          "workers",
+          "any_online",
+          "jobs",
+          "can_launch"
+        ],
+        "title": "PipelineState"
+      },
       "Players": {
         "properties": {
           "season": {
@@ -3796,6 +5658,43 @@
         },
         "type": "object",
         "title": "Preferences"
+      },
+      "Providers": {
+        "properties": {
+          "google": {
+            "type": "boolean",
+            "title": "Google"
+          },
+          "apple": {
+            "type": "boolean",
+            "title": "Apple"
+          }
+        },
+        "type": "object",
+        "required": [
+          "google",
+          "apple"
+        ],
+        "title": "Providers",
+        "description": "Which buttons the sign-in page should draw. Nothing secret: no client id."
+      },
+      "Reason": {
+        "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "Reason"
       },
       "Refreshed": {
         "properties": {
@@ -4516,6 +6415,56 @@
         "title": "Selections",
         "description": "Selections inside an odds band, with hits and their denominator.\n\nThe numbers travel together on purpose: \"10 su 11\" says what \"91%\" hides,\nwhich is that eleven bets decide nothing. Filtering by odds moves variance,\nnot edge — M1's probabilities are the book's own line with the margin\nremoved, so expected value is minus the margin at every threshold."
       },
+      "SessionInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "title": "Last Seen At"
+          },
+          "expires_at": {
+            "type": "string",
+            "title": "Expires At"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created_at",
+          "last_seen_at",
+          "expires_at"
+        ],
+        "title": "SessionInfo"
+      },
       "SessionRow": {
         "properties": {
           "id": {
@@ -4834,80 +6783,6 @@
         "title": "Status",
         "description": "Enough for a frontend to show that the system is alive — and no way to\ncommand it. Writing happens only from local processes."
       },
-      "Summary": {
-        "properties": {
-          "picks": {
-            "type": "integer",
-            "title": "Picks"
-          },
-          "pending": {
-            "type": "integer",
-            "title": "Pending"
-          },
-          "resolved": {
-            "type": "integer",
-            "title": "Resolved"
-          },
-          "won": {
-            "type": "integer",
-            "title": "Won"
-          },
-          "hit_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hit Rate"
-          },
-          "mean_model_probability": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mean Model Probability"
-          },
-          "model_resolved": {
-            "type": "integer",
-            "title": "Model Resolved",
-            "default": 0
-          },
-          "model_won": {
-            "type": "integer",
-            "title": "Model Won",
-            "default": 0
-          },
-          "model_hit_rate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Model Hit Rate"
-          }
-        },
-        "type": "object",
-        "required": [
-          "picks",
-          "pending",
-          "resolved",
-          "won",
-          "hit_rate",
-          "mean_model_probability"
-        ],
-        "title": "Summary",
-        "description": "The comparison without a score.\n\n`mean_model_probability` is what the model expected of the resolved picks\non average; `hit_rate` is what actually happened. Side by side they say\nwhether the user's picks did better or worse than the model thought they\nwould — the one honest comparison with no points table."
-      },
       "TokenOnly": {
         "properties": {
           "token": {
@@ -4922,6 +6797,77 @@
           "token"
         ],
         "title": "TokenOnly"
+      },
+      "TotpConfirm": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "maxLength": 16,
+            "minLength": 6,
+            "title": "Code"
+          },
+          "password": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "TotpConfirm"
+      },
+      "TotpEnabled": {
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/Identity"
+          },
+          "recovery_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recovery Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identity",
+          "recovery_codes"
+        ],
+        "title": "TotpEnabled"
+      },
+      "TotpSetup": {
+        "properties": {
+          "secret": {
+            "type": "string",
+            "title": "Secret"
+          },
+          "otpauth_uri": {
+            "type": "string",
+            "title": "Otpauth Uri"
+          },
+          "qr": {
+            "type": "string",
+            "title": "Qr"
+          }
+        },
+        "type": "object",
+        "required": [
+          "secret",
+          "otpauth_uri",
+          "qr"
+        ],
+        "title": "TotpSetup",
+        "description": "What the person needs to add the account to their app.\n\nThe secret is shown AND carried by the QR code: the camera does not always\ncooperate, and typing it by hand is the fallback every app offers. It is\nsent once, over the session, and stored only encrypted."
       },
       "TrackRecord": {
         "properties": {
@@ -4994,6 +6940,143 @@
         ],
         "title": "TrackRecord"
       },
+      "UserDetail": {
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserRow"
+          },
+          "sessions": {
+            "items": {
+              "$ref": "#/components/schemas/SessionInfo"
+            },
+            "type": "array",
+            "title": "Sessions"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/EventRow"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage"
+          },
+          "can_change_roles": {
+            "type": "boolean",
+            "title": "Can Change Roles"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "sessions",
+          "events",
+          "can_manage",
+          "can_change_roles"
+        ],
+        "title": "UserDetail"
+      },
+      "UserPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/UserRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "limit",
+          "offset",
+          "rows"
+        ],
+        "title": "UserPage"
+      },
+      "UserRow": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "email_verified_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email Verified At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "locked": {
+            "type": "boolean",
+            "title": "Locked"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email",
+          "status",
+          "roles",
+          "created_at",
+          "active_sessions",
+          "locked"
+        ],
+        "title": "UserRow"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -5033,6 +7116,178 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "WorkerRow": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "title": "Last Seen At"
+          },
+          "poll_seconds": {
+            "type": "integer",
+            "title": "Poll Seconds"
+          },
+          "online": {
+            "type": "boolean",
+            "title": "Online"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "started_at",
+          "last_seen_at",
+          "poll_seconds",
+          "online"
+        ],
+        "title": "WorkerRow"
+      },
+      "backend__auth__admin__Summary": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "by_status": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Status"
+          },
+          "new_24h": {
+            "type": "integer",
+            "title": "New 24H"
+          },
+          "new_7d": {
+            "type": "integer",
+            "title": "New 7D"
+          },
+          "new_30d": {
+            "type": "integer",
+            "title": "New 30D"
+          },
+          "admins": {
+            "type": "integer",
+            "title": "Admins"
+          },
+          "active_sessions": {
+            "type": "integer",
+            "title": "Active Sessions"
+          },
+          "signups_by_day": {
+            "items": {
+              "$ref": "#/components/schemas/DayCount"
+            },
+            "type": "array",
+            "title": "Signups By Day"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "by_status",
+          "new_24h",
+          "new_7d",
+          "new_30d",
+          "admins",
+          "active_sessions",
+          "signups_by_day"
+        ],
+        "title": "Summary"
+      },
+      "backend__auth__me__Summary": {
+        "properties": {
+          "picks": {
+            "type": "integer",
+            "title": "Picks"
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending"
+          },
+          "resolved": {
+            "type": "integer",
+            "title": "Resolved"
+          },
+          "won": {
+            "type": "integer",
+            "title": "Won"
+          },
+          "hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hit Rate"
+          },
+          "mean_model_probability": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mean Model Probability"
+          },
+          "model_resolved": {
+            "type": "integer",
+            "title": "Model Resolved",
+            "default": 0
+          },
+          "model_won": {
+            "type": "integer",
+            "title": "Model Won",
+            "default": 0
+          },
+          "model_hit_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Hit Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "picks",
+          "pending",
+          "resolved",
+          "won",
+          "hit_rate",
+          "mean_model_probability"
+        ],
+        "title": "Summary",
+        "description": "The comparison without a score.\n\n`mean_model_probability` is what the model expected of the resolved picks\non average; `hit_rate` is what actually happened. Side by side they say\nwhether the user's picks did better or worse than the model thought they\nwould — the one honest comparison with no points table."
       }
     }
   }

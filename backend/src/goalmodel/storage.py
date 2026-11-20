@@ -16,8 +16,9 @@ TRE MODALITA', scelte con `GOALMODEL_STORAGE` (ADR 0006):
             errore nel log. `goalmodel db --verifica` dice se i due coincidono.
   postgres  legge e scrive solo Postgres. Lo stato finale: niente `data/`.
 
-Il registro delle previsioni NON passa di qui e non passera' mai: resta su
-file, versionato, scritto solo da processi locali (ADR 0002, punto 1).
+Il registro delle previsioni non passa di qui: ha regole sue (append-only,
+fischio d'inizio, catena delle impronte) e il suo modulo, `registro.py`, che
+segue pero' la stessa variabile (ADR 0007, fase 2).
 """
 
 from __future__ import annotations

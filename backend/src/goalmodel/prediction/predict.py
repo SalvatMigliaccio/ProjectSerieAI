@@ -51,13 +51,14 @@ from __future__ import annotations
 import argparse
 import logging
 import shutil
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
 
-from .. import config, data
+from .. import config, data, registro
 from ..features import context as context_mod
 from ..features import form as form_mod
 from ..features import market as market_mod
@@ -491,10 +492,14 @@ def predict_fixtures(
 # ---------------------------------------------------------------------------
 
 def already_logged(model_version: str, path=PREDICTIONS_LOG) -> set[tuple[str, ...]]:
-    """Le partite gia' registrate per questo modello, come insieme di chiavi."""
-    if not path.exists():
+    """
+    Le partite gia' registrate per questo modello, come insieme di chiavi.
+
+    Dal file o da Postgres secondo `GOALMODEL_STORAGE` (`registro.leggi`).
+    """
+    if not registro.esiste(path):
         return set()
-    df = pd.read_csv(path, usecols=KEYS + ["model_version"])
+    df = registro.leggi(path)[KEYS + ["model_version"]]
     df = df[df["model_version"] == model_version]
     return set(map(tuple, df[KEYS].astype(str).to_numpy()))
 
@@ -556,6 +561,25 @@ def append_log(preds: pd.DataFrame, model_version: str, now: pd.Timestamp,
         "odds_away": preds["odds_away"],
         "odds_source": preds["odds_source"],
     })[LOG_COLUMNS]
+
+    # IN POSTGRES (ADR 0007, fase 2) il registro vero va nel database, che
+    # impone da se' append-only, ora del server e calcio d'inizio futuro. In
+    # `doppio` anche sul file, che resta la fonte; in `postgres` solo li'.
+    # Un `path` diverso dal registro vero (backfill, test) resta file.
+    sul_registro_vero = Path(path) == PREDICTIONS_LOG
+    if sul_registro_vero and registro.su_db():
+        kickoff = preds["kickoff"] if "kickoff" in preds.columns else pd.Series([pd.NaT] * len(preds))
+        try:
+            inserite = registro.aggiungi(rec, kickoff.reset_index(drop=True))
+        except registro.RegistroRifiutato:
+            raise
+        except Exception as exc:
+            if registro.modalita() != "doppio":
+                raise
+            log.error("doppio: previsioni scritte su file ma NON in Postgres (%s)", exc)
+            inserite = len(rec)
+        if not registro.su_file():
+            return inserite, saltate + (len(rec) - inserite)
 
     path.parent.mkdir(parents=True, exist_ok=True)
 

@@ -299,6 +299,19 @@ def _stat(path: Path) -> tuple:
         return (str(path), None, None)
 
 
+def _track_in_db(src: Sources) -> bool:
+    """
+    The track record comes from Postgres (ADR 0007, phase 2).
+
+    Only in `GOALMODEL_STORAGE=postgres` and only for the real track record:
+    tests point `Sources` at their own files, which stay files in every mode,
+    exactly as `_in_db` does for `data/`.
+    """
+    from goalmodel import registro
+
+    return registro.legge_db() and src.predictions_log == registro.FILE_REGISTRO
+
+
 def _fingerprint(src: Sources) -> tuple:
     """
     Cache key: (path, mtime, size) of every source, round files included.
@@ -308,9 +321,14 @@ def _fingerprint(src: Sources) -> tuple:
     The round directory is listed as well, because closing a round ADDS a file
     without touching any existing one.
     """
-    items = [_stat(src.predictions_log), _stat(src.rounds_summary),
-             _stat(src.schedule), _stat(src.master), _stat(src.odds_snapshot),
-             _stat(src.understat_schedule)]
+    data = [_stat(src.schedule), _stat(src.master), _stat(src.odds_snapshot),
+            _stat(src.understat_schedule)]
+    if _track_in_db(src):
+        # Append-only tables: a new row always moves the count or the last id.
+        from goalmodel import registro
+
+        return (("registro", *registro.versione()), *data)
+    items = [_stat(src.predictions_log), _stat(src.rounds_summary), *data]
     if src.rounds_dir.is_dir():
         items.extend(_stat(p) for p in sorted(src.rounds_dir.glob("round_*.csv")))
     return tuple(items)
@@ -354,22 +372,16 @@ def _read_predictions(src: Sources) -> pd.DataFrame:
 
 
 def _read_closed(src: Sources) -> pd.DataFrame:
-    """Every `round_<season>_<NN>.csv`, concatenated. The file IS the state."""
-    if not src.rounds_dir.is_dir():
-        return pd.DataFrame()
-    frames = []
-    for path in sorted(src.rounds_dir.glob("round_*.csv")):
-        try:
-            piece = pd.read_csv(path)
-        except (pd.errors.EmptyDataError, OSError) as exc:
-            log.warning("unreadable round file %s: %s", path.name, exc)
-            continue
-        piece["source_file"] = path.name
-        frames.append(piece)
-    if not frames:
-        return pd.DataFrame()
+    """
+    Every closed round, concatenated: the `round_<season>_<NN>.csv` files, or
+    the archive table in Postgres. Either way each row carries `source_file`.
+    """
+    from goalmodel import registro
 
-    df = pd.concat(frames, ignore_index=True)
+    df = (registro.leggi_giornate() if _track_in_db(src)
+          else registro.leggi_giornate_da_file(src.rounds_dir))
+    if df.empty:
+        return pd.DataFrame()
     df["season"] = df["season"].astype(str)
     df["matchday"] = df["matchday"].astype(int)
     df["match_date"] = pd.to_datetime(df["match_date"], errors="coerce")
@@ -383,6 +395,16 @@ def _read_closed(src: Sources) -> pd.DataFrame:
 
 
 def _read_summary(src: Sources) -> pd.DataFrame:
+    if _track_in_db(src):
+        # In Postgres the summary is not stored: it is a view of the rounds.
+        from goalmodel import registro
+
+        df = registro.calcola_riepilogo(registro.leggi_giornate())
+        if df.empty:
+            return df
+        df["season"] = df["season"].astype(str)
+        df["matchday"] = df["matchday"].astype(int)
+        return df
     if not src.rounds_summary.exists():
         return pd.DataFrame()
     try:
@@ -502,6 +524,17 @@ def _load(fingerprint: tuple, src: Sources) -> Snapshot:
     calendar = _read_calendar(src)
     kickoffs = {(season, home, away): kickoff for season, _, home, away, kickoff in calendar}
     results = _read_results(src)
+
+    if _track_in_db(src):
+        from goalmodel import registro
+
+        try:
+            ultimo = registro.aggiornato_il()
+        except Exception as exc:  # noqa: BLE001 - a status field must not fail the API
+            log.warning("track record timestamp unavailable: %s", exc)
+            ultimo = None
+        updated = _iso(ultimo.tz_convert("UTC")) if ultimo is not None else None
+        return Snapshot(predictions, closed, summary, kickoffs, updated, results, calendar)
 
     mtimes = [m for _, m, _ in
               [_stat(src.predictions_log), _stat(src.rounds_summary)]
@@ -1020,7 +1053,8 @@ def freshness(src: Sources | None = None) -> dict:
     snap = load(src)
     return {
         "updated_at": snap.updated_at,
-        "predictions_log_exists": src.predictions_log.exists(),
+        "predictions_log_exists": (len(snap.predictions) > 0 if _track_in_db(src)
+                                   else src.predictions_log.exists()),
         "rounds_closed": int(snap.closed["source_file"].nunique())
                          if not snap.closed.empty else 0,
         "matches_logged": len(snap.predictions),

@@ -180,3 +180,40 @@ def reset_message(cfg: Settings, to: str, token: str) -> Message:
         "and nobody has gained access to the account.</p>"
     )
     return Message(to, "Reset your password", text, html)
+
+
+def mfa_code_message(cfg: Settings, to: str, code: str, purpose: str) -> Message:
+    """
+    The second-factor code.
+
+    NOT IN THE SUBJECT. A subject shows up on a locked phone's notifications;
+    the code in it would be readable by anyone holding the phone, which is the
+    one thing a second factor is supposed to require more than.
+
+    It says what the code is FOR. A code arriving when you did not ask for one
+    means someone has your password: the message says so, and what to do.
+    """
+    minutes = cfg.mfa_code_minutes
+    action = {
+        "sign_in": "sign in",
+        "enable": "turn on two-step verification",
+        "disable": "turn off two-step verification",
+    }.get(purpose, "confirm")
+    text = (
+        f"Your code to {action}:\n\n"
+        f"    {code}\n\n"
+        f"It is valid for {minutes} minutes. Never share it: MatchPoint will "
+        "never ask for it by phone or email.\n\n"
+        "If you did not ask for it, someone has your password: change it now "
+        "from your account page.\n"
+    )
+    html = (
+        f"<p>Your code to {escape(action)}:</p>"
+        f'<p style="font-size:28px;font-weight:700;letter-spacing:6px;'
+        f'font-family:monospace">{escape(code)}</p>'
+        f"<p>It is valid for {minutes} minutes. Never share it: MatchPoint will "
+        "never ask for it by phone or email.</p>"
+        "<p>If you did not ask for it, <strong>someone has your password</strong>: "
+        "change it now from your account page.</p>"
+    )
+    return Message(to, "Your MatchPoint verification code", text, html)

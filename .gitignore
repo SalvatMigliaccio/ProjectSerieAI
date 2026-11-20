@@ -55,3 +55,8 @@ backend/auth/migrations/__pycache__/
 
 # Local verification of the production stack: generated, never committed.
 .env.prodtest
+# L'URL di Neon per il worker sul PC (ADR 0007): un segreto, fuori da git.
+.env.produzione
+
+#JSON Google OAuth credentials
+google_client.json

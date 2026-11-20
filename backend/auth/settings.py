@@ -106,6 +106,74 @@ class Settings(BaseSettings):
     # Where the frontend lives: used to build the links inside emails.
     public_url: str = "http://127.0.0.1:5173"
 
+    # --- sign in with Google (ADR 0008) --------------------------------------
+    # From the Google Cloud Console, "OAuth client ID", type "Web application".
+    # Both empty = the button does not appear and the routes answer 404: an
+    # unconfigured provider is off, not half on.
+    #
+    # The redirect URI to register there is NOT configured here: it is
+    # `public_url` + `/api/auth/oauth/google/callback`, built in one place
+    # (`oauth.redirect_uri`) so the two cannot disagree. Google compares it
+    # character by character, and a mismatch is an error page at Google's end
+    # that never reaches this server's logs.
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+
+    # How long the browser has to come back from Google. Ten minutes covers a
+    # user who has to type a password and a code over there; past that the
+    # flow is stale and starts again.
+    oauth_flow_minutes: int = Field(default=10, ge=2, le=30)
+    oauth_cookie_name: str = "ainaples_oauth"
+
+    # After re-confirming with Google, how long the "you just proved it's you"
+    # mark lasts. It is what lets an account WITHOUT a password delete itself:
+    # short, because it stands in for typing a password.
+    reauth_minutes: int = Field(default=5, ge=1, le=15)
+    reauth_cookie_name: str = "ainaples_reauth"
+
+    # --- second factor by email (ADR 0008, step 3) ---------------------------
+    # The code is a six-digit number: a million values. What makes guessing
+    # hopeless is not the size but the two caps together — a few attempts per
+    # code, and a new code only after the first factor again (or a resend,
+    # limited per account). Ten minutes: long enough for a slow mailbox.
+    mfa_code_minutes: int = Field(default=10, ge=3, le=30)
+    mfa_max_attempts: int = Field(default=5, ge=3, le=10)
+    mfa_cookie_name: str = "ainaples_mfa"
+
+    # --- second factor by authenticator app (TOTP) ---------------------------
+    # THE KEY THAT ENCRYPTS TOTP SECRETS AND HASHES RECOVERY CODES, separate
+    # from `secret_key` on purpose. Rotating `secret_key` is the emergency
+    # brake for every JWT (ADR 0003); if it also encrypted the TOTP secrets,
+    # pulling it would lock every app-2FA user out, recovery codes included.
+    # Empty = derived from `secret_key` (fine in development, flagged below).
+    # Losing or changing THIS key means every TOTP user has to set the app up
+    # again: back it up with the database.
+    mfa_key: SecretStr = SecretStr("")
+    # The name the authenticator app shows next to the code.
+    totp_issuer: str = "MatchPoint"
+    recovery_codes_count: int = Field(default=10, ge=5, le=20)
+
+    @property
+    def google_enabled(self) -> bool:
+        return bool(self.google_client_id and self.google_client_secret.get_secret_value())
+
+    # THE BOOTSTRAP SUPERADMIN, comma-separated addresses (18 November 2026).
+    # An account whose address is listed here receives `superadmin` when it
+    # signs in or verifies — ONLY if the address is verified. Without that
+    # condition the variable would hand the role to whoever registers the
+    # address first; with it, holding the role requires holding the mailbox.
+    #
+    # From the environment and not from the code: the address stays out of the
+    # repository, and the list changes without a deploy. Removing an address
+    # does NOT revoke the role: a typo in a variable must not be able to lock
+    # the only administrator out. Revoking is `cli revoke`, deliberately.
+    superadmin_emails: str = ""
+
+    @property
+    def bootstrap_superadmins(self) -> frozenset[str]:
+        """The listed addresses, lower-cased (the column is CITEXT)."""
+        return frozenset(e.strip().lower() for e in self.superadmin_emails.split(",") if e.strip())
+
     @field_validator("smtp_security")
     @classmethod
     def _known_security(cls, v: str) -> str:
@@ -150,6 +218,17 @@ class Settings(BaseSettings):
             problems.append(
                 f"AI_NAPLES_PUBLIC_URL is http: verification and reset links "
                 f"would be emailed in the clear ({self.public_url})"
+            )
+        if not self.mfa_key.get_secret_value():
+            problems.append(
+                "AI_NAPLES_MFA_KEY is empty: TOTP secrets are encrypted with a key derived "
+                "from AI_NAPLES_SECRET_KEY, so rotating that key would lock every "
+                "authenticator-app user out. Set a separate one (32+ characters)."
+            )
+        if bool(self.google_client_id) != bool(self.google_client_secret.get_secret_value()):
+            problems.append(
+                "Google sign-in is half configured: set both AI_NAPLES_GOOGLE_CLIENT_ID "
+                "and AI_NAPLES_GOOGLE_CLIENT_SECRET, or neither"
             )
         return problems
 

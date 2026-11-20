@@ -56,6 +56,7 @@ COMANDI: dict[str, tuple[str, str]] = {
     "backtest":      ("goalmodel.prediction.backtest_log", "metriche reali dal registro"),
     "report":        ("goalmodel.reporting.report", "rigenera il report HTML"),
     "db":            ("goalmodel.archivio", "dati in Postgres: carica, verifica, stato"),
+    "registro":      ("goalmodel.registro", "track record in Postgres: import, verifica"),
 }
 
 

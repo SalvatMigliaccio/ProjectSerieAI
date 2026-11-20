@@ -1,5 +1,11 @@
 # track_record
 
+> **Dal 18 novembre 2026 (ADR 0007)** il track record puo' stare in Postgres,
+> schema `track_record`, secondo `GOALMODEL_STORAGE`. In modalita' `postgres`
+> questi CSV non si scrivono piu' e restano come archivio congelato dello
+> storico, importato con `goalmodel registro --importa` e verificato con
+> `--verifica`. Le regole sotto valgono identiche, imposte dal database.
+
 **Questa cartella e' versionata di proposito.**
 
 `predictions_log.csv` e' l'unico dato del progetto che non si puo' rigenerare.

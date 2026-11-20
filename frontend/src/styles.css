@@ -2341,6 +2341,25 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   background: var(--mint-wash);
 }
 
+/* Il codice di verifica (ADR 0008): cifre larghe e distanziate, monospazio,
+   cosi' si confronta a colpo d'occhio con quello dell'email. */
+.field__code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 1.375rem; letter-spacing: 0.35em; text-align: center;
+}
+
+/* Accesso con Google (ADR 0008): il pulsante e la riga "oppure" che lo separa
+   dal modulo con la password. Fantasma e non pieno: l'azione principale della
+   schermata resta il pulsante del modulo. */
+.btn--google { gap: var(--s3); }
+.auth-divider {
+  display: flex; align-items: center; gap: var(--s3);
+  margin: var(--s4) 0; color: var(--muted); font-size: 0.8125rem; max-width: none;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ""; flex: 1; border-top: 1px solid var(--line);
+}
+
 .account-links {
   margin-top: var(--s5);
   padding-top: var(--s4);
@@ -3214,7 +3233,8 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
     background: rgba(var(--surface-rgb), 0.96);
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
   }
-  .dash-nav ul { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  /* auto-flow e non 5 colonne fisse: agli amministratori ne compare una sesta. */
+  .dash-nav ul { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
   .dash-nav__link {
     flex-direction: column; gap: 2px; min-height: 56px; padding: 4px 0;
     font-size: 0.6875rem;
@@ -3575,3 +3595,233 @@ table.grid tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
   .pron-arch__item { grid-template-columns: minmax(0, 1fr); }
   .pron-arch__item .pron-card__saved { justify-items: start; text-align: left; }
 }
+
+/* ==========================================================================
+   AMMINISTRAZIONE (18 novembre 2026)
+   Lo stesso impianto dell'area account — colonna delle sezioni, pannello —
+   piu' largo, perche' qui ci sono tabelle. Nessun colore nuovo: stati e
+   ruoli passano da --ok, --ko, --warn, --idle come nel resto del sito.
+   ========================================================================== */
+
+.adm-layout { max-width: var(--max); }
+
+.adm-card {
+  margin-top: var(--s5);
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.adm-card h2 { margin: 0 0 var(--s4); font-size: 1rem; font-weight: 600; }
+.adm-card__head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s4); }
+.adm-link { color: var(--mint); font-size: 0.875rem; text-decoration: none; }
+.adm-link:hover { text-decoration: underline; }
+.adm-back { display: inline-block; margin-top: var(--s2); }
+.adm-faint { color: var(--faint); }
+
+.adm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: var(--s3);
+  margin-top: var(--s5);
+}
+.adm-tile {
+  display: grid; gap: 2px;
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.adm-tile__value { font-family: var(--mono); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.adm-tile__label { color: var(--muted); font-size: 0.8125rem; }
+.adm-tile--ko .adm-tile__value { color: var(--ko); }
+.adm-tile--idle .adm-tile__value { color: var(--muted); }
+
+.adm-bars {
+  display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px;
+  align-items: end; height: 7rem;
+  padding-bottom: 1px; border-bottom: 1px solid var(--line-strong);
+}
+.adm-bars__col { height: 100%; display: flex; align-items: flex-end; }
+.adm-bars__bar { width: 100%; min-height: 1px; background: var(--mint); border-radius: 2px 2px 0 0; }
+.adm-bars__col:hover .adm-bars__bar { background: var(--fg); }
+.adm-bars__axis {
+  display: flex; justify-content: space-between; max-width: none;
+  margin: var(--s2) 0 0; color: var(--faint); font-size: 0.75rem;
+}
+
+.adm-badge {
+  display: inline-block; margin-left: var(--s2);
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 500; white-space: nowrap;
+  background: var(--idle-wash); color: var(--idle);
+}
+td > .adm-badge:first-child, .adm-user-head__badges > .adm-badge:first-child { margin-left: 0; }
+.adm-badge--ok { background: var(--ok-wash); color: var(--ok); }
+.adm-badge--ko { background: var(--ko-wash); color: var(--ko); }
+.adm-badge--warn { background: var(--warn-wash); color: var(--warn); }
+.adm-badge--role { background: var(--mint-wash); color: var(--fg); }
+
+.adm-filters { display: flex; flex-wrap: wrap; gap: var(--s3); margin-top: var(--s5); }
+.adm-filters__search { flex: 1 1 18rem; }
+.adm-filters input, .adm-filters select, .adm-confirm input {
+  width: 100%; min-height: 40px; padding: 0 var(--s3);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--bg-2); color: var(--fg); font: inherit; font-size: 0.9375rem;
+}
+.adm-filters select { width: auto; }
+.adm-filters input:focus-visible, .adm-filters select:focus-visible, .adm-confirm input:focus-visible {
+  outline: 2px solid var(--mint); outline-offset: 0; border-color: var(--mint);
+}
+
+.adm-table-wrap { overflow-x: auto; margin-top: var(--s4); }
+.adm-card .adm-table-wrap { margin-top: 0; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.adm-table th {
+  text-align: left; font-weight: 500; color: var(--faint); font-size: 0.8125rem;
+  padding: var(--s2) var(--s3); border-bottom: 1px solid var(--line-strong);
+}
+.adm-table td { padding: var(--s3); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.adm-table tbody tr { cursor: pointer; }
+.adm-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
+.adm-table td a { color: var(--fg); text-decoration: none; }
+.adm-table td a:hover, .adm-table td a:focus-visible { color: var(--mint); text-decoration: underline; }
+.adm-table .num { text-align: right; font-family: var(--mono); }
+
+.adm-pager { display: flex; align-items: center; gap: var(--s3); margin-top: var(--s4); color: var(--muted); font-size: 0.875rem; }
+.adm-pager > span { margin-right: auto; font-variant-numeric: tabular-nums; }
+
+.adm-user-head { display: flex; gap: var(--s4); align-items: center; }
+.adm-user-head__email { margin: 0 !important; font-size: 1.125rem !important; word-break: break-all; }
+.adm-user-head__badges { margin: var(--s1) 0 0; max-width: none; }
+
+.adm-facts {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--s3) var(--s5); margin: var(--s5) 0 0;
+}
+.adm-facts dt { color: var(--faint); font-size: 0.8125rem; }
+.adm-facts dd { margin: 2px 0 0; }
+
+.adm-actions { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: flex-start; }
+.adm-confirm {
+  display: grid; gap: var(--s3); flex: 1 1 100%;
+  padding: var(--s4); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg-2);
+}
+.adm-confirm label { display: grid; gap: var(--s2); color: var(--muted); font-size: 0.875rem; }
+.adm-confirm__btns { display: flex; gap: var(--s3); }
+.adm-confirm--inline { display: flex; flex-wrap: wrap; align-items: center; flex: 0 1 auto; padding: var(--s2) var(--s3); color: var(--muted); font-size: 0.875rem; }
+
+.adm-events { list-style: none; margin: 0; padding: 0; display: grid; }
+.adm-events li {
+  display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: var(--s3);
+  padding: var(--s3) 0; border-bottom: 1px solid var(--line);
+}
+.adm-events li:last-child { border-bottom: 0; }
+.adm-events__dot { width: 8px; height: 8px; margin-top: 7px; border-radius: 50%; background: var(--ok); }
+.adm-events li.is-ko .adm-events__dot { background: var(--ko); }
+.adm-events__what { margin: 0; max-width: none; }
+.adm-events__meta { margin: 2px 0 0; max-width: none; color: var(--faint); font-size: 0.8125rem; word-break: break-word; }
+
+@media (max-width: 860px) {
+  .adm-table td:nth-child(4), .adm-table th:nth-child(4) { display: none; }
+}
+
+/* Amministrazione dentro la dashboard: la voce in fondo, separata da una
+   linea, e le sezioni come i filtri della giornata (NavLink, quindi .active
+   invece di aria-pressed). */
+.dash-nav__sep { margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line); }
+@media (max-width: 1023px) { .dash-nav__sep { margin-top: 0; padding-top: 0; border-top: 0; } }
+.adm-tabs { margin-top: var(--s5); }
+.adm-tabs .filter { text-decoration: none; }
+.adm-tabs .filter.active {
+  border-color: var(--line-strong);
+  background: var(--mint-wash);
+  color: var(--mint);
+}
+.adm-screen > .adm-tiles:first-child, .adm-screen > .adm-filters:first-child { margin-top: var(--s4); }
+
+/* Metriche dell'amministrazione: gruppi, interruttore di serie, barre
+   orizzontali. Stessi token del resto: --ko solo per gli accessi falliti. */
+.adm-group { margin: var(--s6) 0 0; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); font-weight: 600; }
+.adm-screen > .adm-group:first-child { margin-top: var(--s4); }
+.adm-switch { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.adm-switch .filter { padding: var(--s1) var(--s3); }
+.adm-bars--ko .adm-bars__bar { background: var(--ko); }
+.adm-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: 0 var(--s5); }
+.adm-hbars { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.adm-hbars li { display: grid; grid-template-columns: minmax(6rem, 10rem) minmax(0, 1fr) 3rem; align-items: center; gap: var(--s3); font-size: 0.875rem; }
+.adm-hbars__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.adm-hbars__track { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.adm-hbars__bar { display: block; height: 100%; border-radius: 4px; background: var(--mint); }
+.adm-hbars__value { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.adm-next { margin: 0 0 var(--s3); max-width: none; color: var(--muted); font-size: 0.875rem; }
+.adm-next code { font-family: var(--mono); color: var(--fg); }
+.adm-warn { margin: var(--s2) 0 0; max-width: none; color: var(--warn); font-size: 0.8125rem; }
+.adm-screen > .adm-card:first-child { margin-top: var(--s4); }
+
+/* Pipeline dell'amministrazione: lancio, output in diretta, storico. */
+.adm-job--active { border-color: var(--line-strong); }
+.adm-log {
+  max-height: 22rem; overflow: auto; margin: var(--s3) 0;
+  padding: var(--s3); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--muted);
+  font-family: var(--mono); font-size: 0.75rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+}
+.adm-launch { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--s4); }
+.adm-launch__item { display: grid; gap: var(--s2); align-content: start; justify-items: start;
+  padding: var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg-2); }
+.adm-launch__opts { display: grid; gap: var(--s2); margin-top: var(--s4); color: var(--muted); font-size: 0.875rem; }
+.adm-launch__opts label { display: flex; gap: var(--s2); align-items: center; }
+.adm-launch__opts code, .adm-launch__item code { font-family: var(--mono); color: var(--fg); }
+.adm-linkbtn { padding: 0; border: 0; background: none; color: var(--mint); font: inherit; cursor: pointer; }
+.adm-linkbtn:hover { text-decoration: underline; }
+p.adm-card { margin-top: var(--s5); }
+
+
+/* Informativa privacy e cookie policy (SPEC_PRIVACY_COOKIE R1, R2). Testo da
+   leggere, non da scorrere: riga stretta, tabelle che scorrono in orizzontale
+   su telefono invece di schiacciarsi in colonne illeggibili. */
+.legale { padding: var(--s6) 0 var(--s7, 64px); }
+.legale__testo { max-width: 860px; }
+.legale__eyebrow { color: var(--muted); font-size: 0.8125rem; margin: 0 0 var(--s2); }
+.legale__lead { color: var(--muted); font-size: 1.0625rem; line-height: 1.6; margin: 0 0 var(--s6); }
+.legale h2 { margin: var(--s6) 0 var(--s3); font-size: 1.25rem; }
+.legale p, .legale li { line-height: 1.65; }
+.legale ul { padding-left: var(--s5); }
+.legale li + li { margin-top: var(--s2); }
+.legale a { color: var(--mint); }
+.legale a:hover { text-decoration: underline; }
+.legale__tabella { overflow-x: auto; margin: 0 0 var(--s4); border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.legale table { width: 100%; border-collapse: collapse; font-size: 0.875rem; min-width: 560px; }
+.legale th, .legale td { text-align: left; vertical-align: top; padding: var(--s3); border-bottom: 1px solid var(--line); }
+.legale th { background: var(--bg-2); font-weight: 600; }
+.legale tr:last-child td { border-bottom: 0; }
+.legale code { font-size: 0.8125rem; }
+.legale__nota { text-align: left; color: var(--muted); margin-top: var(--s3); }
+
+
+/* App di autenticazione (TOTP): il QR su fondo bianco anche nel tema scuro,
+   perche' molte fotocamere non leggono un QR chiaro su scuro. */
+.totp__passi { padding-left: var(--s5); margin: 0 0 var(--s4); line-height: 1.6; color: var(--muted); }
+.totp__passi li + li { margin-top: var(--s2); }
+.totp__chiave {
+  display: block; margin-top: var(--s2); padding: var(--s2) var(--s3);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 0.9375rem; letter-spacing: 0.08em; word-break: break-all; color: var(--fg);
+}
+.totp__qr {
+  display: grid; place-items: center; width: 216px; height: 216px; margin: 0 0 var(--s4);
+  background: #fff; border-radius: var(--radius-sm); border: 1px solid var(--line);
+}
+
+/* I codici di riserva: si leggono, si copiano, si confrontano con il foglio. */
+.riserva { display: grid; gap: var(--s3); }
+.riserva h3 { margin: 0; font-size: 1rem; }
+.riserva__codici {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s2);
+  margin: 0; padding: var(--s3) var(--s3) var(--s3) var(--s6);
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius-sm);
+}
+.riserva__codici code { font-size: 0.9375rem; letter-spacing: 0.06em; }
+.riserva__conferma { display: flex; align-items: center; gap: var(--s2); font-size: 0.875rem; }
+.riserva__poche { color: var(--ko); }

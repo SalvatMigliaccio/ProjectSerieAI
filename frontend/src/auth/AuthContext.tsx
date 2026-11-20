@@ -36,11 +36,12 @@ const RINNOVO_MS = 10 * 60 * 1000;
 interface AuthValue {
   phase: Phase;
   user: Identity | null;
-  signIn: (email: string, password: string) => Promise<void>;
+  /** `null` se l'accesso e' completo, l'attesa del codice se serve il secondo passaggio. */
+  signIn: (email: string, password: string) => Promise<authApi.MfaPending | null>;
   signOut: () => Promise<void>;
   /** Erase the account (GDPR art. 17). Throws on a wrong password, and then
    *  the user stays signed in: only a success clears the local state. */
-  deleteAccount: (password: string) => Promise<void>;
+  deleteAccount: (password?: string) => Promise<void>;
   /** Adopt an identity the server already returned, e.g. after verifying. */
   adopt: (user: Identity) => void;
   /** Re-ask the server. Used when a request comes back 401. */
@@ -118,9 +119,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [phase]);
 
   const signIn = useCallback(async (email: string, password: string) => {
-    const identity = await authApi.signIn(email, password);
-    setUser(identity);
+    const risposta = await authApi.signIn(email, password);
+    // Con la verifica in due passaggi la password non basta: nessuna sessione
+    // finche' il codice non e' confermato, e lo stato resta "anonimo".
+    if (authApi.isMfaPending(risposta)) return risposta;
+    setUser(risposta);
     setPhase("authenticated");
+    return null;
   }, []);
 
   const signOut = useCallback(async () => {
@@ -138,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Unlike signOut, NOT optimistic: a refused deletion (wrong password, network
   // down) leaves the account in place, and an interface that showed the user
   // signed out would make them believe it was gone.
-  const deleteAccount = useCallback(async (password: string) => {
+  const deleteAccount = useCallback(async (password?: string) => {
     await meApi.deleteAccount(password);
     setUser(null);
     setPhase("anonymous");

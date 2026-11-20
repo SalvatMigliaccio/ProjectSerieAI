@@ -117,7 +117,9 @@ def connessione() -> Iterator:
     """Una connessione in transazione, con le impostazioni che l'esattezza chiede."""
     import psycopg
 
-    with psycopg.connect(url()) as conn:
+    # connect_timeout: senza, un database giu' tiene appeso il chiamante per
+    # circa due minuti (misurato il 20 novembre 2026) prima di dare errore.
+    with psycopg.connect(url(), connect_timeout=10) as conn:
         with conn.cursor() as cur:
             # UTC: un timestamptz in uscita dipende dal fuso della sessione.
             cur.execute("SET TimeZone = 'UTC'")

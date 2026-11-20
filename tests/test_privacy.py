@@ -21,7 +21,16 @@ from pathlib import Path
 
 import pytest
 from backend.auth import retention, service
-from backend.auth.models import AuthEvent, EmailToken, User, UserPrediction, UserSession, now
+from backend.auth.models import (
+    AuthEvent,
+    EmailToken,
+    MfaChallenge,
+    User,
+    UserIdentity,
+    UserPrediction,
+    UserSession,
+    now,
+)
 from backend.auth.settings import Settings
 from sqlalchemy import select
 from tests.test_auth_http import GOOD, _register_and_verify, _token, client, post  # noqa: F401
@@ -45,7 +54,9 @@ def _published() -> str:
 def test_the_cookie_policy_names_exactly_the_cookies_the_backend_sets() -> None:
     cfg = _defaults()
     named = set(re.findall(r'nome:\s*"([^"]+)"', _published()))
-    assert named == {cfg.cookie_name, cfg.access_cookie_name}, (
+    assert named == {cfg.cookie_name, cfg.access_cookie_name,
+                     cfg.oauth_cookie_name, cfg.reauth_cookie_name,
+                     cfg.mfa_cookie_name}, (
         "the cookie policy and backend/auth/settings.py disagree: update "
         "frontend/src/legal/dati.ts (and AGGIORNATA_IL) together with the code")
 
@@ -57,6 +68,13 @@ def test_the_published_cookie_durations_match_the_settings() -> None:
         "the access cookie lifetime on the cookie page is not access_token_minutes"
     assert f"al massimo {cfg.session_max_hours} ore" in text, \
         "the session ceiling on the cookie page is not session_max_hours"
+    assert f'durata: "{cfg.oauth_flow_minutes} minuti' in text, \
+        "the Google sign-in cookie lifetime on the cookie page is not oauth_flow_minutes"
+    assert f'durata: "{cfg.reauth_minutes} minuti"' in text, \
+        "the re-confirmation cookie lifetime on the cookie page is not reauth_minutes"
+    from backend.auth.deps import MFA_COOKIE_MINUTES
+    assert f'durata: "{MFA_COOKIE_MINUTES} minuti' in text, \
+        "the 2FA cookie lifetime on the cookie page is not deps.MFA_COOKIE_MINUTES"
 
 
 @pytest.mark.parametrize("published, setting", [
@@ -71,6 +89,30 @@ def test_the_published_retention_periods_match_the_settings(published: str, sett
     assert int(found.group(1)) == getattr(_defaults(), setting), (
         f"the privacy page promises {found.group(1)} days for {published}, the "
         f"purge applies {setting}={getattr(_defaults(), setting)}: one of the two is wrong")
+
+
+def test_the_policy_pages_are_published_and_reachable() -> None:
+    """
+    R1-R3 (ADR 0005, T1 and T3, done 20 November 2026).
+
+    The pages must exist, be routed, be linked from the footer of every page
+    and from signup, and take their facts from `legal/dati.ts` rather than
+    restating them: a period typed into the page would escape every check above.
+    """
+    src = ROOT / "frontend" / "src"
+    app = (src / "App.tsx").read_text(encoding="utf-8")
+    assert 'path="/privacy"' in app and 'path="/cookie"' in app, "policy routes missing"
+    footer = (src / "components" / "Layout.tsx").read_text(encoding="utf-8")
+    assert 'to="/privacy"' in footer and 'to="/cookie"' in footer, "footer links missing"
+    signup = (src / "pages" / "Account.tsx").read_text(encoding="utf-8")
+    assert 'to="/privacy"' in signup, "the signup form must link the privacy policy"
+
+    page = (src / "pages" / "Legal.tsx").read_text(encoding="utf-8")
+    for name in ("COOKIE", "CONSERVAZIONE_GIORNI", "TRATTAMENTI", "DESTINATARI", "TITOLARE",
+                 "AGGIORNATA_IL", "ETA_MINIMA"):
+        assert name in page, f"Legal.tsx does not read {name} from legal/dati.ts"
+    typed = re.findall(r"\b\d+ (?:giorni|mesi|minuti|ore)\b", page)
+    assert not typed, f"durations written by hand in Legal.tsx, move them to legal/dati.ts: {typed}"
 
 
 def test_the_page_shell_loads_nothing_from_another_origin() -> None:
@@ -96,7 +138,8 @@ def _cookie_names(response) -> set[str]:
 def test_no_flow_sets_a_cookie_the_policy_does_not_declare(client, db) -> None:  # noqa: F811
     """Signup to deletion, every Set-Cookie on the way."""
     cfg = _defaults()
-    declared = {cfg.cookie_name, cfg.access_cookie_name}
+    declared = {cfg.cookie_name, cfg.access_cookie_name,
+                cfg.oauth_cookie_name, cfg.reauth_cookie_name, cfg.mfa_cookie_name}
     email = "cookie-policy@example.com"
     seen: set[str] = set()
 
@@ -145,7 +188,7 @@ def test_deleting_the_account_removes_it_and_what_it_owns(client, db) -> None:  
         "both cookies must be cleared on the way out"
 
     assert db.get(User, uid) is None
-    for model in (UserSession, EmailToken, UserPrediction):
+    for model in (UserSession, EmailToken, UserPrediction, UserIdentity, MfaChallenge):
         assert db.scalars(select(model).where(model.user_id == uid)).all() == [], \
             f"{model.__tablename__} kept rows of a deleted account"
     assert db.scalars(select(AuthEvent).where(AuthEvent.user_id == uid)).all() == [], \

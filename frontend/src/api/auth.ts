@@ -22,6 +22,26 @@ export interface Identity {
   /** ISO 8601. Optional: an API older than the account page omits them. */
   created_at?: string | null;
   email_verified_at?: string | null;
+  /** ADR 0008. Optional: an API older than Google sign-in omits them. */
+  has_password?: boolean;
+  providers?: string[];
+  /** Verifica in due passaggi attiva (ADR 0008, step 3). */
+  mfa_enabled?: boolean;
+  /** "email", "totp" (app di autenticazione) o null. */
+  mfa_method?: string | null;
+}
+
+/** L'accesso ha superato il primo passaggio e aspetta il codice: nessuna sessione ancora. */
+export interface MfaPending {
+  mfa_required: true;
+  /** Da dove arriva il codice: per email, o dall'app di autenticazione. */
+  method?: "email" | "totp";
+  /** La casella mascherata, solo per `email`. */
+  sent_to: string | null;
+}
+
+export function isMfaPending(x: Identity | MfaPending): x is MfaPending {
+  return (x as MfaPending).mfa_required === true;
 }
 
 /** Message shapes the API returns on 4xx. */
@@ -107,8 +127,9 @@ export async function me(): Promise<Identity | null> {
 export const signUp = (email: string, password: string) =>
   post<{ detail: string }>("/api/auth/signup", { email, password });
 
+/** 200 con l'identita', oppure 202 con `MfaPending` se l'account ha la verifica in due passaggi. */
 export const signIn = (email: string, password: string) =>
-  post<Identity>("/api/auth/sign-in", { email, password });
+  post<Identity | MfaPending>("/api/auth/sign-in", { email, password });
 
 export const signOut = () => post<void>("/api/auth/sign-out");
 
@@ -199,3 +220,130 @@ export const changePassword =(currentPassword: string, newPassword: string) =>
     current_password: currentPassword,
     new_password: newPassword,
   }, { renew: true });
+
+// --- Accesso con Google (ADR 0008) ---------------------------------------------
+
+export interface Providers {
+  google: boolean;
+  apple: boolean;
+}
+
+/** Quali pulsanti disegnare. Un errore vale "nessuno": il modulo con la password resta. */
+export async function providers(): Promise<Providers> {
+  try {
+    const r = await fetch(`${baseUrl()}/api/auth/providers`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+    if (!r.ok) return { google: false, apple: false };
+    return (await r.json()) as Providers;
+  } catch {
+    return { google: false, apple: false };
+  }
+}
+
+export type OAuthIntent = "sign_in" | "link" | "reauth";
+
+/**
+ * L'indirizzo che fa partire il giro da Google. Si NAVIGA, non si fa fetch:
+ * il ritorno arriva come pagina intera, con i cookie gia' impostati dal server.
+ * Nessun token di Google passa mai da questo codice.
+ */
+export function oauthStartUrl(provider: "google", intent: OAuthIntent, next?: string): string {
+  const q = new URLSearchParams({ intent });
+  if (next) q.set("next", next);
+  return `${baseUrl()}/api/auth/oauth/${provider}/start?${q.toString()}`;
+}
+
+/**
+ * Il codice che il server mette in `?oauth_error=`, in una frase che dice cosa
+ * fare. Un codice sconosciuto ha comunque una frase: il server ne puo'
+ * aggiungere uno prima che qualcuno la scriva qui.
+ */
+export function oauthErrorMessage(code: string | null): string | null {
+  if (!code) return null;
+  const messaggi: Record<string, string> = {
+    cancelled: "Accesso con Google annullato.",
+    state: "L'accesso con Google è scaduto o è stato aperto in un'altra scheda. Riprova da qui.",
+    provider: "Google non ha risposto come previsto. Riprova fra qualche minuto.",
+    rate_limited: "Troppi tentativi. Aspetta qualche minuto e riprova.",
+    session: "La sessione è scaduta: accedi di nuovo e ripeti l'operazione.",
+    email_unverified: "L'email del tuo account Google non è verificata: verificala su Google, oppure registrati con email e password.",
+    link_pending: "Esiste già un account con questa email, ma non è ancora confermato. Usa «Password dimenticata» per attivarlo con una password tua, poi collega Google dal profilo.",
+    link_required: "Esiste già un account con questa email. Entra con la password e collega Google dal tuo profilo.",
+    inactive: "Questo account non è attivo.",
+    other_google: "Il tuo account è già collegato a un altro account Google.",
+    linked_elsewhere: "Questo account Google è già collegato a un altro utente.",
+    mismatch: "Hai confermato con un account Google diverso da quello collegato al profilo.",
+    not_configured: "L'accesso con Google non è disponibile.",
+  };
+  return messaggi[code] ?? "Accesso con Google non riuscito. Riprova.";
+}
+
+export interface LinkedIdentity {
+  provider: string;
+  email: string | null;
+  linked_at: string;
+  last_used_at: string | null;
+}
+
+export const identities = () => getJson<LinkedIdentity[]>("/api/auth/identities");
+
+/** 409 se e' l'unico modo di entrare: il messaggio del server lo dice. */
+export const unlinkProvider = (provider: string) =>
+  post<{ unlinked: number }>(`/api/auth/identities/${encodeURIComponent(provider)}/unlink`,
+    undefined, { renew: true });
+
+// --- Verifica in due passaggi (ADR 0008, step 3) ---------------------------------
+
+/** Per la schermata del codice: a quale casella e' andato. `null` se non c'e' niente in attesa. */
+export async function mfaPending(): Promise<MfaPending | null> {
+  try {
+    const r = await fetch(`${baseUrl()}/api/auth/mfa/pending`, {
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+    return r.ok ? ((await r.json()) as MfaPending) : null;
+  } catch {
+    return null;
+  }
+}
+
+export const verifyMfa = (code: string) => post<Identity>("/api/auth/mfa/verify", { code });
+export const resendMfa = () => post<MfaPending>("/api/auth/mfa/resend");
+
+export const mfaStart = (azione: "enable" | "disable") =>
+  post<MfaPending>(`/api/auth/mfa/${azione}/start`, undefined, { renew: true });
+export const mfaConfirm = (azione: "enable" | "disable", code: string) =>
+  post<Identity>(`/api/auth/mfa/${azione}/confirm`, { code }, { renew: true });
+
+// --- App di autenticazione (TOTP) -------------------------------------------------
+
+export interface MfaStatus {
+  method: string | null;
+  enabled_at: string | null;
+  recovery_codes_left: number | null;
+}
+
+export interface TotpSetup {
+  /** Il segreto a gruppi di 4, da scrivere a mano se la fotocamera non legge il QR. */
+  secret: string;
+  otpauth_uri: string;
+  /** Il QR code come immagine `data:image/svg+xml`. */
+  qr: string;
+}
+
+export interface TotpEnabled {
+  identity: Identity;
+  /** Mostrati UNA volta: il server ne tiene solo l'impronta. */
+  recovery_codes: string[];
+}
+
+export const mfaStatus = () => getJson<MfaStatus>("/api/auth/mfa/status");
+export const totpSetup = () =>
+  post<TotpSetup>("/api/auth/mfa/totp/setup", undefined, { renew: true });
+/** La password se l'account ce l'ha; senza, il server guarda la riconferma con Google. */
+export const totpConfirm = (code: string, password?: string) =>
+  post<TotpEnabled>("/api/auth/mfa/totp/confirm", { code, password }, { renew: true });
+export const totpNewRecoveryCodes = (code: string) =>
+  post<TotpEnabled>("/api/auth/mfa/totp/recovery-codes", { code }, { renew: true });

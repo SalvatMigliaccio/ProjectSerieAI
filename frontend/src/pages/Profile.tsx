@@ -19,22 +19,25 @@
  */
 
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { Link, NavLink, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, NavLink, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import * as authApi from "../api/auth";
-import type { ActivityRow, SessionRow } from "../api/auth";
+import type { ActivityRow, LinkedIdentity, SessionRow } from "../api/auth";
 import { useAuth } from "../auth/AuthContext";
 import {
+  CodeField,
   FormAlert,
   FormSuccess,
   PasswordField,
   SubmitButton,
+  codeError,
   newPasswordError,
   requiredError,
   serverError,
   useValidation,
 } from "../components/Form";
 import { FavoritePicker } from "../components/FavoritePicker";
+import { GoogleLogo, useProviders } from "../components/GoogleButton";
 import { CONSERVAZIONE_GIORNI } from "../legal/dati";
 import { Colophon, Masthead } from "../components/Layout";
 import { ago, localDateTime } from "../lib/format";
@@ -128,7 +131,7 @@ const SEZIONI: { id: Sezione; path: string; label: string; lead: string; icon: R
     id: "sicurezza",
     path: "/account/sicurezza",
     label: "Sicurezza",
-    lead: "Cambia la password quando vuoi: serve quella attuale per confermare che sei tu.",
+    lead: "Password, verifica in due passaggi, accesso con Google e cancellazione dell'account.",
     icon: ICONA_SICUREZZA,
   },
   {
@@ -280,6 +283,27 @@ function SezioneProfilo({
   );
 }
 
+/**
+ * Un account creato con Google non ha una password da cambiare. La prima si
+ * imposta con "Password dimenticata": il collegamento via email prova che
+ * l'indirizzo e' tuo, e una sessione aperta da sola non lo prova (ADR 0008).
+ */
+function SenzaPassword() {
+  return (
+    <section className="profilo__blocco" aria-labelledby="password-titolo">
+      <h2 id="password-titolo">Password</h2>
+      <p className="profilo__hint">
+        Il tuo account non ha una password: entri con Google. Se vuoi poter entrare
+        anche con email e password, impostane una con il collegamento che ti mandiamo
+        per email.
+      </p>
+      <Link className="btn btn--ghost" to="/forgot-password">
+        Imposta una password
+      </Link>
+    </section>
+  );
+}
+
 function CambioPassword() {
   const [attuale, setAttuale] = useState("");
   const [nuova, setNuova] = useState("");
@@ -376,6 +400,70 @@ function periodo(giorni: number): string {
  * In fondo alla sezione Sicurezza e separato dal resto: e' l'unica azione
  * dell'account che non si annulla, e non deve stare dove si clicca per altro.
  */
+/**
+ * La cancellazione per un account SENZA password: al posto della password si
+ * riconferma con Google, e il ritorno porta `?reauth=google`. Il server non si
+ * fida di quel parametro: controlla un cookie firmato, legato a questa sessione
+ * e valido pochi minuti. Il parametro serve solo a mostrare il passo giusto.
+ */
+function EliminaSenzaPassword() {
+  const { deleteAccount } = useAuth();
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // `app=1` e' la riconferma fatta per attivare l'app, non per cancellare.
+  const confermato = params.get("reauth") === "google" && params.get("app") !== "1";
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+
+  async function elimina() {
+    setErrore(null);
+    setInCorso(true);
+    try {
+      await deleteAccount();
+      navigate("/account", { replace: true, state: { eliminato: true } });
+    } catch (e) {
+      setErrore(serverError(e, "Conferma scaduta o non valida: riconferma con Google."));
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <section className="profilo__blocco profilo__blocco--pericolo" aria-labelledby="elimina-titolo">
+      <h2 id="elimina-titolo">Elimina l'account</h2>
+      <p className="profilo__hint">
+        Cancella l'account e tutto ciò che è tuo: email, collegamento a Google, squadra
+        preferita, pronostici e sessioni. Non si può annullare. Restano soltanto i
+        registri di sicurezza degli accessi, senza alcun collegamento a te, per al
+        massimo {periodo(CONSERVAZIONE_GIORNI.registroAccessi)}.
+      </p>
+      {!confermato ? (
+        <a className="btn btn--ghost btn--danger-ghost btn--google"
+          href={authApi.oauthStartUrl("google", "reauth", "/account/sicurezza")}>
+          <GoogleLogo />
+          Conferma con Google per eliminare…
+        </a>
+      ) : (
+        <>
+          <FormSuccess>
+            Identità confermata. Hai pochi minuti per completare l'eliminazione.
+          </FormSuccess>
+          <FormAlert>{errore}</FormAlert>
+          <div className="profilo__azioni">
+            <button className="btn btn--danger" type="button" onClick={() => void elimina()}
+              disabled={inCorso} aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              {inCorso ? "Elimino…" : "Elimina definitivamente"}
+            </button>
+            <Link className="btn btn--ghost" to="/account/sicurezza" replace>
+              Annulla
+            </Link>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function EliminaAccount() {
   const { deleteAccount } = useAuth();
   const navigate = useNavigate();
@@ -453,10 +541,495 @@ function EliminaAccount() {
   );
 }
 
+/**
+ * L'account Google collegato: vederlo, collegarlo, scollegarlo (ADR 0008).
+ *
+ * Collegare e' una NAVIGAZIONE verso Google, come l'accesso; il ritorno porta
+ * `?linked=google` o `?oauth_error=`. Scollegare e' rifiutato dal server quando
+ * e' l'unico modo di entrare: qui lo si dice prima, invece di far premere un
+ * pulsante che risponde di no.
+ */
+function SezioneGoogle({ haPassword }: { haPassword: boolean }) {
+  const disponibili = useProviders();
+  const [params] = useSearchParams();
+  const [righe, setRighe] = useState<LinkedIdentity[] | null>(null);
+  const [errore, setErrore] = useState<string | null>(
+    authApi.oauthErrorMessage(params.get("oauth_error")));
+  const [esito, setEsito] = useState<string | null>(
+    params.get("linked") === "google" ? "Account Google collegato." : null);
+  const [inCorso, setInCorso] = useState(false);
+
+  const carica = useCallback(async () => {
+    try {
+      setRighe(await authApi.identities());
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a leggere gli account collegati."));
+    }
+  }, []);
+
+  useEffect(() => {
+    void carica();
+  }, [carica]);
+
+  const google = righe?.find((r) => r.provider === "google") ?? null;
+  // Niente sezione se Google non e' configurato e non c'e' niente di collegato:
+  // un pulsante che porta a un 404 sarebbe peggio di nessun pulsante.
+  if (righe !== null && !google && disponibili && !disponibili.google) return null;
+
+  async function scollega() {
+    setErrore(null);
+    setEsito(null);
+    setInCorso(true);
+    try {
+      await authApi.unlinkProvider("google");
+      setEsito("Account Google scollegato.");
+      await carica();
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a scollegare Google. Riprova."));
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  const dal = google ? soloData(google.linked_at) : null;
+  return (
+    <section className="profilo__blocco" aria-labelledby="google-titolo">
+      <h2 id="google-titolo">Accesso con Google</h2>
+      <FormAlert>{errore}</FormAlert>
+      <FormSuccess>{esito}</FormSuccess>
+      {righe === null ? (
+        !errore && <p className="state">Carico…</p>
+      ) : google ? (
+        <>
+          <p className="profilo__hint">
+            Collegato a <strong>{google.email ?? "un account Google"}</strong>
+            {dal ? <> dal {dal}</> : null}. Puoi entrare con il pulsante «Continua con Google».
+          </p>
+          {haPassword ? (
+            <button className="btn btn--ghost" type="button" onClick={() => void scollega()}
+              disabled={inCorso} aria-busy={inCorso || undefined}>
+              {inCorso && <span className="spinner" aria-hidden="true" />}
+              Scollega Google
+            </button>
+          ) : (
+            <p className="profilo__hint">
+              È l'unico modo con cui entri: per scollegarlo, prima{" "}
+              <Link to="/forgot-password">imposta una password</Link>.
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="profilo__hint">
+            Collega un account Google per entrare con un clic, senza digitare la password.
+          </p>
+          <a className="btn btn--ghost btn--google"
+            href={authApi.oauthStartUrl("google", "link", "/account/sicurezza")}>
+            <GoogleLogo />
+            Collega Google
+          </a>
+        </>
+      )}
+    </section>
+  );
+}
+
+/**
+ * I codici di riserva appena generati: l'unica volta che si vedono.
+ *
+ * NON SI CHIUDE PER SBAGLIO. Il pulsante "Fatto" resta spento finche' la persona
+ * non dice di averli salvati: sono l'unica via d'uscita se perde il telefono,
+ * e il server ne conserva solo l'impronta. Copia e download in testo semplice,
+ * perche' il posto giusto per tenerli e' un gestore di password o un foglio.
+ */
+function CodiciRiserva({ codici, onFatto }: { codici: string[]; onFatto: () => void }) {
+  const [salvati, setSalvati] = useState(false);
+  const [copiati, setCopiati] = useState(false);
+  const testo = `Codici di riserva MatchPoint\nOgnuno vale una volta sola.\n\n${codici.join("\n")}\n`;
+
+  async function copia() {
+    try {
+      await navigator.clipboard.writeText(testo);
+      setCopiati(true);
+    } catch {
+      setCopiati(false);
+    }
+  }
+
+  function scarica() {
+    const url = URL.createObjectURL(new Blob([testo], { type: "text/plain;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "matchpoint-codici-di-riserva.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="riserva" role="region" aria-labelledby="riserva-titolo">
+      <h3 id="riserva-titolo">Salva i codici di riserva</h3>
+      <p className="profilo__hint">
+        Se perdi il telefono, ognuno di questi codici ti fa entrare <strong>una volta</strong>{" "}
+        al posto del codice dell'app. Non li vedrai più: salvali adesso, in un gestore
+        di password o su un foglio.
+      </p>
+      <ol className="riserva__codici">
+        {codici.map((c) => <li key={c}><code>{c}</code></li>)}
+      </ol>
+      <div className="profilo__azioni">
+        <button className="btn btn--ghost" type="button" onClick={() => void copia()}>
+          {copiati ? "Copiati" : "Copia"}
+        </button>
+        <button className="btn btn--ghost" type="button" onClick={scarica}>
+          Scarica .txt
+        </button>
+      </div>
+      <label className="riserva__conferma">
+        <input type="checkbox" checked={salvati} onChange={(e) => setSalvati(e.target.checked)} />
+        Li ho salvati in un posto sicuro
+      </label>
+      <button className="btn" type="button" disabled={!salvati} onClick={onFatto}>
+        Fatto
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Un codice da chiedere e confermare: attivare la verifica per email, disattivarla
+ * (con l'email o con l'app), chiedere nuovi codici di riserva. Il "come" lo
+ * decide chi la usa; qui c'e' solo il modulo, uguale per tutti.
+ */
+function ChiediCodice({
+  etichetta, aiuto, pulsante, pericolo, onInvia, onAnnulla,
+}: {
+  etichetta: string;
+  aiuto: string;
+  pulsante: string;
+  pericolo?: boolean;
+  onInvia: (code: string) => Promise<void>;
+  onAnnulla: () => void;
+}) {
+  const [code, setCode] = useState("");
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+  const v = useValidation({ code: codeError(code) }, { code });
+
+  async function invia(event: FormEvent) {
+    event.preventDefault();
+    setErrore(null);
+    if (!v.check()) return;
+    setInCorso(true);
+    try {
+      await onInvia(code.replace(/\D/g, ""));
+    } catch (e) {
+      setErrore(serverError(e, "Codice non accettato. Riprova."));
+      setCode("");
+      setInCorso(false);
+    }
+  }
+
+  return (
+    <form className="profilo__form" onSubmit={invia} noValidate>
+      <CodeField id="mfa-codice" label={etichetta} value={code} onChange={setCode}
+        onBlur={v.blur("code")} error={v.error("code")} inputRef={v.ref("code")}
+        autoFocus hint={aiuto} />
+      <FormAlert>{errore}</FormAlert>
+      <div className="profilo__azioni">
+        <button className={pericolo ? "btn btn--danger" : "btn"} type="submit"
+          disabled={inCorso} aria-busy={inCorso || undefined}>
+          {inCorso && <span className="spinner" aria-hidden="true" />}
+          {pulsante}
+        </button>
+        <button className="btn btn--ghost" type="button" onClick={onAnnulla} disabled={inCorso}>
+          Annulla
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Configurare l'app: QR code, segreto da scrivere a mano, codice di prova e
+ * conferma di identita'.
+ *
+ * LA PASSWORD E' OBBLIGATORIA, e il server la verifica: senza, chi ha rubato
+ * una sessione potrebbe installare la propria app e chiudere fuori il
+ * proprietario. Un account senza password si riconferma con Google PRIMA di
+ * vedere il QR code: tornando da Google la pagina si ricarica, e un QR chiesto
+ * prima andrebbe scansionato di nuovo.
+ */
+function ConfiguraApp({ haPassword, onAttivata, onAnnulla }: {
+  haPassword: boolean;
+  onAttivata: (r: authApi.TotpEnabled) => void;
+  onAnnulla: () => void;
+}) {
+  const [params] = useSearchParams();
+  const riconfermato = params.get("reauth") === "google" && params.get("app") === "1";
+  const [setup, setSetup] = useState<authApi.TotpSetup | null>(null);
+  const [code, setCode] = useState("");
+  const [password, setPassword] = useState("");
+  const [inCorso, setInCorso] = useState(false);
+  const [errore, setErrore] = useState<string | null>(null);
+  const pronto = haPassword || riconfermato;
+
+  const v = useValidation({
+    code: codeError(code),
+    password: haPassword ? requiredError(password, "la password") : null,
+  }, { code, password });
+
+  useEffect(() => {
+    if (!pronto || setup) return;
+    let annullato = false;
+    authApi.totpSetup()
+      .then((r) => { if (!annullato) setSetup(r); })
+      .catch((e: unknown) => {
+        if (!annullato) setErrore(serverError(e, "Non riesco a preparare il codice QR. Riprova."));
+      });
+    return () => { annullato = true; };
+  }, [pronto, setup]);
+
+  async function conferma(event: FormEvent) {
+    event.preventDefault();
+    setErrore(null);
+    if (!v.check()) return;
+    setInCorso(true);
+    try {
+      onAttivata(await authApi.totpConfirm(code.replace(/\D/g, ""), haPassword ? password : undefined));
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco ad attivare l'app. Riprova."));
+      setCode("");
+      setInCorso(false);
+    }
+  }
+
+  if (!pronto) {
+    return (
+      <div className="profilo__form">
+        <p className="profilo__hint">
+          Il tuo account non ha una password: prima di collegare l'app conferma che sei tu
+          con Google.
+        </p>
+        <div className="profilo__azioni">
+          <a className="btn btn--google btn--ghost"
+            href={authApi.oauthStartUrl("google", "reauth", "/account/sicurezza?app=1")}>
+            <GoogleLogo />
+            Conferma con Google
+          </a>
+          <button className="btn btn--ghost" type="button" onClick={onAnnulla}>Annulla</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="profilo__form totp" onSubmit={conferma} noValidate>
+      <ol className="totp__passi">
+        <li>
+          Apri un'app di autenticazione sul telefono: Google Authenticator, Microsoft
+          Authenticator, Authy, 1Password o quella del tuo gestore di password.
+        </li>
+        <li>
+          Inquadra il codice QR. Se la fotocamera non lo legge, aggiungi l'account a mano
+          con questa chiave:
+          {setup ? <code className="totp__chiave">{setup.secret}</code> : null}
+        </li>
+        <li>Scrivi qui sotto il codice di 6 cifre che l'app mostra per MatchPoint.</li>
+      </ol>
+      <div className="totp__qr">
+        {setup
+          ? <img src={setup.qr} alt="Codice QR da inquadrare con l'app di autenticazione" width={200} height={200} />
+          : !errore && <span className="spinner" aria-label="Preparo il codice QR" />}
+      </div>
+      <CodeField id="totp-codice" label="Codice dall'app" value={code} onChange={setCode}
+        onBlur={v.blur("code")} error={v.error("code")} inputRef={v.ref("code")} />
+      {haPassword && (
+        <PasswordField id="totp-password" label="La tua password, per confermare che sei tu"
+          value={password} onChange={setPassword} onBlur={v.blur("password")}
+          error={v.error("password")} inputRef={v.ref("password")} />
+      )}
+      <FormAlert>{errore}</FormAlert>
+      <div className="profilo__azioni">
+        <button className="btn" type="submit" disabled={inCorso || !setup} aria-busy={inCorso || undefined}>
+          {inCorso && <span className="spinner" aria-hidden="true" />}
+          Attiva l'app
+        </button>
+        <button className="btn btn--ghost" type="button" onClick={onAnnulla} disabled={inCorso}>
+          Annulla
+        </button>
+      </div>
+    </form>
+  );
+}
+
+type ModoMfa = null | "email" | "app" | "spegni" | "nuovi-codici";
+
+/**
+ * La verifica in due passaggi (ADR 0008): facoltativa, con l'app o per email.
+ *
+ * L'APP E' CONSIGLIATA, ed e' detto il perche': il codice per email arriva alla
+ * stessa casella del recupero password, quindi chi ha la casella supera
+ * entrambi i passaggi. L'app no.
+ *
+ * Ogni cambiamento chiede un codice: accenderla prova che il canale funziona,
+ * spegnerla impedisce a un cookie rubato di toglierla con un clic.
+ */
+function SezioneDueFattori() {
+  const { user, adopt } = useAuth();
+  const [params] = useSearchParams();
+  const metodo = user?.mfa_method ?? null;
+  const haPassword = user?.has_password !== false;
+  const [stato, setStato] = useState<authApi.MfaStatus | null>(null);
+  const [modo, setModo] = useState<ModoMfa>(
+    params.get("app") === "1" && params.get("reauth") === "google" ? "app" : null);
+  const [destinazione, setDestinazione] = useState<string | null>(null);
+  const [codici, setCodici] = useState<string[] | null>(null);
+  const [errore, setErrore] = useState<string | null>(null);
+  const [esito, setEsito] = useState<string | null>(null);
+  const [inCorso, setInCorso] = useState(false);
+
+  const carica = useCallback(async () => {
+    try {
+      setStato(await authApi.mfaStatus());
+    } catch {
+      setStato(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void carica();
+  }, [carica, metodo]);
+
+  function chiudi() {
+    setModo(null);
+    setDestinazione(null);
+    setErrore(null);
+  }
+
+  /** Email da accendere o qualsiasi metodo da spegnere: prima il server prepara il codice. */
+  async function avvia(azione: "enable" | "disable", prossimo: ModoMfa) {
+    setErrore(null);
+    setEsito(null);
+    setInCorso(true);
+    try {
+      const p = await authApi.mfaStart(azione);
+      setDestinazione(p.method === "totp" ? null : p.sent_to);
+      setModo(prossimo);
+    } catch (e) {
+      setErrore(serverError(e, "Non riesco a mandare il codice. Riprova."));
+    } finally {
+      setInCorso(false);
+    }
+  }
+
+  async function conferma(azione: "enable" | "disable", code: string) {
+    const identity = await authApi.mfaConfirm(azione, code);
+    adopt(identity);
+    chiudi();
+    setEsito(identity.mfa_enabled
+      ? "Verifica in due passaggi attiva. Dal prossimo accesso ti chiederemo il codice."
+      : "Verifica in due passaggi disattivata.");
+  }
+
+  const descrizione = metodo === "totp"
+    ? "Attiva con l'app di autenticazione: dopo la password (o dopo Google) ti chiediamo il codice che l'app mostra sul telefono."
+    : metodo === "email"
+      ? "Attiva con l'email: dopo la password (o dopo Google) ti mandiamo un codice di 6 cifre."
+      : "Dopo la password (o dopo Google) ti chiediamo anche un codice. Chi ruba la tua password, da sola, non entra.";
+
+  return (
+    <section className="profilo__blocco" aria-labelledby="mfa-titolo">
+      <h2 id="mfa-titolo">Verifica in due passaggi</h2>
+      <p className="profilo__hint">{descrizione}</p>
+      {metodo !== "totp" && (
+        <p className="profilo__hint">
+          Consigliamo l'<strong>app di autenticazione</strong>: il codice per email arriva
+          alla stessa casella del recupero password, quindi chi entra nella tua email
+          supera entrambi i passaggi. Con l'app serve anche il tuo telefono.
+        </p>
+      )}
+      {metodo === "totp" && stato?.recovery_codes_left != null && (
+        <p className={`profilo__hint${stato.recovery_codes_left <= 3 ? " riserva__poche" : ""}`}>
+          Codici di riserva rimasti: <strong>{stato.recovery_codes_left}</strong>
+          {stato.recovery_codes_left <= 3 ? ". Sono pochi: generane di nuovi." : "."}
+        </p>
+      )}
+      <FormSuccess>{esito}</FormSuccess>
+      {modo === null && <FormAlert>{errore}</FormAlert>}
+
+      {codici ? (
+        <CodiciRiserva codici={codici} onFatto={() => { setCodici(null); void carica(); }} />
+      ) : modo === "app" ? (
+        <ConfiguraApp haPassword={haPassword} onAnnulla={chiudi} onAttivata={(r) => {
+          adopt(r.identity);
+          chiudi();
+          setCodici(r.recovery_codes);
+          setEsito("App di autenticazione attiva. Dal prossimo accesso ti chiederemo il suo codice.");
+        }} />
+      ) : modo === "email" ? (
+        <ChiediCodice etichetta={`Codice inviato a ${destinazione ?? "la tua email"}`}
+          aiuto="Vale 10 minuti." pulsante="Conferma e attiva"
+          onInvia={(c) => conferma("enable", c)} onAnnulla={chiudi} />
+      ) : modo === "spegni" ? (
+        <ChiediCodice
+          etichetta={metodo === "totp" ? "Codice dall'app" : `Codice inviato a ${destinazione ?? "la tua email"}`}
+          aiuto={metodo === "totp" ? "Il codice di 6 cifre che l'app mostra adesso." : "Vale 10 minuti."}
+          pulsante="Conferma e disattiva" pericolo
+          onInvia={(c) => conferma("disable", c)} onAnnulla={chiudi} />
+      ) : modo === "nuovi-codici" ? (
+        <ChiediCodice etichetta="Codice dall'app"
+          aiuto="Serve il codice dell'app, non un codice di riserva. I codici vecchi smetteranno di funzionare."
+          pulsante="Genera nuovi codici"
+          onInvia={async (c) => {
+            const r = await authApi.totpNewRecoveryCodes(c);
+            chiudi();
+            setCodici(r.recovery_codes);
+          }} onAnnulla={chiudi} />
+      ) : (
+        <div className="profilo__azioni">
+          {metodo === null && (
+            <>
+              <button className="btn" type="button" onClick={() => setModo("app")}>
+                Attiva con l'app (consigliato)
+              </button>
+              <button className="btn btn--ghost" type="button" disabled={inCorso}
+                onClick={() => void avvia("enable", "email")}>
+                Attiva con l'email
+              </button>
+            </>
+          )}
+          {metodo === "email" && (
+            <button className="btn" type="button" onClick={() => setModo("app")}>
+              Passa all'app di autenticazione
+            </button>
+          )}
+          {metodo === "totp" && (
+            <button className="btn btn--ghost" type="button" onClick={() => setModo("nuovi-codici")}>
+              Nuovi codici di riserva
+            </button>
+          )}
+          {metodo !== null && (
+            <button className="btn btn--ghost" type="button" disabled={inCorso}
+              onClick={() => void avvia("disable", "spegni")}>
+              Disattiva…
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SezioneSicurezza() {
+  const { user } = useAuth();
+  // `undefined` da un'API piu' vecchia: si tratta come "ha la password", cioe'
+  // il comportamento di prima.
+  const haPassword = user?.has_password !== false;
   return (
     <>
-      <CambioPassword />
+      {haPassword ? <CambioPassword /> : <SenzaPassword />}
+      <SezioneDueFattori />
+      <SezioneGoogle haPassword={haPassword} />
       <aside className="profilo__consiglio" aria-label="Consiglio">
         <span className="profilo__consiglio-icon">{ICONA_SICUREZZA}</span>
         <p>
@@ -466,7 +1039,7 @@ function SezioneSicurezza() {
           automatico.
         </p>
       </aside>
-      <EliminaAccount />
+      {haPassword ? <EliminaAccount /> : <EliminaSenzaPassword />}
     </>
   );
 }
@@ -698,6 +1271,16 @@ const EVENTI: Record<string, { ok: string; ko: string }> = {
   reset_done: { ok: "Password reimpostata dal collegamento email", ko: "Reimpostazione non riuscita" },
   session_revoked: { ok: "Chiusa una sessione", ko: "Chiusura sessione non riuscita" },
   sessions_revoked: { ok: "Chiuse le altre sessioni", ko: "Chiusura sessioni non riuscita" },
+  identity_linked: { ok: "Collegato un account Google", ko: "Collegamento a Google non riuscito" },
+  identity_unlinked: { ok: "Scollegato l'account Google", ko: "Scollegamento da Google non riuscito" },
+  reauth: { ok: "Identità riconfermata con Google", ko: "Riconferma con Google non riuscita" },
+  link: { ok: "Collegamento a Google", ko: "Collegamento a Google non riuscito" },
+  mfa_code_sent: { ok: "Inviato un codice di verifica", ko: "Invio del codice non riuscito" },
+  mfa_verify: { ok: "Codice di verifica confermato", ko: "Codice di verifica sbagliato o scaduto" },
+  mfa_enabled: { ok: "Verifica in due passaggi attivata", ko: "Attivazione della verifica non riuscita" },
+  mfa_disabled: { ok: "Verifica in due passaggi disattivata", ko: "Disattivazione della verifica non riuscita" },
+  mfa_challenge: { ok: "Chiesto il codice dell'app di autenticazione", ko: "Richiesta del codice non riuscita" },
+  mfa_recovery_codes: { ok: "Generati nuovi codici di riserva", ko: "Nuovi codici di riserva non generati" },
 };
 
 function SezioneAttivita() {

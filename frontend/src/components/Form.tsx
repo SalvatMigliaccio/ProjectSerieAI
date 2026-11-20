@@ -74,6 +74,22 @@ function gradino(value: string): string {
   return nomi[robustezza(value)];
 }
 
+/** Sei cifre, ignorando spazi e trattini: "123 456" e' quello che la gente incolla. */
+export function codeError(value: string): string | null {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "Scrivi il codice che ti abbiamo mandato.";
+  if (digits.length !== 6) return "Il codice ha 6 cifre.";
+  return null;
+}
+
+/** Un codice di riserva: 10 lettere e cifre, trattino e spazi ignorati. */
+export function recoveryError(value: string): string | null {
+  const chars = value.replace(/[^0-9a-z]/gi, "");
+  if (!chars) return "Scrivi uno dei codici di riserva.";
+  if (chars.length !== 10) return "Un codice di riserva ha 10 caratteri, come ABCDE-FGHJK.";
+  return null;
+}
+
 export function requiredError(value: string, what: string): string | null {
   return value ? null : `Inserisci ${what}.`;
 }
@@ -174,6 +190,44 @@ function FieldMessages({ id, error, hint, hintOk }: { id: string; error?: string
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * Il codice di 6 cifre arrivato per email (ADR 0008).
+ *
+ * `one-time-code`: su telefono la tastiera propone il codice appena arrivato,
+ * senza cambiare app. Testo e non `number`: un campo numerico perde gli zeri
+ * iniziali e mostra le frecce, e "004217" e' un codice valido.
+ */
+export function CodeField(props: FieldProps & { recovery?: boolean }) {
+  const { id, label, value, onChange, onBlur, error, hint, inputRef, autoFocus, recovery } = props;
+  return (
+    <div className={`field${error ? " field--invalid" : ""}`}>
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        ref={inputRef}
+        className="field__code"
+        type="text"
+        // Un codice di riserva ha lettere: tastiera normale, e niente proposta
+        // automatica del telefono, che suggerirebbe l'ultimo codice via SMS.
+        inputMode={recovery ? "text" : "numeric"}
+        autoComplete={recovery ? "off" : "one-time-code"}
+        autoCapitalize={recovery ? "characters" : undefined}
+        pattern={recovery ? undefined : "[0-9 \\-]*"}
+        maxLength={recovery ? 13 : 9}
+        spellCheck={false}
+        required
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy(id, error, hint)}
+      />
+      <FieldMessages id={id} error={error} hint={hint} />
+    </div>
   );
 }
 

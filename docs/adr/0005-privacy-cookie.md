@@ -1,6 +1,6 @@
 # ADR 0005 — Privacy e cookie: cosa promettiamo, e cosa lo verifica
 
-- **Stato**: accettata, implementata in parte. **Pagine pubbliche (T1, T3) sospese**
+- **Stato**: accettata, **implementata**. T1 e T3, sospesi il 27 ottobre, chiusi il 20 novembre 2026
 - **Data**: 27 ottobre 2026
 - **Contesto**: gli account (`backend/auth/`, dal 25 settembre 2026) trattano dati personali
 - **Decide**: base giuridica, cookie, cancellazione, conservazione, e come restano veri
@@ -55,8 +55,8 @@ confermati.
 | T6 "Elimina l'account" nel profilo | fatto |
 | T7 `purge` e periodi in `settings.py` | fatto |
 | T8 documentazione | fatto |
-| **T1 testo di informativa e cookie policy** | **sospeso** |
-| **T3 rotte `#/privacy`, `#/cookie` e link nel footer e in registrazione** | **sospeso** |
+| **T1 testo di informativa e cookie policy** | **fatto il 20 novembre 2026** |
+| **T3 rotte `#/privacy`, `#/cookie` e link nel footer e in registrazione** | **fatto il 20 novembre 2026** |
 
 ## La sospensione di T1 e T3 — 27 ottobre 2026
 
@@ -98,3 +98,46 @@ pagina li mostra ancora.
   dati, e l'inventario della specifica va rifatto;
 - il TOTP: oggi esiste solo come colonna, e quando funzionera' la
   cancellazione dovra' chiederlo.
+
+
+## 20 novembre 2026 — accesso con Google e verifica in due passaggi (ADR 0008)
+
+L'inventario della spec e' aggiornato: tabelle `user_identities` e
+`mfa_challenges`, i dati ricevuti da Google (art. 14), tre cookie tecnici in
+piu' (`ainaples_oauth`, `ainaples_mfa`, `ainaples_reauth`), la cancellazione per
+gli account senza password. La conclusione sul banner **non cambia**: i cookie
+restano tutti tecnici, e il pulsante di Google e' un link, non uno script.
+
+**Cosa cambia per T1 e T3.** Niente di nuovo li blocca: Google entra nel testo
+come titolare autonomo, non come responsabile, quindi non aggiunge un punto
+aperto. Ma c'e' un motivo in piu' per riprenderli: finche' l'informativa non e'
+pubblicata, l'app OAuth su Google non puo' uscire dalla modalita' di test, e
+con Google entrano solo gli indirizzi elencati nella console.
+
+**La guardia sui cookie copre i flussi nuovi**: `tests/test_auth_mfa.py`
+percorre accesso con Google, codice, rinvio, attivazione e disattivazione, e
+fallisce se compare un cookie che `legal/dati.ts` non dichiara.
+
+
+## 20 novembre 2026 — la sospensione e' chiusa
+
+I tre fatti mancanti li ha dati il titolare: recapito **solo email** (quella gia'
+pubblica nel piede), hosting su **VPS nell'UE** con Docker, email con **Gmail
+SMTP**. Vercel e Neon non sono piu' nel piano, e con loro sparisce il
+trasferimento extra-UE dell'hosting; resta quello di Gmail, coperto dal Data
+Privacy Framework.
+
+**Come e' fatto.** `frontend/src/pages/Legal.tsx` non contiene fatti: titolare,
+trattamenti, destinatari, cookie, periodi, eta' minima e termine di risposta
+stanno in `legal/dati.ts`. Un test nuovo
+(`test_the_policy_pages_are_published_and_reachable`) verifica che le pagine
+siano raggiungibili dal piede e dalla registrazione, che leggano quei dati, e
+che nessuna durata sia scritta a mano nella pagina: una durata scritta li'
+sfuggirebbe a tutte le altre guardie.
+
+**Nessuna casella di consenso** in registrazione, come deciso: una frase con il
+link all'informativa, valida anche per "Registrati con Google".
+
+**Cosa resta.** La rilettura di un esperto prima di pubblicare, come dice la
+spec. E se il VPS scelto non fosse nell'UE, la riga dei destinatari va
+corretta prima del deploy.

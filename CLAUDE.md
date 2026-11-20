@@ -12,6 +12,7 @@ Contesto operativo per Claude Code.
 | `docs/adr/` | decisioni di architettura, una per file |
 | `docs/SPEC_PRIVACY_COOKIE.md` | informativa, cookie, cancellazione e conservazione: cosa promettiamo e cosa lo verifica |
 | `docs/adr/0006-schema-postgres-dati.md` | lo schema dei dati in Postgres, le tre modalita' di `storage` e il piano per spegnere il parquet |
+| `docs/adr/0007-amministrazione-e-pipeline-da-interfaccia.md` | pannello admin, registro delle previsioni in Postgres, predict/close dalla dashboard via coda e worker |
 | **questo file** | decisioni prese, risultati misurati, il **perche'** |
 | **`docs/COMANDI.md`** | come si lancia qualsiasi cosa: il **come** |
 
@@ -1457,6 +1458,19 @@ il weekend e il **martedi' entro le 13:00** per gli infrasettimanali. Lanciare
 lo dira' esplicitamente. Non e' un errore ed esce con codice 0.
 
 ### Il track record si scrive solo da processi locali — regola, non preferenza
+
+**IN REVISIONE DAL 18 NOVEMBRE 2026 (ADR 0007).** Dopo il deploy tutto deve
+potersi fare dall'interfaccia. Fase 1 fatta: sezione Amministrazione della dashboard (`/dashboard/admin`) con
+`/api/admin`, che e' il terzo prefisso scrivibile, scrive solo account e ruoli e
+legge i permessi dal DB a ogni chiamata. Fase 2: il registro passa in Postgres,
+con append-only, timestamp e controllo sul fischio imposti dal database
+(FATTA: `goalmodel/registro.py`, segue `GOALMODEL_STORAGE`, comando
+`goalmodel registro --importa | --verifica`; in `parquet` non cambia niente). Fase 3
+(FATTA): predict e close si lanciano dalla dashboard (Amministrazione →
+Pipeline) accodando un job in `pipeline_jobs`; lo esegue `python -m
+backend.worker` sulla macchina della pipeline (PC ora, VPS poi), un job alla
+volta, mai il modello dentro l'API. Lo scheduler accoda con `worker --accoda`. Finche' la produzione resta
+in `parquet` e la fase 3 non e' fatta, sotto vale quanto scritto.
 
 **Le uniche cose che scrivono nel registro sono `predict_round` e
 `close_round`, lanciati sulla macchina.** Nessuna richiesta HTTP, mai. L'API in

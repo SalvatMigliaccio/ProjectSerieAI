@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { api } from "../../api/client";
+import { useAuth } from "../../auth/AuthContext";
 import { useFavorite } from "../../auth/Favorite";
 import { Colophon, Masthead } from "../../components/Layout";
 import { useApi } from "../../hooks/useApi";
@@ -33,7 +34,9 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-const VOCI: { to: string; end?: boolean; label: string; breve: string; icon: ReactNode }[] = [
+type Voce = { to: string; end?: boolean; label: string; breve: string; icon: ReactNode };
+
+const VOCI: Voce[] = [
   {
     to: "/dashboard",
     end: true,
@@ -90,8 +93,27 @@ const VOCI: { to: string; end?: boolean; label: string; breve: string; icon: Rea
   },
 ];
 
+/**
+ * La voce dell'amministrazione, in fondo e separata: e' di chi gestisce il
+ * sito, non di chi lo usa. Compare solo con `users:manage` — nasconderla e'
+ * una cortesia, il server rifiuta comunque ogni chiamata a chi non lo ha.
+ */
+const VOCE_ADMIN: Voce = {
+  to: "/dashboard/admin",
+  label: "Amministrazione",
+  breve: "Admin",
+  icon: (
+    <Icon>
+      <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" />
+      <path d="M9.5 12l1.8 1.8L15 10" />
+    </Icon>
+  ),
+};
+
 export function DashboardShell() {
   const { team } = useFavorite();
+  const { can } = useAuth();
+  const voci = can("users:manage") ? [...VOCI, VOCE_ADMIN] : VOCI;
   // Solo per il piede: la versione del modello. Una chiamata leggera, gia'
   // fatta anche dalla schermata Modello; la cache del browser non serve, la
   // risposta e' piccola.
@@ -105,8 +127,8 @@ export function DashboardShell() {
         <nav className="dash-nav" aria-label="Sezioni della dashboard">
           <p className="dash-nav__title">Dashboard</p>
           <ul>
-            {VOCI.map((v) => (
-              <li key={v.to}>
+            {voci.map((v) => (
+              <li key={v.to} className={v === VOCE_ADMIN ? "dash-nav__sep" : undefined}>
                 <NavLink to={v.to} end={v.end} className="dash-nav__link">
                   {v.icon}
                   <span className="dash-nav__label">{v.label}</span>

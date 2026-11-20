@@ -46,6 +46,23 @@ class InvalidToken(Exception):
     """Expired, already spent, or nonexistent."""
 
 
+class MfaRequired(Exception):
+    """
+    The first factor passed, and the account has 2FA on: no session yet.
+
+    AN EXCEPTION AND NOT A RETURN VALUE, on purpose. Every caller that used to
+    get a session now gets this instead, and one that forgets to handle it
+    fails loudly — it cannot open a session by accident. The route catches it
+    and does NOT re-raise, so the request commits normally: whatever the first
+    factor wrote (the reset failure counter, a new Google link) is kept.
+    """
+
+    def __init__(self, user: User, via: str) -> None:
+        super().__init__("second factor required")
+        self.user = user
+        self.via = via
+
+
 # ---------------------------------------------------------------------------
 # Audit
 # ---------------------------------------------------------------------------
@@ -182,6 +199,7 @@ def verify_email(db: Session, token: str) -> User:
         user.status = "active"
     user.email_verified_at = now()
     record_event(db, "verify_email", "ok", user_id=user.id)
+    apply_bootstrap(db, user)
     return user
 
 
@@ -216,6 +234,18 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
         keep_on_refusal(db)
         raise AccessDenied("too many failed attempts: try again in a few minutes", "locked")
 
+    if not user.has_password():
+        # An account created through Google or Apple. Same answer and same
+        # time as a wrong password: "this address exists but has no password"
+        # would tell a stranger both that it is registered and how to reach
+        # it. Not counted towards the lockout: there is nothing to guess, and
+        # locking would only shut the real owner out of the reset flow.
+        pwd.dummy_verify()
+        record_event(db, "sign_in", "ko", user_id=user.id, ip=ip,
+                     user_agent=user_agent, details={"cause": "no_password"})
+        keep_on_refusal(db)
+        raise AccessDenied("invalid credentials", "no_password")
+
     if not pwd.verify(user.password_hash, clear):
         _count_failure(db, user, cfg, ip, user_agent)
         raise AccessDenied("invalid credentials", "wrong_password")
@@ -235,7 +265,15 @@ def sign_in(db: Session, email: str, clear: str, *, cfg: Settings | None = None,
 
     user.failed_attempts = 0
     user.locked_until = None
+    if user.mfa_enabled():
+        # The password was right: the counter resets (it counts wrong
+        # passwords, not unfinished sign-ins). The `sign_in ok` row is written
+        # only when the code is, by the route that completes it.
+        raise MfaRequired(user, "password")
     record_event(db, "sign_in", "ok", user_id=user.id, ip=ip, user_agent=user_agent)
+    # Before the session opens, so the first access token already carries the
+    # role's permissions.
+    apply_bootstrap(db, user, cfg)
     return open_session(db, user, cfg, ip=ip, user_agent=user_agent)
 
 
@@ -253,6 +291,22 @@ def _count_failure(db: Session, user: User, cfg: Settings,
     # The counter is the point: it is what the lockout counts, so it has to
     # outlive the exception the caller raises next.
     keep_on_refusal(db)
+
+
+def complete_sign_in(db: Session, user: User, cfg: Settings, *, via: str,
+                     ip: str | None = None, user_agent: str | None = None
+                     ) -> tuple[str, UserSession]:
+    """
+    The end of a sign-in whose second factor has just been verified.
+
+    The same three steps as the single-factor path, in the same order: the
+    audit row, the superadmin bootstrap before the session (so the first
+    access token carries the role), the session.
+    """
+    record_event(db, "sign_in", "ok", user_id=user.id, ip=ip, user_agent=user_agent,
+                 details={"via": via, "mfa": "email"})
+    apply_bootstrap(db, user, cfg)
+    return open_session(db, user, cfg, ip=ip, user_agent=user_agent)
 
 
 def open_session(db: Session, user: User, cfg: Settings, *, ip: str | None = None,
@@ -500,6 +554,12 @@ def reset_password(db: Session, token: str, new: str, *, ip: str | None = None,
 def change_password(db: Session, user: User, current: str, new: str, *,
                     current_session: uuid.UUID | None = None) -> None:
     """Change from inside the account area: the current password is required."""
+    if not user.has_password():
+        # Nothing to check `current` against. Setting a first password goes
+        # through the reset link, which proves control of the address; a
+        # session alone does not (ADR 0008).
+        raise AccessDenied("this account has no password yet: set one with "
+                           "'forgot password'", "no_password")
     if not pwd.verify(user.password_hash, current):
         record_event(db, "change_password", "ko", user_id=user.id,
                      details={"cause": "wrong_current"})
@@ -515,7 +575,8 @@ def change_password(db: Session, user: User, current: str, new: str, *,
                  details={"sessions_revoked": count})
 
 
-def delete_account(db: Session, user: User, password: str, *,
+def delete_account(db: Session, user: User, password: str | None, *,
+                   reauthenticated: bool = False,
                    ip: str | None = None, user_agent: str | None = None) -> None:
     """
     The right to erasure (GDPR art. 17), from the account page.
@@ -534,7 +595,18 @@ def delete_account(db: Session, user: User, password: str, *,
     The audit row of the deletion carries no address and no id: once the
     account is gone, nothing here should still name it.
     """
-    if not pwd.verify(user.password_hash, password):
+    if not user.has_password():
+        # No password to type: the confirmation is a fresh round trip to the
+        # linked provider (`reauthenticated`, checked by the route against a
+        # short-lived signed cookie bound to this session — ADR 0008). A
+        # session alone never deletes.
+        if not reauthenticated:
+            record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
+                         user_agent=user_agent, details={"cause": "reauth_required"})
+            keep_on_refusal(db)
+            raise AccessDenied("confirm the deletion with your Google account first",
+                               "reauth_required")
+    elif not password or not pwd.verify(user.password_hash, password):
         record_event(db, "account_deleted", "ko", user_id=user.id, ip=ip,
                      user_agent=user_agent, details={"cause": "wrong_password"})
         keep_on_refusal(db)
@@ -580,6 +652,32 @@ def revoke_role(db: Session, user: User, name: str, *, by: uuid.UUID | None = No
             record_event(db, "role_revoked", "ok", user_id=user.id,
                          details={"role": name, "by": str(by) if by else None})
             return
+
+
+def apply_bootstrap(db: Session, user: User, cfg: Settings | None = None) -> bool:
+    """
+    Grant `superadmin` to a listed, VERIFIED address. True if it was granted.
+
+    Called at sign-in and at verification, the two moments an account proves
+    it holds its mailbox. It only ever adds: see `Settings.superadmin_emails`
+    for why taking an address off the list does not take the role away.
+    """
+    cfg = cfg or settings()
+    if user.email_verified_at is None or user.status != "active":
+        return False
+    if user.email.lower() not in cfg.bootstrap_superadmins:
+        return False
+    if any(r.name == "superadmin" for r in user.roles):
+        return False
+    role = db.scalar(select(Role).where(Role.name == "superadmin"))
+    if role is None:
+        # The base-roles migration has not run. Not worth taking sign-in down.
+        log.error("superadmin role missing: run the base-roles migration")
+        return False
+    user.roles.append(role)
+    record_event(db, "role_granted", "ok", user_id=user.id,
+                 details={"role": "superadmin", "by": None, "via": "AI_NAPLES_SUPERADMIN_EMAILS"})
+    return True
 
 
 def permission_exists(db: Session, name: str) -> bool:

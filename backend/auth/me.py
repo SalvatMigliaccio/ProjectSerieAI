@@ -38,12 +38,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from . import service
+from . import oauth, service
 from .deps import (
     Cfg,
     CurrentSession,
     CurrentUser,
     Db,
+    clear_reauth_cookie,
     clear_session_cookie,
     client_ip,
     require_permission,
@@ -196,7 +197,10 @@ def _limit(request: Request, user_id: uuid.UUID) -> None:
 # --- the account itself --------------------------------------------------------
 
 class DeletePayload(BaseModel):
-    password: str = Field(min_length=1, max_length=1024)
+    # Optional only for an account WITHOUT a password, which confirms with a
+    # fresh Google round trip instead (ADR 0008). The service still refuses an
+    # account that has a password and sent none.
+    password: str | None = Field(default=None, max_length=1024)
 
 
 @router.post("/account/delete", status_code=status.HTTP_204_NO_CONTENT)
@@ -223,13 +227,17 @@ def delete_account(payload: DeletePayload, row: CurrentSession, request: Request
             headers={"Retry-After": str(password_change_limiter.retry_after(key))},
         )
     try:
-        service.delete_account(db, row.user, payload.password, ip=client_ip(request),
+        reauthenticated = oauth.reauth_valid(request.cookies.get(cfg.reauth_cookie_name),
+                                             row.user_id, row.id, cfg)
+        service.delete_account(db, row.user, payload.password,
+                               reauthenticated=reauthenticated, ip=client_ip(request),
                                user_agent=request.headers.get("user-agent"))
     except service.AccessDenied as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(exc)) from exc
     # The cookies go on the response that is returned (see `sign_out`).
     out = Response(status_code=status.HTTP_204_NO_CONTENT)
     clear_session_cookie(out, cfg)
+    clear_reauth_cookie(out, cfg)
     return out
 
 

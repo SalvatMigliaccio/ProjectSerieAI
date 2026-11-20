@@ -380,8 +380,11 @@ del …», e un controllo giornaliero confronta i conteggi.
 sito mostra dati vecchi. Lo stato lo dice già oggi e deve continuare a dirlo.
 
 **Da non fare, mai:**
-- una rotta che lancia `predict_round` (anche solo per admin): la previsione
-  vale perché la scrive un processo che non conosce il risultato;
+- ~~una rotta che lancia `predict_round` (anche solo per admin)~~ — superata
+  dall'ADR 0007 (18 novembre 2026): il pulsante accoda una richiesta per un
+  worker (`backend/worker.py`), e l'integrità del registro la impone il
+  database. Resta vietato che una rotta scriva il CONTENUTO di una previsione,
+  o che una rotta esegua un comando che non sia in lista;
 - scritture dell'API in `core`, nemmeno «temporanee»;
 - materializzare le selezioni o l'esito delle schedine;
 - importi, ROI o valore atteso nelle schedine;

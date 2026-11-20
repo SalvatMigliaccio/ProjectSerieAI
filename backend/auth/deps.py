@@ -266,3 +266,49 @@ def clear_session_cookie(response: Response, cfg: Settings) -> None:
     _drop(response, cfg, cfg.cookie_name, REFRESH_PATH)
     _drop(response, cfg, cfg.cookie_name, LEGACY_PATH)
     _drop(response, cfg, cfg.access_cookie_name, "/")
+
+
+# --- the two short-lived cookies of the external sign-in (ADR 0008) ----------
+
+# The flow cookie only ever needs to reach the callback. The reauth mark is read
+# by two routes in two prefixes — account deletion (`/api/me/account`) and
+# turning the authenticator app on (`/api/auth/mfa/totp`) — so its path is
+# `/api`: never sent with the pages or static files, and it lives 5 minutes.
+OAUTH_PATH = "/api/auth/oauth"
+REAUTH_PATH = "/api"
+
+
+def set_oauth_cookie(response: Response, token: str, cfg: Settings) -> None:
+    """SameSite=Lax, like the others: Strict would not ride the redirect back from Google."""
+    _cookie(response, cfg, cfg.oauth_cookie_name, token, OAUTH_PATH,
+            max_age=cfg.oauth_flow_minutes * 60)
+
+
+def clear_oauth_cookie(response: Response, cfg: Settings) -> None:
+    """Spent after one callback, whatever the outcome: a flow is single use."""
+    _drop(response, cfg, cfg.oauth_cookie_name, OAUTH_PATH)
+
+
+def set_reauth_cookie(response: Response, token: str, cfg: Settings) -> None:
+    _cookie(response, cfg, cfg.reauth_cookie_name, token, REAUTH_PATH,
+            max_age=cfg.reauth_minutes * 60)
+
+
+def clear_reauth_cookie(response: Response, cfg: Settings) -> None:
+    _drop(response, cfg, cfg.reauth_cookie_name, REAUTH_PATH)
+
+
+# The pending second factor (ADR 0008, step 3): only the 2FA routes read it.
+# It lives as long as a resend chain may (`mfa.RESEND_WINDOW`), not as long as
+# one code: "send again" after the first code expired must still find it.
+MFA_PATH = "/api/auth/mfa"
+MFA_COOKIE_MINUTES = 30
+
+
+def set_mfa_cookie(response: Response, token: str, cfg: Settings) -> None:
+    _cookie(response, cfg, cfg.mfa_cookie_name, token, MFA_PATH,
+            max_age=MFA_COOKIE_MINUTES * 60)
+
+
+def clear_mfa_cookie(response: Response, cfg: Settings) -> None:
+    _drop(response, cfg, cfg.mfa_cookie_name, MFA_PATH)

@@ -89,6 +89,16 @@ goalmodel close-round       # once every match of the round has a result
 They write `track_record/` and `data/`, which the containers read. Nothing over
 HTTP can write either.
 
+### The pipeline worker (ADR 0007, phase 3)
+
+The admin panel queues `predict_round` and `close_round` in Postgres; a worker
+on the pipeline machine runs them: `python -m backend.worker`. On the owner's
+PC it is a Task Scheduler task (`docs/COMANDI.md`). On this VPS it will be a
+host service, like the pipeline itself and for the same reason: it writes the
+track record, and it needs the `ingest` and `ml` extras the API image
+deliberately leaves out. It opens outbound connections only, so it publishes
+no port. Run `alembic upgrade head` first: the queue is two tables.
+
 ## Known limits, stated rather than discovered later
 
 - **One API worker.** The rate limiter counts in process memory, so two workers
@@ -158,6 +168,8 @@ Caddy.
    | `AI_NAPLES_COOKIE_SECURE` | `1` |
    | `AI_NAPLES_PUBLIC_URL` | `https://<your-domain>` — builds the links in emails |
    | `AI_NAPLES_SMTP_*` | a real provider, `starttls` or `ssl` |
+   | `AI_NAPLES_SUPERADMIN_EMAILS` | your address: sign up, verify, and you are superadmin |
+   | `GOALMODEL_STORAGE` | `postgres` once the data and the track record are loaded: the API then reads the predictions from the database, not from the deployed files (ADR 0007) |
 
    Not needed: `AI_NAPLES_ROOT` (on Vercel the package uses the working
    directory, see `backend/src/goalmodel/config.py`) and `AI_NAPLES_CORS_ORIGINS`
@@ -168,8 +180,11 @@ Caddy.
 
    ```bash
    AI_NAPLES_DATABASE_URL="<the string above>" alembic -c alembic.ini upgrade head
-   AI_NAPLES_DATABASE_URL="<...>" python -m backend.auth.cli create-superadmin --email you@example.com
    ```
+
+   The first administrator no longer needs a command: with your address in
+   `AI_NAPLES_SUPERADMIN_EMAILS`, sign up from the site and verify the email.
+   `create-superadmin` still works, for a database without a mail relay.
 
 ## Deploying: from the pipeline machine, after every matchday
 

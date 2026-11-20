@@ -23,6 +23,7 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -33,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import CITEXT, INET, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -64,7 +66,12 @@ class User(Base):
     # accounts and the user can no longer sign in because they do not remember
     # which spelling they used.
     email: Mapped[str] = mapped_column(CITEXT, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    # NULL for an account created through Google or Apple that never set a
+    # password (ADR 0008). Not an empty string: `verify("", ...)` would be a
+    # corrupt hash logged as a data defect, while NULL says plainly "this
+    # account has no password", and the service refuses it as such. The way to
+    # add one is the reset flow, which proves control of the address.
+    password_hash: Mapped[str | None] = mapped_column(Text)
 
     # pending -> has not verified the address; active -> may sign in;
     # suspended -> blocked by an admin; deleted -> soft-deleted, because audit
@@ -73,9 +80,21 @@ class User(Base):
 
     email_verified_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
 
-    # MFA groundwork: the column exists, the flow does not yet. Adding it later
-    # would mean migrating a table holding real accounts.
+    # Reserved for an authenticator-app second factor, not used yet. Today the
+    # only method is `email` (ADR 0008); the column stays so that adding TOTP
+    # later is a flow, not a migration of a table holding real accounts.
     totp_secret: Mapped[str | None] = mapped_column(Text)
+
+    # Second factor: NULL = off. One column for the method rather than a
+    # boolean, because "on" has to say WHICH factor, and the day TOTP arrives a
+    # boolean would need a second column that can disagree with the first.
+    mfa_method: Mapped[str | None] = mapped_column(String(16))
+    mfa_enabled_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    # The 30-second step of the last TOTP code accepted. A code is valid for
+    # its whole window (and one step either side, for clock drift): without
+    # this, a code read over a shoulder works again for up to a minute and a
+    # half. Anything at or below it is refused.
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
 
     # The team the user follows, as the track record names it ("Napoli").
     # A plain string and not a foreign key: teams are not a table here, they
@@ -107,14 +126,123 @@ class User(Base):
             "status IN ('pending', 'active', 'suspended', 'deleted')",
             name="ck_users_status",
         ),
+        CheckConstraint("mfa_method IN ('email', 'totp')", name="ck_users_mfa_method"),
+        # Both or neither: a method without a date, or a date without a
+        # method, is an account whose 2FA state nobody can read with certainty.
+        CheckConstraint("(mfa_method IS NULL) = (mfa_enabled_at IS NULL)",
+                        name="ck_users_mfa_consistent"),
+        # A TOTP method with no secret would let anyone through a check that
+        # has nothing to compare against.
+        CheckConstraint("mfa_method IS DISTINCT FROM 'totp' OR totp_secret IS NOT NULL",
+                        name="ck_users_totp_has_secret"),
         # The admin panel searches by partial email. Without this index that is
         # a sequential scan on every keystroke.
         Index("ix_users_email_trgm", "email", postgresql_using="gin",
               postgresql_ops={"email": "gin_trgm_ops"}),
     )
 
+    identities: Mapped[list[UserIdentity]] = relationship(
+        back_populates="user", lazy="selectin")
+
     def is_active(self) -> bool:
         return self.status == "active"
+
+    def has_password(self) -> bool:
+        return self.password_hash is not None
+
+    def mfa_enabled(self) -> bool:
+        return self.mfa_method is not None
+
+
+class UserIdentity(Base):
+    """
+    An external sign-in provider linked to an account (Google today, Apple next).
+
+    THE KEY IS `(provider, subject)`, NEVER THE EMAIL. `sub` is the id the
+    provider guarantees never changes and never gets reassigned; an address
+    can change at the provider, and with Apple it can be a private relay that
+    looks nothing like the real one. Signing someone in because an email
+    matched is how one person ends up inside another person's account.
+
+    The email is kept only as it was at link time, to show on the account page
+    which Google account is connected. It is not used to find anyone.
+    """
+
+    __tablename__ = "user_identities"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Google's `sub` is up to 255 ASCII characters; Apple's is shorter.
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(CITEXT)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    user: Mapped[User] = relationship(back_populates="identities")
+
+    __table_args__ = (
+        CheckConstraint("provider IN ('google', 'apple')", name="ck_user_identities_provider"),
+        UniqueConstraint("provider", "subject", name="uq_user_identities_subject"),
+        # One Google account per user. Two would make "unlink Google" ambiguous
+        # and give a second, forgotten key to the same door.
+        UniqueConstraint("user_id", "provider", name="uq_user_identities_user_provider"),
+    )
+
+
+class MfaChallenge(Base):
+    """
+    A sign-in halfway through: first factor passed, second factor pending.
+
+    NOT A ROW IN `email_tokens`, and the reason is concrete: there the token
+    hash is UNIQUE, and a six-digit code is not unique — two users receiving
+    the same code in the same ten minutes would make the second insert fail.
+    And a challenge needs what an emailed link does not: an attempt counter.
+
+    TWO SECRETS, BOTH HASHED. `challenge_hash` is the digest of a random token
+    kept in a short-lived cookie: it binds the code to the browser that passed
+    the first factor, so a code read over someone's shoulder is useless from
+    another device. `code_hash` is an HMAC keyed with the server secret, not a
+    plain SHA-256: there are only a million six-digit codes, and an unkeyed
+    hash in a database dump is reversed by trying them all.
+    """
+
+    __tablename__ = "mfa_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    # What the challenge completes: a sign-in (by password or provider), or
+    # the confirmation that turns 2FA on or off from the account page.
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    # How the first factor was passed, recorded in the audit event once the
+    # second one is too: `password`, `google`, `apple`.
+    via: Mapped[str] = mapped_column(String(16), nullable=False)
+    challenge_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    expires_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    ip: Mapped[str | None] = mapped_column(INET)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("purpose IN ('sign_in', 'enable', 'disable')",
+                        name="ck_mfa_challenges_purpose"),
+        CheckConstraint("via IN ('password', 'google', 'apple', 'session')",
+                        name="ck_mfa_challenges_via"),
+        CheckConstraint("attempts >= 0", name="ck_mfa_challenges_attempts"),
+    )
+
+    def is_spendable(self, at: dt.datetime, max_attempts: int) -> bool:
+        return self.used_at is None and at < self.expires_at and self.attempts < max_attempts
 
 
 class Role(Base):
@@ -308,4 +436,105 @@ class UserPrediction(Base):
         # opinions, and a double row would count twice in the summary.
         UniqueConstraint("user_id", "season", "home_team", "away_team", "market",
                          name="uq_user_predictions_pick"),
+    )
+
+
+class PipelineJob(Base):
+    """
+    A request to run `predict_round` or `close_round` (ADR 0007, phase 3).
+
+    THE API WRITES THE REQUEST, NEVER THE RESULT. A button in the admin panel
+    inserts a `queued` row; a worker on the pipeline machine claims it, runs
+    the same command the scheduler runs, and writes back how it went. Nothing
+    here can say WHAT the predictions are: the command computes them, and the
+    track record's own rules (append-only, kickoff in the future, server
+    clock) decide whether they are accepted.
+
+    `command` is a name from a closed list, not a command line: the worker maps
+    it to a fixed argv. A string from the database is never executed.
+    """
+
+    __tablename__ = "pipeline_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    command: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Only flags from a fixed list (`dry_run`, `skip_ingest`): validated by the
+    # route on the way in and by the worker on the way out.
+    options: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"))
+    requested_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    started_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    finished_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    # Moved by the worker while it runs: a `running` job whose heartbeat is
+    # old belongs to a worker that died, and the panel says so.
+    heartbeat_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+    worker: Mapped[str | None] = mapped_column(String(128))
+    exit_code: Mapped[int | None] = mapped_column(Integer)
+    # The last part of the output, refreshed while it runs. The full log stays
+    # on the worker's disk, in logs/.
+    log_tail: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        CheckConstraint("command IN ('predict_round', 'close_round')",
+                        name="ck_pipeline_jobs_command"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'done', 'failed', 'cancelled')",
+            name="ck_pipeline_jobs_status"),
+        # ONE ACTIVE JOB AT A TIME, enforced by the database: two clicks, two
+        # tabs or two admins cannot queue predict_round twice, and predict and
+        # close never run together on the same files.
+        # On a constant, not on `status`, which would allow one queued AND one
+        # running row. The migration creates it with the same expression.
+        Index("uq_pipeline_jobs_one_active", text("(true)"),
+              unique=True, postgresql_where=text("status IN ('queued', 'running')")),
+        Index("ix_pipeline_jobs_requested_at", "requested_at"),
+    )
+
+
+class PipelineWorker(Base):
+    """
+    Which worker is alive. One row per worker name, refreshed at every poll.
+
+    The panel reads `last_seen_at` to tell "queued, the worker will take it in
+    a minute" from "queued, and the PC is off": the second is normal while the
+    worker runs on a home computer, and it must be visible, not guessed.
+    """
+
+    __tablename__ = "pipeline_workers"
+
+    name: Mapped[str] = mapped_column(String(128), primary_key=True)
+    host: Mapped[str | None] = mapped_column(String(255))
+    started_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    last_seen_at: Mapped[dt.datetime] = mapped_column(TimestampTz, nullable=False)
+    poll_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class MfaRecoveryCode(Base):
+    """
+    One-time recovery codes for the authenticator-app second factor.
+
+    THE ONLY WAY BACK FROM A LOST PHONE, by design. There is no fallback to
+    the emailed code: that would reopen exactly the weakness the app closes
+    (whoever holds the mailbox passes both steps).
+
+    Stored as an HMAC keyed with `mfa_key` and salted with the user id: the
+    codes are random enough that a slow hash buys nothing, and the key means a
+    database dump alone cannot test guesses. Shown once, at generation.
+    """
+
+    __tablename__ = "mfa_recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid7)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        TimestampTz, nullable=False, server_default=func.now())
+    used_at: Mapped[dt.datetime | None] = mapped_column(TimestampTz)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "code_hash", name="uq_mfa_recovery_codes_code"),
     )
