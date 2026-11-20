@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
-import type { Match, Round, RoundHits, Scorer, StandingRow } from "../api/types";
+import type { Match, Round, Scorer, StandingRow } from "../api/types";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { HowItWorks } from "../components/HowItWorks";
 import { MarketHitsPanel } from "../components/MarketHitsPanel";
@@ -83,47 +83,74 @@ const INDOVINATE_TEST = 0.539;
 const LETTERA: Record<string, string> = { W: "V", D: "N", L: "P" };
 const PAROLA: Record<string, string> = { W: "vittoria", D: "pareggio", L: "sconfitta" };
 
+/** "2,5": una cifra decimale, alla italiana. */
+function media(valore: number): string {
+  return valore.toLocaleString("it-IT", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+/**
+ * Una barra della classifica: nome e dettaglio sopra, la barra con il numero
+ * DENTRO, alla sua estremita'.
+ *
+ * Il numero dentro la barra e non in una colonna a parte: in 208 pixel una
+ * terza colonna rubava spazio alla barra, che diventava un filo. Il primo ha
+ * il riempimento pieno, gli altri piu' tenue: chi guida si vede senza leggere.
+ */
+function Barra({ nome, titolo, dettaglio, valore, quota, primo }: {
+  nome: string;
+  titolo?: string;
+  dettaglio?: string;
+  valore: number;
+  quota: number;
+  primo: boolean;
+}) {
+  return (
+    <div className={`fbar${primo ? " fbar--primo" : ""}`}>
+      <div className="fbar__head">
+        <span className="fbar__nome" title={titolo}>{nome}</span>
+        {dettaglio && <span className="fbar__dettaglio">{dettaglio}</span>}
+      </div>
+      <div className="fbar__track">
+        {/* Un minimo di larghezza: un valore piccolo deve comunque contenere
+            il suo numero, o la barra diventa una cifra senza sfondo. */}
+        <i className="fbar__fill" style={{ width: `max(${Math.round(quota * 100)}%, 2.25rem)` }}>
+          <span className="fbar__valore">{valore}</span>
+        </i>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Le schede accanto al tablet.
  *
- * NUMERI CHE SI LEGGONO SENZA SPIEGAZIONE. C'era la curva dell'RPS cumulativo:
- * giusta, ma per capirla bisognava sapere cos'e' l'RPS e da che parte e'
- * meglio. Qui: quante ne indovina giornata per giornata, chi segna e chi sta
- * andando forte. L'RPS resta nella dashboard, sezione Modello, dove c'e' lo
- * spazio per spiegarlo.
+ * SOLO FATTI DI CAMPIONATO, dal 20 novembre 2026. C'era "Pronostici
+ * indovinati", la quota di esiti piu' probabili usciti giornata per giornata:
+ * un numero vero, ma letto da solo in una vetrina sembrava una promessa di
+ * vincita, e il modello e' misurato come indistinguibile dal mercato (CLAUDE.md).
+ * Al suo posto il miglior attacco: un dato che non chiede di sapere cos'e' un
+ * modello per essere letto bene.
  */
-function Floaters({
-  rounds,
-  table,
-  scorers,
-}: {
-  rounds: RoundHits[];
-  table: StandingRow[];
-  scorers: Scorer[];
-}) {
-  // Le ultime giornate chiuse, con i pronostici di TUTTI i mercati: con il
-  // solo 1X2 la scheda diceva "2 su 6" e raccontava il mercato piu' difficile
-  // come se fosse il modello intero.
-  const giornate = rounds.filter((r) => r.resolved > 0).slice(-5);
+function Floaters({ table, scorers }: { table: StandingRow[]; scorers: Scorer[] }) {
+  const attacco = [...table]
+    .sort((a, b) => b.goals_for - a.goals_for || a.position - b.position)
+    .slice(0, 3);
+  const golMax = Math.max(1, ...attacco.map((r) => r.goals_for));
   const bomber = scorers.slice(0, 3);
   const most = Math.max(1, ...bomber.map((s) => s.goals));
   const top = table.slice(0, 2);
 
   return (
     <div className="floaters">
-      {giornate.length > 0 && (
+      {attacco.length > 0 && (
         <div className="floater">
-          <p className="floater__title">Pronostici indovinati</p>
-          <span className="floater__sub">tutti i mercati, ultime giornate</span>
-          <div className="floater__bars">
-            {giornate.map((g) => (
-              <div className="floater__bar" key={g.matchday}>
-                <span>Giorn. {g.matchday}</span>
-                <span className="floater__track">
-                  <i className="floater__fill" style={{ width: `${(g.hits / g.resolved) * 100}%` }} />
-                </span>
-                <span>{g.hits} su {g.resolved}</span>
-              </div>
+          <p className="floater__title">Miglior attacco</p>
+          <span className="floater__sub">gol segnati in campionato</span>
+          <div className="fbars">
+            {attacco.map((r, i) => (
+              <Barra key={r.team} nome={r.team} valore={r.goals_for} quota={r.goals_for / golMax}
+                dettaglio={r.played > 0 ? `${media(r.goals_for / r.played)} a partita` : undefined}
+                primo={i === 0} />
             ))}
           </div>
         </div>
@@ -133,15 +160,11 @@ function Floaters({
         <div className="floater">
           <p className="floater__title">Capocannonieri</p>
           <span className="floater__sub">gol in campionato</span>
-          <div className="floater__bars">
-            {bomber.map((s) => (
-              <div className="floater__bar" key={`${s.player}-${s.team}`}>
-                <span title={`${s.player} (${s.team})`}>{s.player.split(" ").at(-1)}</span>
-                <span className="floater__track">
-                  <i className="floater__fill" style={{ width: `${(s.goals / most) * 100}%` }} />
-                </span>
-                <span>{s.goals}</span>
-              </div>
+          <div className="fbars">
+            {bomber.map((s, i) => (
+              <Barra key={`${s.player}-${s.team}`} nome={s.player.split(" ").at(-1) ?? s.player}
+                titolo={`${s.player} (${s.team})`} dettaglio={s.team}
+                valore={s.goals} quota={s.goals / most} primo={i === 0} />
             ))}
           </div>
         </div>
@@ -157,31 +180,31 @@ function Floaters({
       <div className="floater">
         <p className="floater__title">Chi va più forte</p>
         <span className="floater__sub">le prime due, ultime partite</span>
-        {top.map((row) => (
-          <div className="floater__form" key={row.team}>
-            <span className="floater__team">{row.team}</span>
-            {/* La lettera dentro il pallino: con il solo colore, verde e
-                corallo sono la stessa cosa per chi non distingue il rosso dal
-                verde — circa un uomo su dodici. */}
-            {(row.form ?? []).map((result, index) => (
-              <span
-                key={`${row.team}-${index}`}
-                className={`floater__result floater__result--${result.toLowerCase()}`}
-                title={`${row.team}: ${PAROLA[result] ?? result}`}
-              >
-                {LETTERA[result] ?? result}
-              </span>
-            ))}
-          </div>
-        ))}
+        <div className="fform">
+          {top.map((row) => (
+            <div className="fform__riga" key={row.team}>
+              <div className="fform__head">
+                <span className="fform__team">{row.team}</span>
+                <span className="fform__punti">{row.points} pt</span>
+              </div>
+              {/* La lettera dentro la pillola: con il solo colore, verde e
+                  corallo sono la stessa cosa per chi non distingue il rosso dal
+                  verde — circa un uomo su dodici. */}
+              <div className="fform__pillole">
+                {(row.form ?? []).map((result, index) => (
+                  <span
+                    key={`${row.team}-${index}`}
+                    className={`fform__pillola fform__pillola--${result.toLowerCase()}`}
+                    title={`${row.team}: ${PAROLA[result] ?? result}`}
+                  >
+                    {LETTERA[result] ?? result}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-
-      <p className="signature">
-        Più dati.
-        <br />
-        Più insight.
-        <em>Più MatchPoint.</em>
-      </p>
     </div>
   );
 }
@@ -196,6 +219,12 @@ export function Hero() {
     (acc, m) => ({ presi: acc.presi + m.hits, su: acc.su + m.resolved }),
     { presi: 0, su: 0 },
   );
+  // Gol per partita in campionato: la somma dei gol fatti di tutte le squadre
+  // conta ogni gol una volta sola, e `matches_played` sono le partite.
+  const golPartita = standings.data && standings.data.matches_played > 0
+    ? standings.data.table.reduce((acc, r) => acc + r.goals_for, 0) / standings.data.matches_played
+    : null;
+  const giornateChiuse = (rounds.data ?? []).filter((r) => r.closed).length;
 
   // Durante la verifica della sessione si parte come anonimi: i dati pubblici
   // compaiono subito, e se l'accesso c'e' la vetrina passa alla prossima
@@ -263,11 +292,14 @@ export function Hero() {
               </span>
             </Link>
 
-            {/* TRE NUMERI CHE CHIUNQUE LEGGE. Prima c'erano "RPS di produzione"
-                e "riferimento backtest": esatti, ma muti per chi non sa cosa
-                misurano. Ora: quante partite, quante indovinate, quante
-                selezioni vinte — sempre "x su y", perche' una percentuale da
-                sola nasconde quanto e' piccolo il campione. */}
+            {/* TRE NUMERI CHE CHIUNQUE LEGGE, E NESSUNO SEMBRA UN RENDIMENTO
+                (20 novembre 2026). Qui c'erano "pronostici indovinati" e
+                "selezioni vinte": esatti, ma in prima pagina e senza contesto
+                un "80% vinte" si legge come una promessa di vincita, mentre il
+                valore atteso contro il book e' negativo (CLAUDE.md). Sono scesi
+                nella sezione «quante ne indovina», accanto al metro per
+                leggerli. Qui restano fatti: quante partite, quanti gol, quante
+                giornate gia' misurate in pubblico. */}
             <div className="figures" style={{ marginTop: "var(--s7)" }}>
               <div className="figure">
                 <span className="figure__label">partite previste</span>
@@ -279,46 +311,31 @@ export function Hero() {
                 </span>
               </div>
               <div className="figure">
-                {/* Il totale sui cinque mercati, non il solo 1X2: con tre
-                    esiti e' il mercato piu' difficile, e da solo faceva
-                    sembrare il modello un lancio di moneta. Il dettaglio, con
-                    la frequenza di base accanto a ogni mercato, e' due
-                    schermate piu' giu' e il rimando porta li'. */}
-                <span className="figure__label">pronostici indovinati</span>
+                <span className="figure__label">gol a partita</span>
                 <span className="figure__value">
-                  {hits.loading ? (
-                    <Skeleton width="4rem" />
-                  ) : indovinati.su > 0 ? (
-                    prob(indovinati.presi / indovinati.su)
+                  {standings.loading ? (
+                    <Skeleton width="3rem" />
+                  ) : golPartita !== null ? (
+                    media(golPartita)
                   ) : (
                     "–"
                   )}
                 </span>
                 <span className="figure__note">
-                  {indovinati.su > 0 ? (
-                    <a className="link-mint" href="#indovinati">
-                      {indovinati.presi} su {indovinati.su} · {hits.data?.markets.length} mercati
-                    </a>
-                  ) : (
-                    ""
-                  )}
+                  {standings.data ? `Serie A, ${standings.data.matches_played} partite` : ""}
                 </span>
               </div>
               <div className="figure">
-                <span className="figure__label">selezioni vinte</span>
+                <span className="figure__label">giornate chiuse</span>
                 <span className="figure__value">
-                  {picks.loading ? (
-                    <Skeleton width="4rem" />
-                  ) : picks.data && picks.data.with_min_odds_resolved > 0 ? (
-                    prob(picks.data.with_min_odds_won / picks.data.with_min_odds_resolved)
-                  ) : (
-                    "–"
-                  )}
+                  {rounds.loading ? <Skeleton width="3rem" /> : giornateChiuse}
                 </span>
                 <span className="figure__note">
-                  {picks.data && picks.data.with_min_odds_resolved > 0
-                    ? `${picks.data.with_min_odds_won} su ${picks.data.with_min_odds_resolved} · quota da ${num(picks.data.min_odds, 2)}`
-                    : ""}
+                  {giornateChiuse > 0 ? (
+                    <a className="link-mint" href="#statistiche">errore pubblico</a>
+                  ) : (
+                    ""
+                  )}
                 </span>
               </div>
             </div>
@@ -440,7 +457,6 @@ export function Hero() {
             <ErrorBoundary label="schede laterali">
               {standings.data && (
                 <Floaters
-                  rounds={hits.data?.by_round ?? []}
                   table={standings.data.table}
                   scorers={players.data?.scorers ?? []}
                 />
@@ -569,6 +585,46 @@ export function Hero() {
               leggerlo. Nelle 1140 partite di prova l'1X2 è stato indovinato il{" "}
               {prob(INDOVINATE_TEST)} delle volte.
             </p>
+            {/* I DUE NUMERI CHE STAVANO IN PRIMA PAGINA, qui con il loro metro
+                accanto. Vincere spesso e' il comportamento ATTESO di chi sceglie
+                l'esito piu' probabile, ed e' detto sotto: senza quella riga,
+                "80% vinte" e' la frase di chi vende pronostici. */}
+            <div className="figures indovinati__figures">
+              <div className="figure">
+                <span className="figure__label">pronostici indovinati</span>
+                <span className="figure__value">
+                  {indovinati.su > 0 ? prob(indovinati.presi / indovinati.su) : "–"}
+                </span>
+                <span className="figure__note">
+                  {indovinati.su > 0
+                    ? `${indovinati.presi} su ${indovinati.su} · ${hits.data.markets.length} mercati`
+                    : ""}
+                </span>
+              </div>
+              <div className="figure">
+                <span className="figure__label">selezioni vinte</span>
+                <span className="figure__value">
+                  {picks.loading ? (
+                    <Skeleton width="4rem" />
+                  ) : picks.data && picks.data.with_min_odds_resolved > 0 ? (
+                    prob(picks.data.with_min_odds_won / picks.data.with_min_odds_resolved)
+                  ) : (
+                    "–"
+                  )}
+                </span>
+                <span className="figure__note">
+                  {picks.data && picks.data.with_min_odds_resolved > 0
+                    ? `${picks.data.with_min_odds_won} su ${picks.data.with_min_odds_resolved} · quota da ${num(picks.data.min_odds, 2)}`
+                    : ""}
+                </span>
+              </div>
+            </div>
+            <p className="indovinati__metro">
+              Vincono spesso perché sono gli esiti più probabili, e per lo stesso
+              motivo pagano poco: il margine del bookmaker resta tutto. Su 1140
+              partite di prova nessuna giocata aveva valore atteso positivo.
+              Vincere spesso non vuol dire guadagnare.
+            </p>
             <ErrorBoundary label="mercati indovinati">
               <MarketHitsPanel data={hits.data} />
             </ErrorBoundary>
@@ -677,6 +733,26 @@ export function Hero() {
               Quota equa e overround sì, quelli descrivono il prezzo.
             </p>
           </aside> */}
+        </section>
+
+        {/* LA FIRMA CHIUDE LA PAGINA (20 novembre 2026). Stava in fondo alla
+            colonna delle schede accanto al tablet; con le barre nuove la
+            colonna e' piu' alta, e la firma usciva dal riquadro della hero
+            restando tagliata a "Più dati.". Qui ha lo spazio che le serve, ed
+            e' l'ultima cosa che si legge prima di entrare. */}
+        <section className="section chiusura" aria-label="MatchPoint">
+          <p className="signature signature--chiusura">
+            Più dati.
+            <br />
+            Più insight.
+            <em>Più MatchPoint.</em>
+          </p>
+          <Link className="cta" to="/dashboard">
+            Esplora le partite
+            <span className="cta__arrow" aria-hidden="true">
+              →
+            </span>
+          </Link>
         </section>
       </main>
 

@@ -594,26 +594,58 @@ html { scroll-padding-top: 104px; }
   opacity: 0.85;
 }
 .floater__spark { display: block; width: 100%; height: auto; }
-.floater__bars { display: grid; gap: var(--s2); }
-.floater__bar { display: grid; grid-template-columns: 52px 1fr auto; gap: var(--s2); align-items: center; font-size: 0.6875rem; color: var(--faint); }
-.floater__track { height: 5px; border-radius: 3px; background: var(--line); overflow: hidden; }
-.floater__fill { display: block; height: 100%; background: var(--mint); }
+
+/* Barre delle schede (20 novembre 2026): spesse, con il numero dentro, il primo
+   pieno e gli altri piu' tenui. Le vecchie barre da 5px erano tutte uguali e il
+   numero stava staccato a destra: si leggeva una lista, non una classifica. */
+.fbars { display: grid; gap: var(--s3); }
+.fbar { display: grid; gap: 5px; }
+.fbar__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
+.fbar__nome {
+  font-size: 0.75rem; font-weight: 600; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.fbar__dettaglio { font-size: 0.625rem; color: var(--faint); white-space: nowrap; }
+.fbar__track {
+  height: 18px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.fbar__fill {
+  display: flex; align-items: center; justify-content: flex-end;
+  height: 100%; max-width: 100%; padding-right: 7px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mint) 22%, transparent), color-mix(in srgb, var(--mint) 45%, transparent));
+  transition: width 600ms cubic-bezier(.2, .8, .2, 1);
+}
+.fbar--primo .fbar__fill {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mint) 55%, transparent), var(--mint));
+  box-shadow: 0 0 14px color-mix(in srgb, var(--mint) 35%, transparent);
+}
+.fbar__valore {
+  font-family: var(--display); font-size: 0.75rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--fg);
+}
+.fbar--primo .fbar__valore { color: var(--mint-ink); }
+
+/* La forma: pillole quadrate con la lettera, i punti accanto al nome. */
+.fform { display: grid; gap: var(--s3); }
+.fform__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; }
+.fform__team { font-size: 0.75rem; font-weight: 600; color: var(--fg); }
+.fform__punti {
+  font-family: var(--display); font-size: 0.6875rem; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--muted);
+}
+.fform__pillole { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.fform__pillola {
+  display: grid; place-items: center; height: 22px; border-radius: 5px;
+  font-size: 0.6875rem; font-weight: 800; line-height: 1;
+}
+.fform__pillola--w { background: color-mix(in srgb, var(--ok) 85%, transparent); color: var(--mint-ink); }
+.fform__pillola--d { background: color-mix(in srgb, var(--warn) 80%, transparent); color: var(--mint-ink); }
+.fform__pillola--l { background: color-mix(in srgb, var(--ko) 85%, transparent); color: #1a0d0c; }
 .device__logo { height: 24px; width: auto; display: block; }
 
-/* Trend e forma: la sequenza dei risultati, non i totali. Verde vittoria,
-   ambra pareggio, corallo sconfitta. Pallini pieni come nel riferimento; il
-   risultato per esteso resta nel `title`, perche' colore da solo non e' un
-   testo. */
-.floater__form { display: flex; align-items: center; gap: 5px; margin-top: var(--s2); }
-.floater__team { font-size: 0.6875rem; color: var(--muted); min-width: 44px; margin-right: 3px; }
-
-/* La lettera dentro il pallino (V, N, P): il colore resta, ma non e' piu'
-   l'unica cosa che distingue una vittoria da una sconfitta. */
-.floater__result {
-  display: grid; place-items: center; flex: none;
-  width: 17px; height: 17px; border-radius: 50%;
-  font-size: 0.6875rem; font-weight: 700; line-height: 1; color: var(--mint-ink);
-}
 
 .floater__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s2); }
 .floater__head .floater__title { margin-bottom: var(--s3); }
@@ -622,9 +654,6 @@ html { scroll-padding-top: 104px; }
   font-variant-numeric: tabular-nums; color: var(--fg);
 }
 
-.floater__result--w { background: var(--ok); }
-.floater__result--d { background: var(--warn); }
-.floater__result--l { background: var(--ko); }
 
 /* --- come funziona: quattro passi ------------------------------------------ */
 
@@ -3825,3 +3854,20 @@ p.adm-card { margin-top: var(--s5); }
 .riserva__codici code { font-size: 0.9375rem; letter-spacing: 0.06em; }
 .riserva__conferma { display: flex; align-items: center; gap: var(--s2); font-size: 0.875rem; }
 .riserva__poche { color: var(--ko); }
+
+
+/* «Quante ne indovina»: i due numeri scesi dalla hero e la frase che li legge. */
+.indovinati__figures { margin: var(--s5) 0 var(--s3); max-width: 520px; }
+.indovinati__metro { max-width: 640px; margin: 0 0 var(--s6); font-size: 0.875rem; line-height: 1.6; color: var(--muted); }
+
+/* La firma come chiusura della pagina: piu' grande, centrata, con il pulsante. */
+.chiusura {
+  display: grid; justify-items: center; gap: var(--s6);
+  text-align: center; padding-top: var(--s6);
+}
+.signature--chiusura {
+  margin: 0; text-align: center;
+  font-family: var(--display); font-size: clamp(1.75rem, 3.5vw, 2.75rem);
+  font-weight: 700; line-height: 1.2; letter-spacing: -0.01em;
+}
+.signature--chiusura em::after { left: 15%; right: 15%; bottom: -6px; height: 3px; }
